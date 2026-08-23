@@ -138,13 +138,6 @@ export class MainMenu {
               <span class="menu-hero-btn__label">Settings</span>
             </button>
           </nav>
-          <footer class="menu-footer">
-            <p class="menu-controls">
-              <span class="menu-rule" aria-hidden="true"></span>
-              <span>WASD move · mouse look · E pack · J journal · M map</span>
-              <span class="menu-rule" aria-hidden="true"></span>
-            </p>
-          </footer>
         </div>
       </div>
 
