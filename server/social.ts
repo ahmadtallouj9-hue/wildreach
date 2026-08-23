@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
 import type { WebSocket } from 'ws';
 import type { ProfileWire, WorldSettingsWire } from '../src/net/protocol.ts';
 import {
@@ -32,6 +34,15 @@ type JoinRequest = {
   at: number;
 };
 
+type StoredAccount = {
+  id: string;
+  code: string;
+  profile: ProfileWire;
+  friends: string[];
+};
+
+const DATA_FILE = process.env.SOCIAL_DATA_PATH || join(process.cwd(), 'data', 'social.json');
+
 const accounts = new Map<string, Account>();
 const codeIndex = new Map<string, string>();
 const sockets = new Map<string, WebSocket>();
@@ -42,10 +53,66 @@ function send(ws: WebSocket, msg: SocialServerMessage): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
 }
 
+function uniqueCodeFor(id: string): string {
+  let code = accountToCode(id);
+  let n = 0;
+  while (codeIndex.has(code) && codeIndex.get(code) !== id) {
+    n += 1;
+    code = accountToCode(`${id}:${n}`);
+  }
+  return code;
+}
+
+function loadStore(): void {
+  try {
+    if (!existsSync(DATA_FILE)) return;
+    const raw = JSON.parse(readFileSync(DATA_FILE, 'utf8')) as { accounts?: StoredAccount[] };
+    for (const row of raw.accounts ?? []) {
+      if (!row?.id || !row?.code) continue;
+      const acc: Account = {
+        id: row.id,
+        code: row.code,
+        profile: row.profile,
+        friends: new Set(row.friends ?? []),
+        presence: { inGame: false },
+      };
+      accounts.set(acc.id, acc);
+      codeIndex.set(acc.code, acc.id);
+    }
+    console.log(`Social: loaded ${accounts.size} accounts from disk`);
+  } catch (err) {
+    console.warn('Social: failed to load store', err);
+  }
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSave(): void {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try {
+      mkdirSync(dirname(DATA_FILE), { recursive: true });
+      const payload = {
+        accounts: [...accounts.values()].map((a) => ({
+          id: a.id,
+          code: a.code,
+          profile: a.profile,
+          friends: [...a.friends],
+        })),
+      };
+      writeFileSync(DATA_FILE, JSON.stringify(payload));
+    } catch (err) {
+      console.warn('Social: failed to save store', err);
+    }
+  }, 250);
+}
+
+loadStore();
+
 function getOrCreateAccount(id: string, profile: ProfileWire): Account {
   let acc = accounts.get(id);
   if (!acc) {
-    const code = accountToCode(id);
+    const code = uniqueCodeFor(id);
     acc = {
       id,
       code,
@@ -55,8 +122,11 @@ function getOrCreateAccount(id: string, profile: ProfileWire): Account {
     };
     accounts.set(id, acc);
     codeIndex.set(code, id);
+    scheduleSave();
   } else {
     acc.profile = profile;
+    // Keep existing code; re-index in case store was partial.
+    codeIndex.set(acc.code, id);
   }
   return acc;
 }
@@ -115,6 +185,7 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
       friends: friendsFor(accountId),
     });
     notifyFriendsOf(accountId);
+    scheduleSave();
     return true;
   }
 
@@ -136,11 +207,18 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
     }
     const targetId = codeIndex.get(code);
     if (!targetId) {
-      send(ws, { t: 'social_error', msg: 'No player with that code' });
+      send(ws, {
+        t: 'social_error',
+        msg: 'No player with that code. They must open Wildreach once while online.',
+      });
       return true;
     }
     if (targetId === accountId) {
       send(ws, { t: 'social_error', msg: 'That is your own code' });
+      return true;
+    }
+    if (self.friends.has(targetId)) {
+      send(ws, { t: 'social_toast', title: 'Already friends', body: accounts.get(targetId)?.profile.name });
       return true;
     }
     self.friends.add(targetId);
@@ -148,6 +226,7 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
     if (target) target.friends.add(accountId);
     notifyFriendsOf(accountId);
     notifyFriendsOf(targetId);
+    scheduleSave();
     send(ws, {
       t: 'social_toast',
       title: 'Friend added',
@@ -170,6 +249,7 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
     accounts.get(fid)?.friends.delete(accountId);
     notifyFriendsOf(accountId);
     notifyFriendsOf(fid);
+    scheduleSave();
     return true;
   }
 
@@ -202,10 +282,7 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
     if (hostWs) {
       send(hostWs, {
         t: 'social_join_request_in',
-        request: {
-          id: requestId,
-          from: friendSummary(self),
-        },
+        request: { id: requestId, from: friendSummary(self) },
       });
     }
     send(ws, { t: 'social_toast', title: 'Request sent', body: host.profile.name ?? 'Friend' });

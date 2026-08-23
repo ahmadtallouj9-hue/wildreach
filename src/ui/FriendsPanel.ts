@@ -1,5 +1,5 @@
 import type { SocialClient } from '../net/SocialClient';
-import type { FriendSummary, JoinRequestWire } from '../net/socialProtocol';
+import type { FriendSummary } from '../net/socialProtocol';
 import { getFriendCode } from '../ui/account';
 
 function statusLabel(f: FriendSummary): string {
@@ -78,9 +78,9 @@ export class FriendsPanel {
     });
 
     this.social.on({
-      onRegistered: () => {
-        // Prefer local 6-digit code so UI stays correct even if the server is mid-redeploy.
-        this.codeEl.textContent = getFriendCode();
+      onRegistered: (code) => {
+        // Always show the server code so Add Friend lookups match.
+        this.codeEl.textContent = code || getFriendCode();
         this.render();
       },
       onFriends: () => this.render(),
@@ -213,8 +213,19 @@ export class FriendsPanel {
   }
 
   private addFriend(): void {
-    const code = this.addInput.value.trim();
-    if (!code) return;
+    const code = this.addInput.value.replace(/\D/g, '').slice(0, 6);
+    if (!code) {
+      this.showToast('Enter a 6-digit friend code');
+      return;
+    }
+    if (code.length !== 6) {
+      this.showToast('Code must be 6 digits');
+      return;
+    }
+    if (!this.social.connected) {
+      this.showToast('Friends server offline — wait until it says connected');
+      return;
+    }
     this.social.addFriend(code);
     this.addInput.value = '';
   }
@@ -223,7 +234,7 @@ export class FriendsPanel {
     const code = this.social.friendCode || getFriendCode();
     try {
       await navigator.clipboard.writeText(code);
-      this.showToast('Code copied — send it to a friend');
+      this.showToast('Code copied — friend must open the game once, then add this code');
     } catch {
       this.showToast(`Your code: ${code}`);
     }
@@ -232,10 +243,9 @@ export class FriendsPanel {
   private showToast(text: string): void {
     this.toastEl.textContent = text;
     this.toastEl.hidden = false;
-    window.setTimeout(() => {
+    window.clearTimeout((this as { toastTimer?: number }).toastTimer);
+    (this as { toastTimer?: number }).toastTimer = window.setTimeout(() => {
       this.toastEl.hidden = true;
-    }, 3200);
+    }, 4200);
   }
 }
-
-export type { JoinRequestWire };

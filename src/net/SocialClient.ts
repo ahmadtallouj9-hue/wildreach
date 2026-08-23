@@ -83,7 +83,20 @@ export class SocialClient {
   }
 
   addFriend(code: string): void {
-    this.send({ t: 'social_friend_add', code: code.replace(/\D/g, '').slice(0, 6) });
+    const cleaned = code.replace(/\D/g, '').slice(0, 6);
+    if (!this.connected) {
+      this.handlers.onError?.('Friends server offline — wait for Connected, then try again');
+      return;
+    }
+    if (cleaned.length !== 6) {
+      this.handlers.onError?.('Enter a full 6-digit code');
+      return;
+    }
+    if (cleaned === this.myCode) {
+      this.handlers.onError?.('That is your own code');
+      return;
+    }
+    this.send({ t: 'social_friend_add', code: cleaned });
   }
 
   removeFriend(accountId: string): void {
