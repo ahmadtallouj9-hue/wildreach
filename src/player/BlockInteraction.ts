@@ -23,7 +23,6 @@ export class BlockInteraction {
   private hit: RayHit | null = null;
   private place: { x: number; y: number; z: number } | null = null;
   private highlight: THREE.LineSegments;
-  private ghost: THREE.Mesh;
   private cooldown = 0;
   private enabled = true;
   private onBlockChange: ((x: number, y: number, z: number, block: number) => void) | null =
@@ -38,26 +37,19 @@ export class BlockInteraction {
     private onInventoryChange?: () => void,
     onBlockChange?: (x: number, y: number, z: number, block: number) => void,
   ) {
+    // Minecraft-style: wire outline only on the looked-at block (no filled ghost).
     this.highlight = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(1.005, 1.005, 1.005)),
-      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }),
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)),
+      new THREE.LineBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.85,
+        depthTest: true,
+      }),
     );
     this.highlight.visible = false;
     this.highlight.renderOrder = 10;
     this.scene.add(this.highlight);
-
-    this.ghost = new THREE.Mesh(
-      new THREE.BoxGeometry(0.98, 0.98, 0.98),
-      new THREE.MeshBasicMaterial({
-        color: 0x5ec4b0,
-        transparent: true,
-        opacity: 0.4,
-        depthWrite: false,
-      }),
-    );
-    this.ghost.visible = false;
-    this.ghost.renderOrder = 9;
-    this.scene.add(this.ghost);
 
     this.bindInput();
     this.onBlockChange = onBlockChange ?? null;
@@ -69,10 +61,7 @@ export class BlockInteraction {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    if (!enabled) {
-      this.highlight.visible = false;
-      this.ghost.visible = false;
-    }
+    if (!enabled) this.highlight.visible = false;
   }
 
   setOnBlockChange(fn: (x: number, y: number, z: number, block: number) => void): void {
@@ -163,17 +152,6 @@ export class BlockInteraction {
       this.highlight.position.set(this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
     } else {
       this.highlight.visible = false;
-    }
-
-    if (
-      this.place &&
-      this.isEmpty(this.place.x, this.place.y, this.place.z) &&
-      !this.eyesIn(this.place.x, this.place.y, this.place.z)
-    ) {
-      this.ghost.visible = true;
-      this.ghost.position.set(this.place.x + 0.5, this.place.y + 0.5, this.place.z + 0.5);
-    } else {
-      this.ghost.visible = false;
     }
   }
 
