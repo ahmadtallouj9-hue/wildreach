@@ -1,0 +1,29 @@
+{
+  "name": "wildreach",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mp": "concurrently -n web,mp -c cyan,magenta \"vite\" \"tsx server/index.ts\"",
+    "server": "tsx server/index.ts",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "preview:mp": "concurrently -n web,mp -c cyan,magenta \"vite preview\" \"tsx server/index.ts\"",
+    "deploy": "npm run build && npx vercel deploy dist --temporary --yes",
+    "deploy:surge": "npm run build && npx surge dist wildreach-game.surge.sh"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.4",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.20.5",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  },
+  "dependencies": {
+    "simplex-noise": "^4.0.3",
+    "three": "^0.185.1",
+    "ws": "^8.18.3"
+  }
+}

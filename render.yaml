@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: wildreach-mp
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npx tsx server/index.ts

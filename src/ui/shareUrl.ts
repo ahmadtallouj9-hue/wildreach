@@ -1,0 +1,85 @@
+import type { TerrainType, WorldSettings, WorldTime } from './worldSettings';
+import { DEFAULT_WORLD_SETTINGS, loadWorldSettings, saveWorldSettings } from './worldSettings';
+
+export type ShareParams = {
+  seed: string;
+  settings?: Partial<WorldSettings>;
+  autoJoin: boolean;
+};
+
+const TERRAINS: TerrainType[] = ['balanced', 'flat', 'mountains', 'islands', 'wild'];
+const TIMES: WorldTime[] = ['day', 'noon', 'sunset', 'night'];
+
+/** Public play link — send to friends for the same world + co-op room. */
+export function buildShareUrl(seed: string, settings?: WorldSettings, autoJoin = true): string {
+  const params = new URLSearchParams();
+  const trimmed = seed.trim();
+  params.set('seed', trimmed);
+
+  const world = settings ?? loadWorldSettings(trimmed);
+  if (world.terrain !== DEFAULT_WORLD_SETTINGS.terrain) params.set('t', world.terrain);
+  if (!world.caves) params.set('c', '0');
+  if (!world.structures) params.set('s', '0');
+  if (world.time !== DEFAULT_WORLD_SETTINGS.time) params.set('tm', world.time);
+  if (world.renderDistance !== DEFAULT_WORLD_SETTINGS.renderDistance) {
+    params.set('rd', String(world.renderDistance));
+  }
+  if (autoJoin) params.set('join', '1');
+
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return `${base}?${params.toString()}`;
+}
+
+export function parseShareFromUrl(search = window.location.search): ShareParams | null {
+  const params = new URLSearchParams(search);
+  const seed = params.get('seed')?.trim();
+  if (!seed) return null;
+
+  const settings: Partial<WorldSettings> = {};
+  const terrain = params.get('t');
+  if (terrain && TERRAINS.includes(terrain as TerrainType)) {
+    settings.terrain = terrain as TerrainType;
+  }
+  if (params.has('c')) settings.caves = params.get('c') !== '0';
+  if (params.has('s')) settings.structures = params.get('s') !== '0';
+  const time = params.get('tm');
+  if (time && TIMES.includes(time as WorldTime)) settings.time = time as WorldTime;
+  const rd = params.get('rd');
+  if (rd) settings.renderDistance = Number(rd);
+
+  return {
+    seed,
+    settings: Object.keys(settings).length > 0 ? settings : undefined,
+    autoJoin: params.get('join') === '1',
+  };
+}
+
+/** Apply URL world settings to local storage (friend opening your link). */
+export function applyShareParams(params: ShareParams): void {
+  const merged = { ...loadWorldSettings(params.seed), ...params.settings };
+  saveWorldSettings(params.seed, merged);
+}
+
+export function replaceUrlForShare(seed: string, settings?: WorldSettings): void {
+  const url = buildShareUrl(seed, settings, true);
+  const query = url.split('?')[1] ?? '';
+  window.history.replaceState({}, '', `${window.location.pathname}?${query}`);
+}
+
+export async function copyShareUrl(seed: string, settings?: WorldSettings): Promise<boolean> {
+  const url = buildShareUrl(seed, settings, true);
+  try {
+    await navigator.clipboard.writeText(url);
+    return true;
+  } catch {
+    const input = document.createElement('textarea');
+    input.value = url;
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    const ok = document.execCommand('copy');
+    input.remove();
+    return ok;
+  }
+}
