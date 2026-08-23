@@ -332,7 +332,15 @@ export class MainMenu {
             <div class="friends-requests" hidden></div>
             <p class="friends-section-title">Friends</p>
             <div class="friends-list"></div>
-            <p class="mp-note">Set your name under Character so friends recognize you.</p>
+            <div class="friends-tips">
+              <p class="friends-tips-title">Quick tips</p>
+              <ul>
+                <li>Share your code so friends can add you</li>
+                <li>Tap a friend to open their profile</li>
+                <li>Join when they are in a world</li>
+                <li>Set your name under Character</li>
+              </ul>
+            </div>
           </div>
           <div class="friend-profile-modal" hidden>
             <div class="friend-profile-modal-inner menu-glass-window">
@@ -665,6 +673,7 @@ export class MainMenu {
     this.root.querySelectorAll<HTMLElement>('.menu-stage').forEach((el) => {
       el.hidden = el.dataset.panel !== panel;
     });
+    if (panel !== 'multiplayer') this.friendsPanel?.hideProfile();
     if (panel === 'settings') this.syncSettingsUi();
     if (panel === 'world') this.syncWorldUi();
     if (panel === 'customize') {

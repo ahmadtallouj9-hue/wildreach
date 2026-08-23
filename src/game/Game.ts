@@ -207,7 +207,10 @@ export class Game {
     this.hud.setMenuOpen(paused);
     this.pauseMenu.setOpen(paused);
     if (paused) this.syncPauseSocial();
-    else this.reportPresence();
+    else {
+      this.setSessionCoveredByTitle(false);
+      this.reportPresence();
+    }
     this.inventoryUi.root.classList.toggle('menu-hidden', paused);
     this.chatUi.root.classList.toggle('menu-hidden', paused);
     if (paused) {
@@ -221,7 +224,7 @@ export class Game {
     this.syncControlState();
   }
 
-  /** Leave to title: keep the world paused, close pause UI, mark yourself as in menu. */
+  /** Leave to title: keep the world paused, hide the canvas, mark yourself as in menu. */
   returnToTitle(): void {
     this.paused = true;
     this.pauseMenu.setOpen(false);
@@ -231,8 +234,22 @@ export class Game {
     this.inventoryUi.setOpen(false);
     this.chatUi.setOpen(false);
     this.exitPointerLockQuiet();
+    this.setSessionCoveredByTitle(true);
     this.social?.setPresence({ inGame: false });
     this.syncControlState();
+  }
+
+  /** Hide the live world under the title menu so presence/UI match what you see. */
+  private setSessionCoveredByTitle(covered: boolean): void {
+    document.body.classList.toggle('title-over-session', covered);
+    this.renderer.domElement.classList.toggle('game-canvas--title-covered', covered);
+    this.hud.root.classList.toggle('hud--title-covered', covered);
+    this.pauseMenu.root.classList.toggle('pause-menu--title-covered', covered);
+    if (covered) {
+      this.renderer.setAnimationLoop(null);
+    } else if (this.running) {
+      this.renderer.setAnimationLoop(() => this.frame());
+    }
   }
 
   get isPaused(): boolean {
@@ -346,6 +363,7 @@ export class Game {
 
   dispose(): void {
     this.running = false;
+    this.setSessionCoveredByTitle(false);
     this.social?.setPresence({ inGame: false });
     this.renderer.setAnimationLoop(null);
     this.hud.root.remove();

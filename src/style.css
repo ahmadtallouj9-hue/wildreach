@@ -118,6 +118,28 @@ body,
   overscroll-behavior: none;
 }
 
+/* Title menu over a live session: hide the world so status matches the screen. */
+body.title-over-session .game-canvas,
+body.title-over-session .game-canvas--title-covered,
+.game-canvas--title-covered {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.title-over-session .hud--title-covered,
+body.title-over-session .pause-menu--title-covered,
+body.title-over-session .inv-root,
+body.title-over-session .chat-root {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.title-over-session #main-menu {
+  background: #0c0a14;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 #hud {
   position: fixed;
   inset: 0;
@@ -1554,23 +1576,73 @@ body,
 }
 
 .friend-dot {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: 0.65rem;
+  height: 0.65rem;
   border-radius: 50%;
   flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
 }
 
 .friend-dot.offline {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .friend-dot.online {
-  background: #5ec4b0;
+  background: #4ec4ff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 0 8px rgba(78, 196, 255, 0.55);
 }
 
 .friend-dot.in-game {
-  background: var(--gold);
-  box-shadow: 0 0 8px rgba(232, 197, 106, 0.55);
+  background: #f0c14a;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 0 10px rgba(240, 193, 74, 0.75);
+}
+
+.friend-status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.2rem;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.friend-status-badge--in-game {
+  background: #f0c14a;
+  color: #1a1408;
+}
+
+.friend-status-badge--online {
+  background: #2a6f88;
+  color: #dff6ff;
+}
+
+.friend-status-badge--offline {
+  background: #3a3a3a;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.friend-row-status-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.friend-row-world {
+  font-size: 0.62rem;
+  font-style: normal;
+  color: #f0c14a;
+}
+
+.friend-profile-status-detail {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .friend-row-text {
@@ -1612,16 +1684,16 @@ body,
 }
 
 .friend-profile-modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 8;
+  z-index: 120;
   display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-  padding: 0;
-  background: rgba(6, 8, 12, 0.82);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  background: rgba(6, 8, 12, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .friend-profile-modal[hidden] {
@@ -1629,62 +1701,256 @@ body,
 }
 
 .friend-profile-modal-inner {
-  width: 100%;
+  width: min(460px, 96vw);
+  max-height: min(92vh, 820px);
+  padding: 0.85rem 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: rgba(18, 16, 24, 0.98) !important;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 24px 80px rgba(0, 0, 0, 0.55);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: hidden;
+}
+
+.friend-profile-modal-body {
   flex: 1;
-  padding: 1rem 1.1rem 1.2rem;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  background: rgba(18, 16, 24, 0.96) !important;
-  border-radius: inherit;
-  box-shadow: none;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  padding-right: 0.15rem;
 }
 
-.friend-profile-card {
+.friend-profile-hero {
   display: flex;
   gap: 0.85rem;
-  align-items: flex-start;
+  align-items: center;
   padding: 0.85rem;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--glass-border-soft);
-  border-radius: 0.4rem;
+  border-radius: 0.45rem;
 }
 
-.friend-profile-swatch {
-  width: 3.4rem;
-  height: 3.4rem;
-  border-radius: 0.4rem;
+.friend-profile-avatar {
+  width: 4.2rem;
+  height: 4.2rem;
+  border-radius: 0.45rem;
   border: 1px solid var(--glass-border-soft);
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
+}
+
+.friend-profile-avatar-face {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.friend-profile-hero-text {
+  min-width: 0;
 }
 
 .friend-profile-name {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   font-weight: 700;
 }
 
-.friend-profile-code,
-.friend-profile-meta,
-.friend-profile-style {
+.friend-profile-code {
   margin: 0.2rem 0 0;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.friend-profile-code strong {
+  color: #9be7d4;
+  font-family: 'Courier New', Courier, monospace;
+  letter-spacing: 0.12em;
+}
+
+.friend-profile-status {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.friend-profile-status--online { color: #5ec4b0; }
+.friend-profile-status--in-game { color: #e8c56a; }
+.friend-profile-status--offline { color: rgba(255, 255, 255, 0.45); }
+
+.friend-profile-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.7rem 0.75rem;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.4rem;
+}
+
+.friend-profile-section-title {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
-.friend-profile-colors {
-  display: flex;
-  gap: 0.3rem;
-  margin-top: 0.45rem;
+.friend-profile-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
 }
 
-.friend-profile-colors span {
-  width: 1.05rem;
-  height: 1.05rem;
-  border-radius: 0.18rem;
+.friend-profile-swatch-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.friend-profile-swatch-item span {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.25rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.friend-profile-swatch-item em {
+  font-size: 0.58rem;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.friend-profile-traits {
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem 0.6rem;
+}
+
+.friend-profile-traits li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.friend-profile-traits span {
+  color: var(--muted);
+}
+
+.friend-profile-traits strong {
+  color: #fff;
+  text-transform: capitalize;
+}
+
+.friend-profile-world {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.friend-profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.25rem;
+}
+
+.friends-list-meta {
+  margin: 0 0 0.15rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.friends-empty-card {
+  padding: 0.75rem 0.8rem;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.4rem;
+}
+
+.friends-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.friends-tips {
+  margin-top: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.4rem;
+}
+
+.friends-tips-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.friends-tips ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.friends-tips li {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.friend-row-avatar {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.friend-row-avatar span {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 0.18rem;
+}
+
+.friend-join-btn {
+  min-width: 3.6rem;
+  padding-inline: 0.55rem !important;
+  font-size: 0.72rem !important;
+}
+
+.friend-row-main {
+  gap: 0.45rem;
 }
 
 .profile-panel,
@@ -3571,17 +3837,44 @@ html.touch-device .chat-log {
   grid-template-columns: 1fr;
 }
 .pause-menu__dot {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.55rem;
+  height: 0.55rem;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
 }
 .pause-menu__dot.online {
-  background: #5ec4b0;
-  box-shadow: 0 0 6px rgba(94, 196, 176, 0.6);
+  background: #4ec4ff;
+  box-shadow: 0 0 8px rgba(78, 196, 255, 0.55);
+}
+.pause-menu__dot.in-game {
+  background: #f0c14a;
+  box-shadow: 0 0 10px rgba(240, 193, 74, 0.75);
 }
 .pause-menu__dot.offline {
   background: rgba(255, 255, 255, 0.25);
+}
+.pause-menu__badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 0.1rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid #000;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.pause-menu__badge--in-game {
+  background: #f0c14a;
+  color: #1a1408;
+}
+.pause-menu__badge--online {
+  background: #2a6f88;
+  color: #dff6ff;
+}
+.pause-menu__badge--offline {
+  background: #3a3a3a;
+  color: rgba(255, 255, 255, 0.65);
 }
 .pause-menu__row-text {
   display: flex;

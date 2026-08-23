@@ -36,6 +36,7 @@ export class SocialClient {
   private friends: FriendSummary[] = [];
   private myCode = '';
   private joinRequests: JoinRequestWire[] = [];
+  private lastPresence: PresencePayload = { inGame: false };
 
   constructor(private url: string) {}
 
@@ -118,6 +119,7 @@ export class SocialClient {
   }
 
   setPresence(presence: PresencePayload): void {
+    this.lastPresence = presence;
     this.send({ t: 'social_presence', ...presence });
   }
 
@@ -169,6 +171,8 @@ export class SocialClient {
         this.friends = msg.friends;
         this.handlers.onRegistered?.(msg.code, msg.friends);
         this.handlers.onFriends?.(msg.friends);
+        // Re-assert presence after reconnect so leave/in-world status sticks.
+        this.send({ t: 'social_presence', ...this.lastPresence });
         break;
       case 'social_friends':
         this.friends = msg.friends;

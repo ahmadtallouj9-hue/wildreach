@@ -42,7 +42,7 @@ function ensureGame(seed: string): Game {
   game = new Game(app, seed);
   game.setSocial(social);
   game.onMenuRequest = () => {
-    game?.setPaused(true);
+    game?.returnToTitle();
     menu.show({ resumable: true });
   };
   app.appendChild(menu.root);

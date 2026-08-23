@@ -6,6 +6,7 @@ export type PauseFriendRow = {
   name: string;
   status: string;
   online: boolean;
+  inGame: boolean;
   canInvite: boolean;
 };
 
@@ -15,8 +16,7 @@ export class PauseMenu {
   private onAction: ((action: PauseMenuAction) => void) | null = null;
   private onJoinRespond: ((requestId: string, accept: boolean) => void) | null = null;
   private onInviteFriend: ((accountId: string) => void) | null = null;
-  private requestsEl: HTMLElement;
-  private friendsEl: HTMLElement;
+  private socialEl: HTMLElement;
   private open = false;
 
   constructor() {
@@ -27,8 +27,7 @@ export class PauseMenu {
       <div class="pause-menu__dim" aria-hidden="true"></div>
       <div class="pause-menu__panel" role="dialog" aria-modal="true" aria-labelledby="pause-menu-title">
         <h2 id="pause-menu-title" class="pause-menu__title">Game Menu</h2>
-        <div class="pause-menu__requests" hidden></div>
-        <div class="pause-menu__friends" hidden></div>
+        <div class="pause-menu__social"></div>
         <div class="pause-menu__actions">
           <button type="button" class="pause-menu__btn" data-action="resume">Back to Game</button>
           <button type="button" class="pause-menu__btn" data-action="title">Quit to Title</button>
@@ -36,8 +35,7 @@ export class PauseMenu {
       </div>
     `;
 
-    this.requestsEl = this.root.querySelector('.pause-menu__requests')!;
-    this.friendsEl = this.root.querySelector('.pause-menu__friends')!;
+    this.socialEl = this.root.querySelector('.pause-menu__social')!;
 
     this.root.querySelectorAll<HTMLButtonElement>('[data-action]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -61,71 +59,73 @@ export class PauseMenu {
     this.onInviteFriend = handler;
   }
 
-  setJoinRequests(requests: PauseJoinRequest[]): void {
-    if (!requests.length) {
-      this.requestsEl.hidden = true;
-      this.requestsEl.innerHTML = '';
-      return;
+  setSocial(opts: { requests: PauseJoinRequest[]; friends: PauseFriendRow[] }): void {
+    const { requests, friends } = opts;
+    const parts: string[] = [];
+
+    if (requests.length) {
+      parts.push(`
+        <section class="pause-menu__block">
+          <p class="pause-menu__section-title">Join requests</p>
+          ${requests
+            .map(
+              (r) => `
+            <div class="pause-menu__row pause-menu__row--stack">
+              <span class="pause-menu__row-text">${escapeHtml(r.name)} wants to join</span>
+              <div class="pause-menu__row-actions">
+                <button type="button" class="pause-menu__btn pause-menu__btn--small" data-accept="${r.id}">Accept</button>
+                <button type="button" class="pause-menu__btn pause-menu__btn--small pause-menu__btn--ghost" data-deny="${r.id}">Deny</button>
+              </div>
+            </div>
+          `,
+            )
+            .join('')}
+        </section>
+      `);
     }
-    this.requestsEl.hidden = false;
-    this.requestsEl.innerHTML = `
-      <p class="pause-menu__section-title">Join requests</p>
-      ${requests
-        .map(
-          (r) => `
-        <div class="pause-menu__row">
-          <span class="pause-menu__row-text">${escapeHtml(r.name)} wants to join</span>
-          <div class="pause-menu__row-actions">
-            <button type="button" class="pause-menu__btn pause-menu__btn--small" data-accept="${r.id}">Accept</button>
-            <button type="button" class="pause-menu__btn pause-menu__btn--small pause-menu__btn--ghost" data-deny="${r.id}">Deny</button>
-          </div>
-        </div>
-      `,
-        )
-        .join('')}
-    `;
-    this.requestsEl.querySelectorAll<HTMLButtonElement>('[data-accept]').forEach((btn) => {
+
+    parts.push(`
+      <section class="pause-menu__block">
+        <p class="pause-menu__section-title">Friends</p>
+        ${
+          friends.length
+            ? friends
+                .map(
+                  (f) => `
+            <div class="pause-menu__row">
+              <span class="pause-menu__dot ${f.inGame ? 'in-game' : f.online ? 'online' : 'offline'}"></span>
+              <span class="pause-menu__row-text">
+                <strong>${escapeHtml(f.name)}</strong>
+                <span class="pause-menu__badge pause-menu__badge--${f.inGame ? 'in-game' : f.online ? 'online' : 'offline'}">${
+                  f.inGame ? 'IN WORLD' : f.online ? 'IN MENU' : 'OFFLINE'
+                }</span>
+                <em>${escapeHtml(f.status)}</em>
+              </span>
+              <div class="pause-menu__row-actions">
+                ${
+                  f.canInvite
+                    ? `<button type="button" class="pause-menu__btn pause-menu__btn--small pause-menu__btn--invite" data-invite="${f.accountId}">Invite</button>`
+                    : `<span class="pause-menu__row-muted">${f.online ? '—' : 'Offline'}</span>`
+                }
+              </div>
+            </div>
+          `,
+                )
+                .join('')
+            : `<p class="pause-menu__empty">Add friends from Title → Friends, then invite them here.</p>`
+        }
+      </section>
+    `);
+
+    this.socialEl.innerHTML = parts.join('');
+
+    this.socialEl.querySelectorAll<HTMLButtonElement>('[data-accept]').forEach((btn) => {
       btn.addEventListener('click', () => this.onJoinRespond?.(btn.dataset.accept!, true));
     });
-    this.requestsEl.querySelectorAll<HTMLButtonElement>('[data-deny]').forEach((btn) => {
+    this.socialEl.querySelectorAll<HTMLButtonElement>('[data-deny]').forEach((btn) => {
       btn.addEventListener('click', () => this.onJoinRespond?.(btn.dataset.deny!, false));
     });
-  }
-
-  setFriends(friends: PauseFriendRow[]): void {
-    if (!friends.length) {
-      this.friendsEl.hidden = false;
-      this.friendsEl.innerHTML = `
-        <p class="pause-menu__section-title">Friends</p>
-        <p class="pause-menu__empty">No friends yet. Add them from the title Friends panel.</p>
-      `;
-      return;
-    }
-    this.friendsEl.hidden = false;
-    this.friendsEl.innerHTML = `
-      <p class="pause-menu__section-title">Invite friends</p>
-      ${friends
-        .map(
-          (f) => `
-        <div class="pause-menu__row">
-          <span class="pause-menu__dot ${f.online ? 'online' : 'offline'}"></span>
-          <span class="pause-menu__row-text">
-            <strong>${escapeHtml(f.name)}</strong>
-            <em>${escapeHtml(f.status)}</em>
-          </span>
-          <div class="pause-menu__row-actions">
-            ${
-              f.canInvite
-                ? `<button type="button" class="pause-menu__btn pause-menu__btn--small" data-invite="${f.accountId}">Invite</button>`
-                : `<span class="pause-menu__row-muted">${f.online ? '—' : 'Offline'}</span>`
-            }
-          </div>
-        </div>
-      `,
-        )
-        .join('')}
-    `;
-    this.friendsEl.querySelectorAll<HTMLButtonElement>('[data-invite]').forEach((btn) => {
+    this.socialEl.querySelectorAll<HTMLButtonElement>('[data-invite]').forEach((btn) => {
       btn.addEventListener('click', () => this.onInviteFriend?.(btn.dataset.invite!));
     });
   }
