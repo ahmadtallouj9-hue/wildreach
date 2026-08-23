@@ -129,10 +129,6 @@ export class Game {
         this.requestPointerLock();
         return;
       }
-      if (action === 'edit-hud') {
-        this.beginHudEdit();
-        return;
-      }
       this.onMenuRequest?.();
     });
     applyHudLayout(loadHudLayout());
@@ -346,9 +342,10 @@ export class Game {
   }
 
   
-  /** Close pause and open the drag-to-move HUD editor (does not quit to title). */
-  private beginHudEdit(): void {
+  /** Open the drag-to-move HUD editor (from Settings). Keeps the world paused. */
+  beginHudEdit(): void {
     this.editingHud = true;
+    this.setSessionCoveredByTitle(false);
     this.pauseMenu.setOpen(false);
     this.hud.setMenuOpen(false);
     this.inventoryUi.root.classList.remove('menu-hidden');

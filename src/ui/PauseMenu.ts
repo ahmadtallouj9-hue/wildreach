@@ -1,4 +1,4 @@
-export type PauseMenuAction = 'resume' | 'edit-hud' | 'title';
+export type PauseMenuAction = 'resume' | 'title';
 
 export type PauseJoinRequest = { id: string; name: string };
 export type PauseFriendRow = {
@@ -30,7 +30,6 @@ export class PauseMenu {
         <div class="pause-menu__social"></div>
         <div class="pause-menu__actions">
           <button type="button" class="pause-menu__btn" data-action="resume">Back to Game</button>
-          <button type="button" class="pause-menu__btn" data-action="edit-hud">Move HUD</button>
           <button type="button" class="pause-menu__btn" data-action="title">Quit to Title</button>
         </div>
       </div>
@@ -43,7 +42,7 @@ export class PauseMenu {
         e.preventDefault();
         e.stopPropagation();
         const action = btn.dataset.action as PauseMenuAction;
-        if (action === 'resume' || action === 'edit-hud' || action === 'title') {
+        if (action === 'resume' || action === 'title') {
           this.onAction?.(action);
         }
       });

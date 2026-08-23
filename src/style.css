@@ -5026,6 +5026,17 @@ button.mc-row {
   height: 1.1rem;
   accent-color: #6bb0e8;
 }
+.field-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  opacity: 0.72;
+}
+.menu-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .fps-chip {
   position: fixed;
   top: max(0.55rem, env(safe-area-inset-top));

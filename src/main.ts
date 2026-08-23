@@ -56,6 +56,12 @@ menu.on((action) => {
     social.updateProfile(action.profile);
     return;
   }
+  if (action.type === 'edit-hud') {
+    if (!game) return;
+    menu.hide();
+    game.beginHudEdit();
+    return;
+  }
   if (action.type === 'play') {
     startWorld(action.seed);
   } else if (action.type === 'resume' && game) {

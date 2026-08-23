@@ -48,6 +48,7 @@ import { FriendsPanel } from './FriendsPanel';
 export type MenuAction =
   | { type: 'play'; seed: string }
   | { type: 'resume' }
+  | { type: 'edit-hud' }
   | { type: 'prefs'; profile: Profile; settings: Settings; skinPixels?: Uint8ClampedArray };
 
 function randomSeed(): string {
@@ -184,6 +185,11 @@ export class MainMenu {
           <input type="checkbox" class="uw-fx-check" checked />
           <span>Underwater effects</span>
         </label>
+        <div class="field">
+          <span>Touch &amp; HUD layout</span>
+          <button type="button" class="menu-btn" data-action="edit-hud">Move HUD</button>
+          <p class="field-hint edit-hud-hint">Drag hotbar and controls while in a world. Open a world first if this is disabled.</p>
+        </div>
         <button type="button" class="menu-btn primary" data-action="save-settings">Save</button>
       </div>
 
@@ -510,6 +516,10 @@ export class MainMenu {
       saveSettings(this.settings);
       this.emitPrefs();
       this.showPanel('home');
+    });
+    this.root.querySelector('[data-action="edit-hud"]')!.addEventListener('click', () => {
+      if (!this.hasSession) return;
+      this.onAction?.({ type: 'edit-hud' });
     });
     this.root.querySelectorAll('[data-action="save-profile"]').forEach((el) => {
       el.addEventListener('click', () => {
@@ -1137,6 +1147,19 @@ export class MainMenu {
     this.root.querySelector('.bright-val')!.textContent = this.settings.brightness.toFixed(2);
     this.root.querySelector('.cloud-val')!.textContent = `${Math.round(this.settings.clouds * 100)}%`;
     this.syncViewSeg();
+    const editHud = this.root.querySelector<HTMLButtonElement>('[data-action="edit-hud"]');
+    const hint = this.root.querySelector<HTMLElement>('.edit-hud-hint');
+    if (editHud) {
+      editHud.disabled = !this.hasSession;
+      editHud.title = this.hasSession
+        ? 'Drag hotbar and touch controls'
+        : 'Open or resume a world first';
+    }
+    if (hint) {
+      hint.textContent = this.hasSession
+        ? 'Drag hotbar and controls. Done returns you to the world.'
+        : 'Open or resume a world first, then return here from the title screen.';
+    }
   }
 
   private syncViewSeg(): void {
