@@ -727,7 +727,32 @@ body.title-over-session #main-menu {
 }
 
 #main-menu[hidden] {
-  display: none;
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Atmosphere lives only on the title/home panel — never over gameplay. */
+.menu-stage.menu-home {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  max-width: none;
+  min-height: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-stage.menu-home[hidden] {
+  display: none !important;
+}
+
+.menu-stage.menu-home[hidden] .menu-atmosphere,
+.menu-stage.menu-home[hidden] .menu-atmosphere * {
+  display: none !important;
+  animation: none !important;
 }
 
 .menu-atmosphere {
@@ -737,6 +762,13 @@ body.title-over-session #main-menu {
   border-radius: inherit;
   background: #071525;
   pointer-events: none;
+  z-index: 0;
+}
+
+.menu-home-inner,
+.menu-home-hero {
+  position: relative;
+  z-index: 2;
 }
 
 .menu-atmosphere__hero {

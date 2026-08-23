@@ -95,16 +95,16 @@ export class MainMenu {
     this.root = document.createElement('div');
     this.root.id = 'main-menu';
     this.root.innerHTML = `
-      <div class="menu-atmosphere" aria-hidden="true">
-        <div class="menu-atmosphere__hero"></div>
-        <div class="menu-atmosphere__stars"></div>
-        <div class="menu-atmosphere__glow"></div>
-        <div class="menu-atmosphere__shimmer"></div>
-        <div class="menu-atmosphere__leaves"></div>
-        <div class="menu-atmosphere__grass"></div>
-        <div class="menu-atmosphere__veil"></div>
-      </div>
       <div class="menu-stage menu-home" data-panel="home">
+        <div class="menu-atmosphere" aria-hidden="true">
+          <div class="menu-atmosphere__hero"></div>
+          <div class="menu-atmosphere__stars"></div>
+          <div class="menu-atmosphere__glow"></div>
+          <div class="menu-atmosphere__shimmer"></div>
+          <div class="menu-atmosphere__leaves"></div>
+          <div class="menu-atmosphere__grass"></div>
+          <div class="menu-atmosphere__veil"></div>
+        </div>
         <div class="menu-home-inner menu-home-hero">
           <header class="menu-header">
             <div class="menu-logo-mark menu-logo-mark--crest" aria-hidden="true"></div>
@@ -557,18 +557,25 @@ export class MainMenu {
     this.onAction = handler;
   }
 
-  show(opts?: { resumable?: boolean }): void {
-    this.hasSession = opts?.resumable ?? this.hasSession;
-    const playLabel = this.root.querySelector('.menu-framed-btn--play .menu-framed-btn__label');
-    if (playLabel) playLabel.textContent = 'Play';
-    this.showPanel('home');
-    this.root.hidden = false;
-  }
-
   hide(): void {
     this.heroPreview?.stop();
     this.skinEditor?.setActive(false);
     this.root.hidden = true;
+    // Belt-and-suspenders: never leave title FX over the world.
+    this.root.querySelectorAll('.menu-atmosphere').forEach((el) => {
+      (el as HTMLElement).style.visibility = 'hidden';
+    });
+  }
+
+  show(opts?: { resumable?: boolean }): void {
+    this.hasSession = opts?.resumable ?? this.hasSession;
+    const playLabel = this.root.querySelector('.menu-framed-btn--play .menu-framed-btn__label');
+    if (playLabel) playLabel.textContent = 'Play';
+    this.root.querySelectorAll('.menu-atmosphere').forEach((el) => {
+      (el as HTMLElement).style.visibility = '';
+    });
+    this.showPanel('home');
+    this.root.hidden = false;
   }
 
   get visible(): boolean {
