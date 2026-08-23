@@ -11,11 +11,15 @@ import { DiscoverySystem } from '../discovery/DiscoverySystem';
 import { Hud } from '../ui/Hud';
 import { InventoryUi } from '../ui/InventoryUi';
 import { TouchControls } from '../ui/TouchControls';
+import { ChatUi } from '../ui/ChatUi';
+import { PauseMenu } from '../ui/PauseMenu';
 import { NetClient } from '../net/NetClient';
 import { RemotePlayers } from '../net/RemotePlayers';
+import type { SocialClient } from '../net/SocialClient';
 import { mpUrl, worldRoomId, type ProfileWire } from '../net/protocol';
 import { loadProfile, loadSettings, type Profile, type Settings } from '../ui/prefs';
 import { loadWorldSettings, WORLD_TIME_VALUES, type WorldSettings } from '../ui/worldSettings';
+import { worldNameFromSeed } from '../ui/worldNames';
 import { isTouchDevice } from '../util/isTouchDevice';
 
 export class Game {
@@ -27,6 +31,8 @@ export class Game {
   private player: PlayerController;
   private inventory: Inventory;
   private inventoryUi: InventoryUi;
+  private chatUi: ChatUi;
+  private pauseMenu: PauseMenu;
   private interaction: BlockInteraction;
   private sky: Sky;
   private postfx: PostFX;
@@ -34,10 +40,13 @@ export class Game {
   private hud: Hud;
   private touchControls: TouchControls | null = null;
   private net: NetClient | null = null;
+  private social: SocialClient | null = null;
   private remotePlayers: RemotePlayers | null = null;
+  private playerName = 'Wanderer';
   private clock = new THREE.Clock();
   private running = false;
   private paused = true;
+  private ignorePointerUnlock = false;
   readonly seed: string;
   onMenuRequest: (() => void) | null = null;
 
@@ -86,11 +95,36 @@ export class Game {
     this.inventoryUi = new InventoryUi(this.inventory);
     host.appendChild(this.inventoryUi.root);
     this.inventoryUi.onToggle((open) => {
-      const playing = !this.paused && !open;
-      this.player.setInputEnabled(playing);
-      this.interaction.setEnabled(playing);
-      this.touchControls?.setEnabled(playing);
-      if (open && document.pointerLockElement) document.exitPointerLock();
+      this.syncControlState();
+      if (open) this.exitPointerLockQuiet();
+    });
+
+    this.chatUi = new ChatUi();
+    host.appendChild(this.chatUi.root);
+    this.chatUi.onToggle(() => {
+      // Chat only steals typing focus — world keeps running (Minecraft-style).
+      this.syncControlState();
+      if (this.chatUi.isOpen) this.exitPointerLockQuiet();
+    });
+    this.chatUi.onChatSend((text) => {
+      this.chatUi.push({
+        id: this.net?.playerId ?? 'local',
+        name: this.playerName,
+        text,
+        self: true,
+      });
+      this.net?.sendChat(text);
+    });
+
+    this.pauseMenu = new PauseMenu();
+    host.appendChild(this.pauseMenu.root);
+    this.pauseMenu.on((action) => {
+      if (action === 'resume') {
+        this.setPaused(false);
+        this.requestPointerLock();
+        return;
+      }
+      this.onMenuRequest?.();
     });
 
     this.interaction = new BlockInteraction(
@@ -115,7 +149,8 @@ export class Game {
         onPack: () => this.inventoryUi.toggle('pack'),
         onJournal: () => this.hud.toggleJournal(),
         onMap: () => this.hud.toggleMap(),
-        onMenu: () => this.onMenuRequest?.(),
+        onChat: () => this.chatUi.toggle(),
+        onMenu: () => this.setPaused(true),
       });
       host.appendChild(this.touchControls.root);
       this.touchControls.setEnabled(false);
@@ -128,6 +163,7 @@ export class Game {
 
     this.initMultiplayer(worldSettings, loadProfile());
 
+    document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
     window.addEventListener('resize', () => this.onResize());
     this.onResize();
   }
@@ -140,7 +176,16 @@ export class Game {
     this.inventoryUi.setOpen(false);
   }
 
+  get chatOpen(): boolean {
+    return this.chatUi.isOpen;
+  }
+
+  closeChat(): void {
+    this.chatUi.setOpen(false);
+  }
+
   applyPrefs(profile: Profile, settings: Settings, skinPixels?: Uint8ClampedArray): void {
+    this.playerName = profile.name || 'Wanderer';
     this.player.mouseSensitivity = settings.mouseSensitivity;
     this.player.setFov(settings.fov);
     this.player.setViewMode(settings.viewMode);
@@ -160,26 +205,118 @@ export class Game {
   setPaused(paused: boolean): void {
     this.paused = paused;
     this.hud.setMenuOpen(paused);
+    this.pauseMenu.setOpen(paused);
+    if (paused) this.syncPauseJoinRequests();
     this.inventoryUi.root.classList.toggle('menu-hidden', paused);
+    this.chatUi.root.classList.toggle('menu-hidden', paused);
     if (paused) {
       this.inventoryUi.setOpen(false);
-      if (document.pointerLockElement) document.exitPointerLock();
+      this.chatUi.setOpen(false);
+      this.exitPointerLockQuiet();
+    } else {
+      // Returning from Game Menu — recapture mouse like Minecraft.
+      window.setTimeout(() => this.requestPointerLock(), 0);
     }
-    const playing = !paused && !this.inventoryUi.isOpen;
-    this.player.setInputEnabled(playing);
-    this.interaction.setEnabled(playing);
-    this.touchControls?.setEnabled(playing);
+    this.syncControlState();
   }
 
   get isPaused(): boolean {
     return this.paused;
   }
 
+  /** Minecraft-style: Escape opens this pause menu (not the title screen). */
+  openPauseMenu(): void {
+    if (this.paused) return;
+    this.setPaused(true);
+  }
+
+  setSocial(social: SocialClient): void {
+    this.social = social;
+    this.reportPresence();
+    this.social.on({
+      onJoinRequest: () => {
+        this.syncPauseJoinRequests();
+        this.showJoinRequestToast();
+      },
+    });
+    this.pauseMenu.onJoinRequestRespond((id, accept) => {
+      this.social?.respondJoin(id, accept);
+      this.syncPauseJoinRequests();
+    });
+  }
+
+  showJoinRequestToast(): void {
+    this.hud.showToast('Join request', 'Press Esc to accept or deny');
+  }
+
+  private syncPauseJoinRequests(): void {
+    if (!this.social) return;
+    this.pauseMenu.setJoinRequests(
+      this.social.incomingRequests.map((r) => ({
+        id: r.id,
+        name: r.from.profile.name || 'Friend',
+      })),
+    );
+  }
+
+  private reportPresence(): void {
+    if (!this.social) return;
+    const worldSettings = loadWorldSettings(this.seed);
+    const worldWire = {
+      terrain: worldSettings.terrain,
+      caves: worldSettings.caves,
+      structures: worldSettings.structures,
+      time: worldSettings.time,
+      renderDistance: worldSettings.renderDistance,
+    };
+    this.social.setPresence({
+      inGame: true,
+      seed: this.seed,
+      room: worldRoomId(this.seed, worldWire),
+      world: worldWire,
+      worldName: worldNameFromSeed(this.seed),
+    });
+  }
+
+  private syncControlState(): void {
+    const canControl =
+      !this.paused && !this.inventoryUi.isOpen && !this.chatUi.isOpen;
+    this.player.setInputEnabled(canControl);
+    this.interaction.setEnabled(canControl);
+    this.touchControls?.setEnabled(canControl);
+  }
+
+  private exitPointerLockQuiet(): void {
+    if (!document.pointerLockElement) return;
+    this.ignorePointerUnlock = true;
+    document.exitPointerLock();
+    window.setTimeout(() => {
+      this.ignorePointerUnlock = false;
+    }, 0);
+  }
+
+  private requestPointerLock(): void {
+    if (isTouchDevice() || this.paused || this.chatUi.isOpen || this.inventoryUi.isOpen) return;
+    this.renderer.domElement.requestPointerLock?.();
+  }
+
+  private onPointerLockChange(): void {
+    if (isTouchDevice()) return;
+    if (document.pointerLockElement === this.renderer.domElement) return;
+    if (this.ignorePointerUnlock) return;
+    if (this.paused || this.chatUi.isOpen || this.inventoryUi.isOpen) return;
+    // Lost aim lock (Alt-Tab / Escape) → Game Menu, not "Click to play".
+    this.setPaused(true);
+  }
+
   dispose(): void {
     this.running = false;
+    this.social?.setPresence({ inGame: false });
     this.renderer.setAnimationLoop(null);
     this.hud.root.remove();
     this.inventoryUi.root.remove();
+    this.chatUi.root.remove();
+    this.pauseMenu.root.remove();
     this.touchControls?.root.remove();
     this.net?.disconnect();
     this.remotePlayers?.root.remove();
@@ -198,13 +335,19 @@ export class Game {
 
   private frame(): void {
     const dt = Math.min(this.clock.getDelta(), 0.05);
-    const playing = !this.paused && !this.inventoryUi.isOpen;
+    const worldLive = !this.paused && !this.inventoryUi.isOpen;
+    const canControl = worldLive && !this.chatUi.isOpen;
     const hudBlocking = this.hud.isJournalOpen || this.hud.isMapOpen;
 
-    if (playing && !hudBlocking) {
+    if (worldLive && !hudBlocking) {
       this.chunks.updateAround(this.player.position.x, this.player.position.z, 3);
-      this.player.update(dt);
-      this.interaction.update(dt);
+      if (canControl) {
+        this.player.update(dt);
+        this.interaction.update(dt);
+      } else {
+        // Chat open: keep standing still but world/time continue.
+        this.player.update(0);
+      }
 
       const biomeLive = this.chunks.getBiomeAt(this.player.position.x, this.player.position.z);
       this.discovery.checkBiome(biomeLive);
@@ -232,6 +375,11 @@ export class Game {
       submersion,
     );
     this.postfx.setUnderwater(submersion, dt);
+    this.postfx.setSun(
+      this.sky.sunDir,
+      Math.max(0, this.sky.sunDir.y),
+      this.player.position,
+    );
 
     const landmarks = this.chunks.getLandmarks();
     const nearest = this.discovery.nearestLandmark(
@@ -240,11 +388,11 @@ export class Game {
       landmarks,
     );
 
-    this.hud.setPointerLocked(this.player.aimActive && playing && !hudBlocking);
+    this.hud.setPointerLocked(this.player.aimActive && canControl && !hudBlocking);
     this.hud.setTouchMode(this.player.touchControlsActive);
-    this.touchControls?.setEnabled(playing && !hudBlocking);
+    this.touchControls?.setEnabled(canControl && !hudBlocking);
     this.hud.setUnderwater(submersion);
-    if (playing && !hudBlocking) {
+    if (worldLive && !hudBlocking) {
       this.net?.tickState(dt, { t: 'state', ...this.player.getNetState() });
     }
     this.remotePlayers?.update(dt);
@@ -260,7 +408,7 @@ export class Game {
       playerZ: this.player.position.z,
       explored: this.chunks.getExploredKeys(),
       landmarks,
-      dt: playing ? dt : 0,
+      dt: worldLive ? dt : 0,
     });
 
     this.postfx.render();
@@ -295,7 +443,7 @@ export class Game {
       },
       onPlayerJoin: (id, p, snapshot) => {
         this.remotePlayers!.add(id, p, snapshot);
-        this.hud.showToast(`${snapshot.name} joined`, 'Same world link');
+        this.hud.showToast(`${snapshot.name} joined`, 'Joined your world');
       },
       onPlayerLeave: (id) => {
         this.remotePlayers!.remove(id);
@@ -305,6 +453,10 @@ export class Game {
       },
       onBlockEdit: (edit) => {
         this.chunks.applyRemoteEdit(edit.x, edit.y, edit.z, edit.block);
+      },
+      onChat: (id, name, text) => {
+        if (id === this.net?.playerId) return;
+        this.chatUi.push({ id, name, text });
       },
       onDisconnect: () => {
         this.hud.setMultiplayer(1, false);
@@ -319,5 +471,6 @@ export class Game {
     });
 
     this.net.connect(room, this.seed, worldWire, profileWire);
+    this.reportPresence();
   }
 }

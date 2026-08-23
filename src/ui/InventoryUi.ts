@@ -54,48 +54,52 @@ export class InventoryUi {
         <div class="hotbar-name" aria-live="polite"></div>
         <div class="hotbar" role="listbox" aria-label="Hotbar"></div>
       </div>
-      <div class="inv-panel" hidden>
-        <header class="inv-header">
-          <div class="inv-tabs">
-            <button type="button" class="inv-tab active" data-tab="pack">Pack</button>
-            <button type="button" class="inv-tab" data-tab="guide">Guide</button>
-          </div>
-          <button type="button" class="inv-close" aria-label="Close">✕</button>
-        </header>
-        <div class="inv-body" data-view="pack">
-          <section class="craft-bay">
-            <h3>Craft</h3>
-            <div class="craft-row">
-              <div class="craft-grid"></div>
-              <span class="craft-arrow" aria-hidden="true">→</span>
-              <div class="result-slot slot" data-kind="result" data-index="0"></div>
+      <div class="inv-panel glass-window" hidden>
+        <div class="glass-frost" aria-hidden="true"></div>
+        <div class="inv-panel-scroll">
+          <header class="inv-header">
+            <div class="inv-tabs">
+              <button type="button" class="inv-tab active" data-tab="pack">Pack</button>
+              <button type="button" class="inv-tab" data-tab="guide">Guide</button>
             </div>
-            <p class="craft-hint">Arrange materials, then click the result.</p>
-          </section>
-          <section class="pack-bay">
-            <h3>Satchel</h3>
-            <div class="inv-grid"></div>
-          </section>
-        </div>
-        <div class="inv-body guide-body" data-view="guide" hidden>
-          <section>
-            <h3>Controls</h3>
-            <ul class="guide-controls">
-              <li><kbd>E</kbd> Pack &amp; craft</li>
-              <li><kbd>G</kbd> Field guide</li>
-              <li><kbd>Ctrl</kbd> Sneak</li>
-              <li><kbd>C</kbd> Sit / stand</li>
-              <li><kbd>Space</kbd> Jump</li>
-              <li><kbd>Shift</kbd> Sprint</li>
-              <li><kbd>V</kbd> First / third / front view</li>
-              <li><kbd>1–9</kbd> Hotbar · <kbd>F</kbd> / RMB place · LMB break</li>
-              <li><kbd>J</kbd> Journal · <kbd>M</kbd> Map</li>
-            </ul>
-          </section>
-          <section>
-            <h3>Recipes</h3>
-            <ul class="guide-recipes"></ul>
-          </section>
+            <button type="button" class="inv-close" aria-label="Close">✕</button>
+          </header>
+          <div class="inv-body" data-view="pack">
+            <section class="craft-bay">
+              <h3>Craft</h3>
+              <div class="craft-row">
+                <div class="craft-grid"></div>
+                <span class="craft-arrow" aria-hidden="true">→</span>
+                <div class="result-slot slot" data-kind="result" data-index="0"></div>
+              </div>
+              <p class="craft-hint">Arrange materials, then click the result.</p>
+            </section>
+            <section class="pack-bay">
+              <h3>Satchel</h3>
+              <div class="inv-grid"></div>
+            </section>
+          </div>
+          <div class="inv-body guide-body" data-view="guide" hidden>
+            <section>
+              <h3>Controls</h3>
+              <ul class="guide-controls">
+                <li><kbd>E</kbd> Pack &amp; craft</li>
+                <li><kbd>T</kbd> / <kbd>Enter</kbd> Chat (AR / EN)</li>
+                <li><kbd>G</kbd> Field guide</li>
+                <li><kbd>Ctrl</kbd> Sneak</li>
+                <li><kbd>C</kbd> Sit / stand</li>
+                <li><kbd>Space</kbd> Jump</li>
+                <li><kbd>Shift</kbd> Sprint</li>
+                <li><kbd>V</kbd> First / third / front view</li>
+                <li><kbd>1–9</kbd> Hotbar · <kbd>F</kbd> / RMB place · LMB break</li>
+                <li><kbd>J</kbd> Journal · <kbd>M</kbd> Map</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Recipes</h3>
+              <ul class="guide-recipes"></ul>
+            </section>
+          </div>
         </div>
       </div>
       <div class="inv-cursor" hidden></div>

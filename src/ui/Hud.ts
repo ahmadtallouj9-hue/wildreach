@@ -16,7 +16,6 @@ export class Hud {
   private mapCtx: CanvasRenderingContext2D;
   private distanceEl: HTMLElement;
   private seedEl: HTMLElement;
-  private overlay: HTMLElement;
   private paletteEl: HTMLElement;
   private paletteNameEl: HTMLElement;
   private coordsEl: HTMLElement;
@@ -77,13 +76,6 @@ export class Hud {
         </header>
         <canvas class="sketch-map" width="280" height="280"></canvas>
       </aside>
-      <div class="click-overlay">
-        <div class="click-card">
-          <p class="click-kicker">Ready</p>
-          <p class="click-title">Click to play</p>
-          <p class="click-sub">Break blocks · build · explore</p>
-        </div>
-      </div>
       <div class="underwater-overlay" aria-hidden="true">
         <span class="uw-bubble"></span>
         <span class="uw-bubble"></span>
@@ -106,7 +98,6 @@ export class Hud {
     this.mapCtx = this.mapCanvas.getContext('2d')!;
     this.distanceEl = this.root.querySelector('.distance')!;
     this.seedEl = this.root.querySelector('.seed')!;
-    this.overlay = this.root.querySelector('.click-overlay')!;
     this.underwaterOverlay = this.root.querySelector('.underwater-overlay')!;
     this.mpChip = this.root.querySelector('.mp-chip')!;
     this.mpLabel = this.root.querySelector('.mp-label')!;
@@ -193,23 +184,12 @@ export class Hud {
     return this.mapOpen;
   }
 
-  setPointerLocked(locked: boolean): void {
-    if (this.root.classList.contains('menu-open')) {
-      this.overlay.hidden = true;
-      return;
-    }
-    if (this.root.classList.contains('touch-mode')) {
-      this.overlay.hidden = true;
-      return;
-    }
-    this.overlay.hidden = locked;
+  setPointerLocked(_locked: boolean): void {
+    /* Click-to-play overlay removed — Escape opens the pause menu instead. */
   }
 
   setTouchMode(on: boolean): void {
     this.root.classList.toggle('touch-mode', on);
-    if (on && !this.root.classList.contains('menu-open')) {
-      this.overlay.hidden = true;
-    }
   }
 
   toggleJournal(): void {
@@ -224,7 +204,6 @@ export class Hud {
 
   setMenuOpen(open: boolean): void {
     this.root.classList.toggle('menu-open', open);
-    if (open) this.overlay.hidden = true;
   }
 
   /** Inventory hotbar replaces the old material tray. */

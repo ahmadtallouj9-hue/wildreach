@@ -39,7 +39,9 @@ import {
   type WorldSettings,
   type WorldTime,
 } from './worldSettings';
-import { buildShareUrl, copyShareUrl, replaceUrlForShare } from './shareUrl';
+import { replaceSeedInUrl } from './shareUrl';
+import { SocialClient } from '../net/SocialClient';
+import { FriendsPanel } from './FriendsPanel';
 
 export type MenuAction =
   | { type: 'play'; seed: string }
@@ -57,7 +59,7 @@ function readSeedFromUrl(): string {
   return randomSeed();
 }
 
-type Panel = 'home' | 'settings' | 'customize' | 'skins' | 'world';
+type Panel = 'home' | 'settings' | 'customize' | 'multiplayer' | 'world';
 
 export class MainMenu {
   readonly root: HTMLElement;
@@ -71,14 +73,15 @@ export class MainMenu {
   private heroPreview: ProfilePreview3D | null = null;
   private activePresetId: string | null = null;
   private previewPresetId: string | null = null;
+  private friendsPanel: FriendsPanel | null = null;
 
-  constructor() {
+  constructor(private social?: SocialClient) {
     this.root = document.createElement('div');
     this.root.id = 'main-menu';
     this.root.innerHTML = `
       <div class="menu-atmosphere" aria-hidden="true"></div>
       <div class="menu-stage menu-home" data-panel="home">
-        <div class="menu-home-inner">
+        <div class="menu-home-inner menu-glass-window">
           <header class="menu-header">
             <div class="menu-logo-stack">
               <div class="menu-canopy" aria-hidden="true"></div>
@@ -90,7 +93,6 @@ export class MainMenu {
               Wander seeded reaches. Chart what you find.
               <span class="menu-star" aria-hidden="true">✦</span>
             </p>
-            <p class="menu-share-hint">Copy your link — friends join the same world and see each other.</p>
           </header>
           <nav class="menu-nav" aria-label="Main menu">
             <button type="button" class="menu-framed-btn menu-framed-btn--play" data-action="play">
@@ -107,6 +109,20 @@ export class MainMenu {
                 <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
               </span>
             </button>
+            <button type="button" class="menu-framed-btn" data-action="multiplayer">
+              <span class="menu-framed-btn__frame">
+                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
+                <span class="menu-framed-btn__label">Friends</span>
+                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
+              </span>
+            </button>
+            <button type="button" class="menu-framed-btn" data-action="customize">
+              <span class="menu-framed-btn__frame">
+                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
+                <span class="menu-framed-btn__label">Character</span>
+                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
+              </span>
+            </button>
             <button type="button" class="menu-framed-btn" data-action="settings">
               <span class="menu-framed-btn__frame">
                 <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
@@ -114,38 +130,13 @@ export class MainMenu {
                 <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
               </span>
             </button>
-            <button type="button" class="menu-framed-btn" data-action="customize">
-              <span class="menu-framed-btn__frame">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-framed-btn__label">Customize</span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
-            </button>
-            <button type="button" class="menu-framed-btn" data-action="skins">
-              <span class="menu-framed-btn__frame">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-framed-btn__label">Skins</span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
-            </button>
           </nav>
           <footer class="menu-footer">
-            <a class="menu-game-link menu-framed-box" href="#" target="_blank" rel="noopener noreferrer">
-              <span class="menu-framed-box__inner">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-game-link-text">
-                  <span class="menu-game-link-label">Share link</span>
-                  <code class="menu-game-link-url"></code>
-                </span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
-            </a>
             <p class="menu-controls">
               <span class="menu-star" aria-hidden="true">✦</span>
               WASD move · mouse look · E pack · J journal · M map
               <span class="menu-star" aria-hidden="true">✦</span>
             </p>
-            <p class="menu-share-toast" hidden>Link copied — send it to your friend!</p>
           </footer>
         </div>
       </div>
@@ -179,7 +170,7 @@ export class MainMenu {
       <div class="menu-stage panel profile-panel blocky customize-panel" data-panel="customize" hidden>
         <header class="profile-topbar">
           <button type="button" class="panel-back block-btn" data-action="home">← BACK</button>
-          <h2 class="panel-title">CUSTOMIZE</h2>
+          <h2 class="panel-title">CHARACTER</h2>
           <button type="button" class="menu-btn primary block-btn" data-action="save-profile">SAVE</button>
         </header>
         <div class="profile-shell">
@@ -187,7 +178,7 @@ export class MainMenu {
             <div class="profile-hero-viewport"></div>
             <div class="profile-stage-meta">
               <span class="profile-preview-name">Wanderer</span>
-              <span class="profile-preview-tag">Tweak colors, body, and gear</span>
+              <span class="profile-preview-tag">Skins, colors, body, and gear</span>
               <label class="field field-tight">
                 <span>Name</span>
                 <input type="text" class="name-input" maxlength="20" spellcheck="false" autocomplete="off" />
@@ -197,6 +188,12 @@ export class MainMenu {
           </aside>
 
           <div class="profile-scroll">
+            <section class="profile-section block-card">
+              <h3 class="profile-section-title">Skin presets</h3>
+              <p class="profile-preset-hint">Pick a preset, then tweak everything below.</p>
+              <div class="skin-preset-grid skins-preset-grid" role="list"></div>
+            </section>
+
             <section class="profile-section block-card">
               <h3 class="profile-section-title">Colors</h3>
               <div class="profile-color-grid">
@@ -307,16 +304,42 @@ export class MainMenu {
         </div>
       </div>
 
-      <div class="menu-stage panel profile-panel blocky skins-panel" data-panel="skins" hidden>
-        <header class="profile-topbar">
-          <button type="button" class="panel-back block-btn" data-action="home">← BACK</button>
-          <h2 class="panel-title">SKINS</h2>
-          <button type="button" class="menu-btn primary block-btn" data-action="save-profile">SAVE</button>
-        </header>
-        <div class="skins-shell">
-          <p class="profile-preset-hint">Tap a preset to apply it to your character.</p>
-          <div class="skin-preset-grid skins-preset-grid" role="list"></div>
-          <button type="button" class="menu-btn primary block-btn skins-save-mobile" data-action="save-profile">SAVE</button>
+      <div class="menu-stage menu-home mp-panel" data-panel="multiplayer" hidden>
+        <div class="menu-home-inner menu-glass-window mp-glass-window">
+          <header class="mp-topbar">
+            <button type="button" class="panel-back block-btn" data-action="home">← BACK</button>
+            <h2 class="panel-title">Friends</h2>
+          </header>
+          <div class="mp-shell friends-shell">
+            <p class="mp-lead">Add friends by code, see their profile, and request to join their world.</p>
+            <p class="mp-status">Friends server: connecting…</p>
+            <div class="friends-code-row">
+              <span class="friends-code-label">Your code</span>
+              <code class="friends-my-code"></code>
+              <button type="button" class="menu-framed-btn friends-copy-btn" data-action="copy-friend-code">
+                <span class="menu-framed-btn__frame">
+                  <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
+                  <span class="menu-framed-btn__label">Copy</span>
+                  <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
+                </span>
+              </button>
+            </div>
+            <div class="friends-add-row">
+              <input type="text" class="friends-add-input" maxlength="6" spellcheck="false" autocomplete="off" placeholder="Friend code" />
+              <button type="button" class="menu-btn primary block-btn" data-action="add-friend">Add friend</button>
+            </div>
+            <p class="friends-toast" hidden></p>
+            <div class="friends-requests" hidden></div>
+            <p class="friends-section-title">Friends</p>
+            <div class="friends-list"></div>
+            <p class="mp-note">Set your name under Character so friends recognize you.</p>
+          </div>
+          <div class="friend-profile-modal" hidden>
+            <div class="friend-profile-modal-inner menu-glass-window">
+              <button type="button" class="panel-back block-btn" data-action="close-friend-profile">← BACK</button>
+              <div class="friend-profile-modal-body"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -341,13 +364,7 @@ export class MainMenu {
                 <button type="button" class="menu-btn quiet" data-action="random-world" title="New seed">↻</button>
               </div>
             </label>
-            <p class="world-seed-note">Same link = same terrain and builds. Send it to friends — they drop straight into your world.</p>
-
-            <div class="world-share-row">
-              <code class="world-share-url"></code>
-              <button type="button" class="menu-btn ghost block-btn" data-action="copy-share">COPY LINK</button>
-            </div>
-            <p class="world-share-toast" hidden>Link copied — send it to your friend!</p>
+            <p class="world-seed-note">Your seed defines the terrain. Friends can request to join when you are in this world.</p>
 
             <div class="world-settings-card block-card">
               <p class="profile-section-title">World options</p>
@@ -401,25 +418,9 @@ export class MainMenu {
 
     this.worldSeedInput = this.root.querySelector('.world-seed-input')!;
 
-    const seed = loadLastWorld() ?? readSeedFromUrl();
-    this.syncShareLinkDisplay(seed);
-    const linkEl = this.root.querySelector<HTMLAnchorElement>('.menu-game-link')!;
-    linkEl.addEventListener('click', (e) => {
-      e.preventDefault();
-      const shareSeed = this.worldSeedInput.value.trim() || loadLastWorld() || readSeedFromUrl();
-      this.collectWorldFromUi();
-      const settings = loadWorldSettings(shareSeed);
-      void copyShareUrl(shareSeed, settings).then((ok) => {
-        const toast = this.root.querySelector<HTMLElement>('.menu-share-toast');
-        if (toast) {
-          toast.hidden = false;
-          toast.textContent = ok ? 'Link copied — send it to your friend!' : 'Copy failed';
-          window.setTimeout(() => {
-            toast.hidden = true;
-          }, 3200);
-        }
-      });
-    });
+    if (this.social) {
+      this.friendsPanel = new FriendsPanel(this.root, this.social);
+    }
 
     this.root.querySelector('[data-action="play"]')!.addEventListener('click', () => this.onPlayClick());
     this.root.querySelector('[data-action="settings"]')!.addEventListener('click', () =>
@@ -428,8 +429,8 @@ export class MainMenu {
     this.root.querySelector('[data-action="customize"]')!.addEventListener('click', () =>
       this.showPanel('customize'),
     );
-    this.root.querySelector('[data-action="skins"]')!.addEventListener('click', () =>
-      this.showPanel('skins'),
+    this.root.querySelector('[data-action="multiplayer"]')!.addEventListener('click', () =>
+      this.openMultiplayerPanel(),
     );
     this.root.querySelectorAll('[data-action="home"]').forEach((el) => {
       el.addEventListener('click', () => this.showPanel('home'));
@@ -445,9 +446,6 @@ export class MainMenu {
       this.syncWorldUi();
       this.worldSeedInput.focus();
     });
-    this.root.querySelector('[data-action="copy-share"]')!.addEventListener('click', () =>
-      void this.copyWorldShareLink(),
-    );
     this.root.querySelector('[data-action="save-settings"]')!.addEventListener('click', () => {
       this.collectSettingsFromUi();
       saveSettings(this.settings);
@@ -528,7 +526,7 @@ export class MainMenu {
   private emitPlay(): void {
     const seed = this.getPlaySeed();
     this.worldSeedInput.value = seed;
-    replaceUrlForShare(seed, loadWorldSettings(seed));
+    replaceSeedInUrl(seed);
     saveLastWorld(seed);
     this.hasSession = true;
     this.emitPrefs();
@@ -540,7 +538,7 @@ export class MainMenu {
     this.worldSeedInput.value = seed;
     this.collectWorldFromUi();
     saveWorldSettings(seed, this.worldSettings);
-    replaceUrlForShare(seed, this.worldSettings);
+    replaceSeedInUrl(seed);
     saveLastWorld(seed);
     this.hasSession = true;
     this.emitPrefs();
@@ -553,6 +551,15 @@ export class MainMenu {
     this.showPanel('world');
   }
 
+  private openMultiplayerPanel(): void {
+    this.friendsPanel?.refresh();
+    this.showPanel('multiplayer');
+  }
+
+  private syncMultiplayerUi(): void {
+    this.friendsPanel?.refresh();
+  }
+
   private syncWorldPreview(): void {
     const seed = this.worldSeedInput.value.trim() || randomSeed();
     const nameInput = this.root.querySelector<HTMLInputElement>('.world-name-input')!;
@@ -561,38 +568,6 @@ export class MainMenu {
     const tagEl = this.root.querySelector('.world-preview-tag');
     if (nameEl) nameEl.textContent = displayName;
     if (tagEl) tagEl.textContent = worldTagFromSeed(seed);
-    this.syncShareLinkDisplay(seed);
-  }
-
-  private syncShareLinkDisplay(seed: string): void {
-    const settings = loadWorldSettings(seed);
-    const shareUrl = buildShareUrl(seed, settings, true);
-    const worldShare = this.root.querySelector('.world-share-url');
-    if (worldShare) worldShare.textContent = shareUrl;
-    const menuUrl = this.root.querySelector('.menu-game-link-url');
-    const menuLink = this.root.querySelector<HTMLAnchorElement>('.menu-game-link');
-    if (menuUrl) menuUrl.textContent = shareUrl;
-    if (menuLink) menuLink.href = shareUrl;
-  }
-
-  private async copyWorldShareLink(): Promise<void> {
-    const seed = this.worldSeedInput.value.trim() || randomSeed();
-    this.collectWorldFromUi();
-    saveWorldSettings(seed, this.worldSettings);
-    const ok = await copyShareUrl(seed, this.worldSettings);
-    const toast = this.root.querySelector<HTMLElement>('.world-share-toast');
-    if (toast) {
-      toast.hidden = false;
-      toast.textContent = ok
-        ? 'Link copied — send it to your friend!'
-        : 'Copy failed — select the link and copy manually.';
-    }
-    if (ok && toast) {
-      window.setTimeout(() => {
-        toast.hidden = true;
-      }, 3200);
-    }
-    this.syncShareLinkDisplay(seed);
   }
 
   private bindWorldUi(): void {
@@ -696,15 +671,15 @@ export class MainMenu {
       this.ensureHeroPreview();
       this.ensureSkinEditor();
       this.syncProfileUi();
+      this.syncCustomCardThumb();
+      this.markActivePreset();
       requestAnimationFrame(() => {
         this.heroPreview?.start();
         this.heroPreview?.layout();
         this.skinEditor?.setActive(true);
       });
-    } else if (panel === 'skins') {
-      this.syncProfileUi();
-      this.syncCustomCardThumb();
-      this.markActivePreset();
+    } else if (panel === 'multiplayer') {
+      this.syncMultiplayerUi();
       this.heroPreview?.stop();
       this.skinEditor?.setActive(false);
     } else {

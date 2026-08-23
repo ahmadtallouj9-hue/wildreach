@@ -19,6 +19,7 @@ export type NetHandlers = {
   onPlayerLeave?: (id: string) => void;
   onPlayerState?: (id: string, state: PlayerStatePayload) => void;
   onBlockEdit?: (edit: BlockEditWire) => void;
+  onChat?: (id: string, name: string, text: string) => void;
   onDisconnect?: () => void;
   onReconnecting?: () => void;
 };
@@ -87,6 +88,13 @@ export class NetClient {
   sendBlock(edit: BlockEditWire): void {
     if (!this.connected) return;
     this.send({ t: 'block', ...edit });
+  }
+
+  sendChat(text: string): void {
+    if (!this.connected) return;
+    const cleaned = text.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 160);
+    if (!cleaned) return;
+    this.send({ t: 'chat', text: cleaned });
   }
 
   private openSocket(): void {
@@ -184,6 +192,9 @@ export class NetClient {
         break;
       case 'block':
         this.handlers.onBlockEdit?.({ x: msg.x, y: msg.y, z: msg.z, block: msg.block });
+        break;
+      case 'chat':
+        this.handlers.onChat?.(msg.id, msg.name, msg.text);
         break;
       default:
         break;

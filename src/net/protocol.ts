@@ -72,7 +72,9 @@ export type ClientState = PlayerStatePayload & { t: 'state' };
 
 export type ClientBlock = BlockEditWire & { t: 'block' };
 
-export type ClientMessage = ClientJoin | ClientState | ClientBlock | { t: 'leave' };
+export type ClientChat = { t: 'chat'; text: string };
+
+export type ClientMessage = ClientJoin | ClientState | ClientBlock | ClientChat | { t: 'leave' };
 
 export type ServerWelcome = {
   t: 'welcome';
@@ -93,12 +95,20 @@ export type ServerState = { t: 'state'; id: string } & Omit<PlayerSnapshot, 'id'
 
 export type ServerBlock = BlockEditWire & { t: 'block' };
 
+export type ServerChat = {
+  t: 'chat';
+  id: string;
+  name: string;
+  text: string;
+};
+
 export type ServerMessage =
   | ServerWelcome
   | ServerPlayerJoin
   | ServerPlayerLeave
   | ServerState
   | ServerBlock
+  | ServerChat
   | { t: 'error'; msg: string };
 
 export function editKey(x: number, y: number, z: number): string {

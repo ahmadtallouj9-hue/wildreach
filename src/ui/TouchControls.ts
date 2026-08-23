@@ -8,6 +8,7 @@ export type TouchControlHandlers = {
   onPack?: () => void;
   onJournal?: () => void;
   onMap?: () => void;
+  onChat?: () => void;
   onMenu?: () => void;
 };
 
@@ -31,6 +32,7 @@ export class TouchControls {
       <div class="touch-top-bar" aria-label="Quick actions">
         <button type="button" class="touch-util-btn" data-action="journal" aria-label="Journal">J</button>
         <button type="button" class="touch-util-btn" data-action="map" aria-label="Map">M</button>
+        <button type="button" class="touch-util-btn" data-action="chat" aria-label="Chat">💬</button>
         <button type="button" class="touch-util-btn" data-action="menu" aria-label="Menu">☰</button>
       </div>
       <div class="touch-look-zone" aria-hidden="true"></div>
@@ -113,11 +115,17 @@ export class TouchControls {
       const e = evt as PointerEvent;
       if (e.pointerId !== this.lookPointerId) return;
       e.preventDefault();
-      const dx = e.clientX - this.lookLast.x;
-      const dy = e.clientY - this.lookLast.y;
+      const samples = e.getCoalescedEvents?.() ?? [e];
+      let dx = 0;
+      let dy = 0;
+      for (const sample of samples) {
+        dx += sample.clientX - this.lookLast.x;
+        dy += sample.clientY - this.lookLast.y;
+        this.lookLast.x = sample.clientX;
+        this.lookLast.y = sample.clientY;
+      }
+      if (Math.abs(dx) + Math.abs(dy) < 0.35) return;
       if (Math.abs(dx) + Math.abs(dy) > 2) this.lookMoved = true;
-      this.lookLast.x = e.clientX;
-      this.lookLast.y = e.clientY;
       this.handlers.onLook?.(dx, dy);
     };
 
@@ -176,6 +184,12 @@ export class TouchControls {
       e.preventDefault();
       if (!this.enabled) return;
       this.handlers.onMap?.();
+    });
+
+    this.root.querySelector('[data-action="chat"]')!.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!this.enabled) return;
+      this.handlers.onChat?.();
     });
 
     this.root.querySelector('[data-action="menu"]')!.addEventListener('click', (e) => {

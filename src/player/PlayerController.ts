@@ -38,6 +38,10 @@ export class PlayerController {
   private touchMoveZ = 0;
   private touchJump = false;
   private touchSneak = false;
+  private touchLookVelYaw = 0;
+  private touchLookVelPitch = 0;
+  private camYaw = 0;
+  private camPitch = -0.15;
   private readonly eyeWorld = new THREE.Vector3();
   private readonly aimDir = new THREE.Vector3();
   private readonly aimEuler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -69,6 +73,13 @@ export class PlayerController {
 
   setTouchMode(on: boolean): void {
     this.touchMode = on;
+    if (on) {
+      this.camYaw = this.yaw;
+      this.camPitch = this.pitch;
+    } else {
+      this.touchLookVelYaw = 0;
+      this.touchLookVelPitch = 0;
+    }
   }
 
   setTouchMove(x: number, z: number): void {
@@ -78,8 +89,17 @@ export class PlayerController {
 
   applyLookDelta(dx: number, dy: number): void {
     if (!this.inputEnabled) return;
-    const touchBoost = this.touchMode ? 1.75 : 1;
-    const sens = 0.0022 * this.mouseSensitivity * touchBoost;
+    const sens = 0.0022 * this.mouseSensitivity;
+    if (this.touchMode) {
+      const touchSens = sens * 1.25;
+      const impulse = 16;
+      this.touchLookVelYaw -= dx * touchSens * impulse;
+      this.touchLookVelPitch -= dy * touchSens * impulse;
+      const maxVel = 2.6;
+      this.touchLookVelYaw = THREE.MathUtils.clamp(this.touchLookVelYaw, -maxVel, maxVel);
+      this.touchLookVelPitch = THREE.MathUtils.clamp(this.touchLookVelPitch, -maxVel, maxVel);
+      return;
+    }
     this.yaw -= dx * sens;
     this.pitch -= dy * sens;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
@@ -128,6 +148,8 @@ export class PlayerController {
       this.touchMoveZ = 0;
       this.touchJump = false;
       this.touchSneak = false;
+      this.touchLookVelYaw = 0;
+      this.touchLookVelPitch = 0;
     }
   }
 
@@ -173,14 +195,38 @@ export class PlayerController {
   }
 
   private refreshAim(eyeYBob: number): void {
+    const yaw = this.touchMode ? this.camYaw : this.yaw;
+    const pitch = this.touchMode ? this.camPitch : this.pitch;
     this.eyeWorld.set(
       this.position.x,
       this.position.y + this.eyeHeight + eyeYBob,
       this.position.z,
     );
-    this.aimEuler.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.aimEuler.set(pitch, yaw, 0, 'YXZ');
     this.aimQuat.setFromEuler(this.aimEuler);
     this.aimDir.set(0, 0, -1).applyQuaternion(this.aimQuat).normalize();
+  }
+
+  private applyTouchLook(dt: number): void {
+    if (!this.touchMode || !this.inputEnabled) {
+      this.touchLookVelYaw = 0;
+      this.touchLookVelPitch = 0;
+      return;
+    }
+
+    this.yaw += this.touchLookVelYaw * dt;
+    this.pitch += this.touchLookVelPitch * dt;
+    this.pitch = THREE.MathUtils.clamp(this.pitch, -1.45, 1.45);
+
+    const damp = Math.exp(-11 * dt);
+    this.touchLookVelYaw *= damp;
+    this.touchLookVelPitch *= damp;
+    if (Math.abs(this.touchLookVelYaw) < 0.002) this.touchLookVelYaw = 0;
+    if (Math.abs(this.touchLookVelPitch) < 0.002) this.touchLookVelPitch = 0;
+
+    const follow = 1 - Math.exp(-18 * dt);
+    this.camYaw += (this.yaw - this.camYaw) * follow;
+    this.camPitch += (this.pitch - this.camPitch) * follow;
   }
 
   getSubmersion(): number {
@@ -235,12 +281,17 @@ export class PlayerController {
     this.velocity.set(0, 0, 0);
     this.sitting = false;
     this.lastPos.copy(this.position);
+    this.camYaw = this.yaw;
+    this.camPitch = this.pitch;
+    this.touchLookVelYaw = 0;
+    this.touchLookVelPitch = 0;
     this.refreshAim(0);
     this.updateCamera();
   }
 
   update(dt: number): void {
     this.justJumped = false;
+    this.applyTouchLook(dt);
 
     if (this.sitting) {
       // WASD stands up
@@ -271,8 +322,9 @@ export class PlayerController {
     );
     const moveSpeed = inWaterPreview ? speed * 0.48 : speed;
 
-    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    const lookYaw = this.touchMode ? this.camYaw : this.yaw;
+    const forward = new THREE.Vector3(-Math.sin(lookYaw), 0, -Math.cos(lookYaw));
+    const right = new THREE.Vector3(Math.cos(lookYaw), 0, -Math.sin(lookYaw));
 
     const wish = new THREE.Vector3();
     if (!this.sitting) {
@@ -334,7 +386,7 @@ export class PlayerController {
     this.lastPos.copy(this.position);
 
     this.avatar.position.set(this.position.x, this.position.y, this.position.z);
-    this.avatar.rotation.y = this.yaw;
+    this.avatar.rotation.y = lookYaw;
 
     const moveAmt = moveSpeed > 0 ? Math.hypot(this.velocity.x, this.velocity.z) / Math.max(moveSpeed, 0.01) : 0;
     this.model.update(

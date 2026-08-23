@@ -1,0 +1,24 @@
+{
+  "gameHasChat": false,
+  "chatClass": "ChatUi",
+  "chatMethods": [
+    "constructor",
+    "onChatSend",
+    "onToggle",
+    "setOpen",
+    "toggle",
+    "push"
+  ],
+  "netSendChat": true,
+  "netOnChat": true,
+  "invFrost": true,
+  "invTransform": true,
+  "invPanelCss": ".inv-panel {\n  pointer-events: auto;\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  width: min(720px, 94vw);\n  max-height: min(860px, 92vh);\n  padding: 0;\n  color: var(--ink);\n  z-index: 1;\n  border: 1px solid var(--glass-border);\n  border-radius: 16px;\n  box-sh",
+  "gameNetOn": "this.net.on({\n      onWelcome: (_id, players, edits) => {\n        this.remotePlayers!.clear();\n        for (const p of players) {\n          this.remotePlayers!.add(p.id, p.profile, p.snapshot);\n        }\n        this.chunks.loadNetworkEdits(edits);\n        if (players.length > 0) {\n          this.hud.showToast('Connected', `${players.length + 1} in this world`);\n        }\n      },\n      onPlayerJoin: (id, p, snapshot) => {\n        this.remotePlayers!.add(id, p, snapshot);\n        this.hud.showToast(`${snapshot.name} joined`, 'Same world link');\n      },\n      onPlayerLeave: (id) => {\n        t",
+  "inventoryOpenName": "inventoryOpen",
+  "setPausedSnippet": "setPaused(paused: boolean): void {\n    this.paused = paused;\n    this.hud.setMenuOpen(paused);\n    this.inventoryUi.root.classList.toggle('menu-hidden', paused);\n    if (paused) {\n      this.inventoryUi.setOpen(false);\n      if (document.pointerLockElement) document.exitPointerLock();\n    }\n    const playing = !paused && !this.inventoryUi.isOpen;\n    this.player.setInputEnabled(playing);\n    this.interaction.setEnabled(playing);\n    this.touchControls?.setEnabled(playing);\n  }",
+  "touchHandlers": "export type TouchControlHandlers = {\n  onMove?: (x: number, z: number) => void;\n  onLook?: (dx: number, dy: number) => void;\n  onJump?: (down: boolean) => void;\n  onSneak?: (down: boolean) => void;\n  onBreak?: () => void;\n  onPlace?: () => void;\n  onPack?: () => void;\n  onJournal?: () => void;\n  onMap?: () => void;\n  onMenu?: () => void;\n};",
+  "mainEscape": "keydown', (e) => {\n  if (e.code !== 'Escape') return;\n  if (!game || game.isPaused) return;\n  if (game.inventoryOpen) {\n    game.closeInventory();\n    return;\n  }\n  if (document.pointerLockElement) {\n    document.exitPointerLock();\n    return;\n  }\n  game.setPaused(true);\n  menu.show({ resumable: true });",
+  "serverChat": false,
+  "applyPrefs": "applyPrefs(loadProfile(), loadSettings());\n\n    this.chunks.bootstrapAt(0, 0);\n    this.player.spawnAt(0, 0);\n\n    this.initMultiplayer(worldSettings, loadProfile());\n\n    window.addEventListener('resize', () => this.onResize());\n    this.onResize();\n  }\n\n  get"
+}

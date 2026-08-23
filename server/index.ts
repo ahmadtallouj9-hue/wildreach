@@ -8,6 +8,8 @@ import type {
   WorldSettingsWire,
 } from '../src/net/protocol.ts';
 import { editKey } from '../src/net/protocol.ts';
+import { isSocialClientMessage } from '../src/net/socialProtocol.ts';
+import { handleSocialClose, handleSocialMessage } from './social.ts';
 
 const PORT = Number(process.env.PORT) || 8787;
 
@@ -23,6 +25,7 @@ type PlayerState = {
   onGround: boolean;
   profile: ProfileWire;
   lastBlockAt: number;
+  lastChatAt: number;
 };
 
 type Room = {
@@ -100,10 +103,15 @@ wss.on('connection', (ws) => {
   let roomId: string | null = null;
 
   ws.on('message', (raw) => {
-    let msg: ClientMessage;
+    let msg: ClientMessage | { t?: string };
     try {
       msg = JSON.parse(String(raw)) as ClientMessage;
     } catch {
+      return;
+    }
+
+    if (isSocialClientMessage(msg)) {
+      handleSocialMessage(ws, msg);
       return;
     }
 
@@ -128,6 +136,7 @@ wss.on('connection', (ws) => {
         onGround: false,
         profile: msg.profile,
         lastBlockAt: 0,
+        lastChatAt: 0,
       };
       room.players.set(playerId, player);
       room.sockets.set(playerId, ws);
@@ -189,10 +198,30 @@ wss.on('connection', (ws) => {
       if (!validateBlock(player, msg)) return;
       room.edits.set(editKey(msg.x, msg.y, msg.z), msg.block);
       broadcastAll(room, { t: 'block', x: msg.x, y: msg.y, z: msg.z, block: msg.block });
+      return;
+    }
+
+    if (msg.t === 'chat') {
+      const text = String(msg.text ?? '')
+        .replace(/[\u0000-\u001F\u007F]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+      if (!text) return;
+      const now = Date.now();
+      if (now - player.lastChatAt < 400) return;
+      player.lastChatAt = now;
+      broadcastAll(room, {
+        t: 'chat',
+        id: playerId,
+        name: player.name,
+        text,
+      });
     }
   });
 
   ws.on('close', () => {
+    handleSocialClose(ws);
     if (!playerId || !roomId) return;
     const room = rooms.get(roomId);
     if (!room) return;
