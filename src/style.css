@@ -874,14 +874,10 @@ body.title-over-session #main-menu {
   background: rgba(40, 70, 20, 0.45);
 }
 
-.menu-atmosphere__grass {
-  position: absolute;
-  left: -2%;
-  right: -2%;
-  bottom: 0;
-  height: min(24vh, 170px);
-  z-index: 6;
-  pointer-events: none;
+.menu-atmosphere__grass,
+.menu-blade,
+.menu-plant {
+  display: none !important;
 }
 
 .menu-blade {

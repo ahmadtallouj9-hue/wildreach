@@ -102,7 +102,6 @@ export class MainMenu {
           <div class="menu-atmosphere__glow"></div>
           <div class="menu-atmosphere__shimmer"></div>
           <div class="menu-atmosphere__leaves"></div>
-          <div class="menu-atmosphere__grass"></div>
           <div class="menu-atmosphere__veil"></div>
         </div>
         <div class="menu-home-inner menu-home-hero">
@@ -584,9 +583,8 @@ export class MainMenu {
 
   private buildAtmosphereFx(): void {
     const stars = this.root.querySelector('.menu-atmosphere__stars');
-    const grass = this.root.querySelector('.menu-atmosphere__grass');
     const leaves = this.root.querySelector('.menu-atmosphere__leaves');
-    if (!stars || !grass || !leaves) return;
+    if (!stars || !leaves) return;
 
     const starN = 48;
     let starHtml = '';
@@ -600,24 +598,6 @@ export class MainMenu {
       starHtml += `<span class="menu-star" style="--sx:${x}%;--sy:${y}%;--ss:${size}px;--sd:${delay}s;--su:${dur}s;--sb:${bright}"></span>`;
     }
     stars.innerHTML = starHtml;
-
-    const bladeN = 56;
-    let grassHtml = '';
-    for (let i = 0; i < bladeN; i++) {
-      const x = (i / (bladeN - 1)) * 100;
-      const h = 18 + ((i * 47) % 34);
-      const delay = ((i * 19) % 40) / 10;
-      const dur = 2.2 + ((i * 23) % 25) / 10;
-      const shade = 40 + ((i * 31) % 35);
-      const lean = -8 + ((i * 41) % 16);
-      grassHtml += `<span class="menu-blade" style="--bx:${x}%;--bh:${h}px;--bd:${delay}s;--bu:${dur}s;--bc:${shade}%;--bl:${lean}deg"></span>`;
-    }
-    // A few denser plant clumps
-    for (let i = 0; i < 7; i++) {
-      const x = 6 + i * 14 + ((i * 7) % 5);
-      grassHtml += `<span class="menu-plant" style="--px:${x}%;--pd:${(i * 0.35).toFixed(2)}s"><i></i><i></i><i></i><i></i></span>`;
-    }
-    grass.innerHTML = grassHtml;
 
     const leafN = 14;
     let leafHtml = '';
