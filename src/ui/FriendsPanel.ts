@@ -1,6 +1,54 @@
 import type { SocialClient } from '../net/SocialClient';
 import type { FriendSummary } from '../net/socialProtocol';
+import type { ProfileWire } from '../net/protocol';
 import { getFriendCode } from '../ui/account';
+import type { Profile } from './prefs';
+import { ProfilePreview3D } from './ProfilePreview3D';
+import { createDefaultSkin, decodeSkin, drawSkinFrontPreview } from '../player/SkinAtlas';
+
+function wireToProfile(p: ProfileWire): Profile {
+  return {
+    name: p.name || 'Wanderer',
+    accent: p.accent,
+    skin: p.skin,
+    outfit: p.outfit,
+    pants: p.pants,
+    hair: p.hair,
+    eyes: p.eyes,
+    shoes: p.shoes,
+    style: p.style ?? 'classic',
+    hat: p.hat ?? 'none',
+    hairStyle: p.hairStyle ?? 'short',
+    face: p.face ?? 'neutral',
+    glasses: p.glasses ?? 'none',
+    facial: p.facial ?? 'none',
+    sleeves: p.sleeves ?? 'bare',
+    cape: p.cape ?? 'none',
+    skinData: p.skinData,
+  };
+}
+
+async function pixelsForProfile(p: ProfileWire): Promise<Uint8ClampedArray> {
+  if (p.skinData) {
+    try {
+      return await decodeSkin(p.skinData);
+    } catch {
+      /* ignore bad skin data */
+    }
+  }
+  return createDefaultSkin(p.skin, p.outfit, p.accent, {
+    hair: p.hair,
+    eyes: p.eyes,
+    shoes: p.shoes,
+    hairStyle: p.hairStyle,
+    face: p.face,
+    facial: p.facial,
+    sleeves: p.sleeves,
+    pants: p.pants,
+    outfit: p.outfit,
+    skin: p.skin,
+  });
+}
 
 function statusLabel(f: FriendSummary): string {
   if (!f.online) return 'Offline';
@@ -37,10 +85,12 @@ function profileViewHtml(f: FriendSummary): string {
   const p = f.profile;
   const status = statusLabel(f);
   return `
-    <div class="friend-profile-hero">
-      <div class="friend-profile-avatar" style="background:${p.accent}">
-        <span class="friend-profile-avatar-face" style="background:${p.skin}"></span>
-      </div>
+    <div class="friend-profile-stage-wrap">
+      <div class="friend-profile-stage" data-friend-preview></div>
+      <p class="friend-profile-stage-hint">Drag to turn · scroll to zoom</p>
+    </div>
+
+    <div class="friend-profile-hero friend-profile-hero--text">
       <div class="friend-profile-hero-text">
         <p class="friend-profile-name">${escapeHtml(p.name || 'Wanderer')}</p>
         <p class="friend-profile-code">Code <strong>${escapeHtml(f.code)}</strong></p>
@@ -108,6 +158,8 @@ export class FriendsPanel {
   private profileBody: HTMLElement;
   private toastTimer = 0;
   private openFriendId: string | null = null;
+  private preview: ProfilePreview3D | null = null;
+  private previewFriendId: string | null = null;
 
   constructor(
     host: HTMLElement,
@@ -217,9 +269,7 @@ export class FriendsPanel {
           (f) => `
       <article class="friend-row" data-id="${f.accountId}">
         <button type="button" class="friend-row-main" data-action="view-friend" data-id="${f.accountId}">
-          <span class="friend-row-avatar" style="background:${f.profile.accent}">
-            <span style="background:${f.profile.skin}"></span>
-          </span>
+          <canvas class="friend-row-skin" width="32" height="64" data-friend-skin="${f.accountId}" aria-hidden="true"></canvas>
           <span class="friend-dot ${statusClass(f)}"></span>
           <span class="friend-row-text">
             <strong>${escapeHtml(f.profile.name || 'Wanderer')}</strong>
@@ -268,6 +318,7 @@ export class FriendsPanel {
         }
       });
     });
+    this.paintFriendRowSkins(friends);
   }
 
   private renderRequests(): void {
@@ -320,11 +371,50 @@ export class FriendsPanel {
     this.openFriendId = friend.accountId;
     this.profileBody.innerHTML = profileViewHtml(friend);
     this.profileModal.hidden = false;
+    this.mountFriendPreview(friend);
   }
 
   hideProfile(): void {
     this.openFriendId = null;
+    this.stopFriendPreview();
+    this.profileBody.innerHTML = '';
     this.profileModal.hidden = true;
+  }
+
+  private mountFriendPreview(friend: FriendSummary): void {
+    const mount = this.profileBody.querySelector<HTMLElement>('[data-friend-preview]');
+    if (!mount) return;
+    if (!this.preview) this.preview = new ProfilePreview3D();
+    if (this.preview.root.parentElement !== mount) {
+      mount.replaceChildren();
+      this.preview.mount(mount);
+    }
+    this.previewFriendId = friend.accountId;
+    this.preview.applyProfile(wireToProfile(friend.profile));
+    this.preview.start();
+    requestAnimationFrame(() => this.preview?.layout());
+    const token = friend.accountId;
+    void pixelsForProfile(friend.profile).then((pixels) => {
+      if (this.previewFriendId !== token) return;
+      this.preview?.syncPixels(pixels);
+    });
+  }
+
+  private stopFriendPreview(): void {
+    this.previewFriendId = null;
+    this.preview?.stop();
+  }
+
+  private paintFriendRowSkins(friends: FriendSummary[]): void {
+    this.listEl.querySelectorAll<HTMLCanvasElement>('[data-friend-skin]').forEach((canvas) => {
+      const id = canvas.dataset.friendSkin;
+      const friend = friends.find((f) => f.accountId === id);
+      if (!friend) return;
+      void pixelsForProfile(friend.profile).then((pixels) => {
+        if (!canvas.isConnected) return;
+        drawSkinFrontPreview(pixels, canvas, 2);
+      });
+    });
   }
 
   private addFriend(): void {
