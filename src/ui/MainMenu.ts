@@ -97,61 +97,45 @@ export class MainMenu {
     this.root.innerHTML = `
       <div class="menu-atmosphere" aria-hidden="true"></div>
       <div class="menu-stage menu-home" data-panel="home">
-        <div class="menu-home-inner menu-glass-window">
+        <div class="menu-home-inner menu-home-hero">
           <header class="menu-header">
-            <div class="menu-logo-stack">
-              <div class="menu-canopy" aria-hidden="true"></div>
-              <div class="menu-logo-mark" aria-hidden="true"></div>
-            </div>
-            <h1 class="menu-brand">Wildreach</h1>
+            <div class="menu-logo-mark menu-logo-mark--crest" aria-hidden="true"></div>
+            <h1 class="menu-brand">WILDREACH</h1>
             <p class="menu-tagline">
-              <span class="menu-star" aria-hidden="true">✦</span>
-              Wander seeded reaches. Chart what you find.
-              <span class="menu-star" aria-hidden="true">✦</span>
+              <span class="menu-rule" aria-hidden="true"></span>
+              <span class="menu-tagline-text">Wander seeded reaches. Chart what you find.</span>
+              <span class="menu-rule" aria-hidden="true"></span>
             </p>
           </header>
           <nav class="menu-nav" aria-label="Main menu">
-            <button type="button" class="menu-framed-btn menu-framed-btn--play" data-action="play">
-              <span class="menu-framed-btn__frame">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-framed-btn__label">Play</span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
+            <button type="button" class="menu-hero-btn menu-hero-btn--focus" data-action="play">
+              <span class="menu-hero-btn__chev" aria-hidden="true"></span>
+              <span class="menu-hero-btn__icon" aria-hidden="true">*</span>
+              <span class="menu-hero-btn__label">Play</span>
+              <span class="menu-hero-btn__chev menu-hero-btn__chev--end" aria-hidden="true"></span>
             </button>
-            <button type="button" class="menu-framed-btn" data-action="world">
-              <span class="menu-framed-btn__frame">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-framed-btn__label">Worlds</span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
+            <button type="button" class="menu-hero-btn" data-action="world">
+              <span class="menu-hero-btn__icon" aria-hidden="true">o</span>
+              <span class="menu-hero-btn__label">Worlds</span>
             </button>
-            <button type="button" class="menu-framed-btn" data-action="multiplayer">
-              <span class="menu-framed-btn__frame">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-framed-btn__label">Friends</span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
+            <button type="button" class="menu-hero-btn" data-action="multiplayer">
+              <span class="menu-hero-btn__icon" aria-hidden="true">+</span>
+              <span class="menu-hero-btn__label">Friends</span>
             </button>
-            <button type="button" class="menu-framed-btn" data-action="customize">
-              <span class="menu-framed-btn__frame">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-framed-btn__label">Character</span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
+            <button type="button" class="menu-hero-btn" data-action="customize">
+              <span class="menu-hero-btn__icon" aria-hidden="true">@</span>
+              <span class="menu-hero-btn__label">Customize</span>
             </button>
-            <button type="button" class="menu-framed-btn" data-action="settings">
-              <span class="menu-framed-btn__frame">
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                <span class="menu-framed-btn__label">Settings</span>
-                <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-              </span>
+            <button type="button" class="menu-hero-btn" data-action="settings">
+              <span class="menu-hero-btn__icon" aria-hidden="true">#</span>
+              <span class="menu-hero-btn__label">Settings</span>
             </button>
           </nav>
           <footer class="menu-footer">
             <p class="menu-controls">
-              <span class="menu-star" aria-hidden="true">✦</span>
-              WASD move · mouse look · E pack · J journal · M map
-              <span class="menu-star" aria-hidden="true">✦</span>
+              <span class="menu-rule" aria-hidden="true"></span>
+              <span>WASD move · mouse look · E pack · J journal · M map</span>
+              <span class="menu-rule" aria-hidden="true"></span>
             </p>
           </footer>
         </div>
@@ -172,6 +156,14 @@ export class MainMenu {
           <span>Render distance <em class="dist-val">6</em></span>
           <input type="range" class="dist-range" min="3" max="8" step="1" />
         </label>
+        <label class="field">
+          <span>Brightness <em class="bright-val">1.0</em></span>
+          <input type="range" class="bright-range" min="0.6" max="1.4" step="0.05" />
+        </label>
+        <label class="field">
+          <span>Clouds <em class="cloud-val">70%</em></span>
+          <input type="range" class="cloud-range" min="0" max="1" step="0.05" />
+        </label>
         <div class="field">
           <span>Person view</span>
           <div class="seg" role="group" aria-label="Camera view">
@@ -180,6 +172,18 @@ export class MainMenu {
             <button type="button" class="seg-btn" data-view="front">Front</button>
           </div>
         </div>
+        <label class="field field-check">
+          <input type="checkbox" class="invert-y-check" />
+          <span>Invert Y look</span>
+        </label>
+        <label class="field field-check">
+          <input type="checkbox" class="show-fps-check" />
+          <span>Show FPS</span>
+        </label>
+        <label class="field field-check">
+          <input type="checkbox" class="uw-fx-check" checked />
+          <span>Underwater effects</span>
+        </label>
         <button type="button" class="menu-btn primary" data-action="save-settings">Save</button>
       </div>
 
@@ -1045,6 +1049,8 @@ export class MainMenu {
     const sens = this.root.querySelector<HTMLInputElement>('.sens-range')!;
     const fov = this.root.querySelector<HTMLInputElement>('.fov-range')!;
     const dist = this.root.querySelector<HTMLInputElement>('.dist-range')!;
+    const bright = this.root.querySelector<HTMLInputElement>('.bright-range')!;
+    const clouds = this.root.querySelector<HTMLInputElement>('.cloud-range')!;
     sens.addEventListener('input', () => {
       this.root.querySelector('.sens-val')!.textContent = Number(sens.value).toFixed(2);
     });
@@ -1053,6 +1059,12 @@ export class MainMenu {
     });
     dist.addEventListener('input', () => {
       this.root.querySelector('.dist-val')!.textContent = dist.value;
+    });
+    bright.addEventListener('input', () => {
+      this.root.querySelector('.bright-val')!.textContent = Number(bright.value).toFixed(2);
+    });
+    clouds.addEventListener('input', () => {
+      this.root.querySelector('.cloud-val')!.textContent = `${Math.round(Number(clouds.value) * 100)}%`;
     });
     this.root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1066,12 +1078,24 @@ export class MainMenu {
     const sens = this.root.querySelector<HTMLInputElement>('.sens-range')!;
     const fov = this.root.querySelector<HTMLInputElement>('.fov-range')!;
     const dist = this.root.querySelector<HTMLInputElement>('.dist-range')!;
+    const bright = this.root.querySelector<HTMLInputElement>('.bright-range')!;
+    const clouds = this.root.querySelector<HTMLInputElement>('.cloud-range')!;
+    const invert = this.root.querySelector<HTMLInputElement>('.invert-y-check')!;
+    const fps = this.root.querySelector<HTMLInputElement>('.show-fps-check')!;
+    const uw = this.root.querySelector<HTMLInputElement>('.uw-fx-check')!;
     sens.value = String(this.settings.mouseSensitivity);
     fov.value = String(this.settings.fov);
     dist.value = String(this.settings.renderDistance);
+    bright.value = String(this.settings.brightness);
+    clouds.value = String(this.settings.clouds);
+    invert.checked = this.settings.invertY;
+    fps.checked = this.settings.showFps;
+    uw.checked = this.settings.underwaterFx;
     this.root.querySelector('.sens-val')!.textContent = this.settings.mouseSensitivity.toFixed(2);
     this.root.querySelector('.fov-val')!.textContent = String(this.settings.fov);
     this.root.querySelector('.dist-val')!.textContent = String(this.settings.renderDistance);
+    this.root.querySelector('.bright-val')!.textContent = this.settings.brightness.toFixed(2);
+    this.root.querySelector('.cloud-val')!.textContent = `${Math.round(this.settings.clouds * 100)}%`;
     this.syncViewSeg();
   }
 
@@ -1085,9 +1109,19 @@ export class MainMenu {
     const sens = this.root.querySelector<HTMLInputElement>('.sens-range')!;
     const fov = this.root.querySelector<HTMLInputElement>('.fov-range')!;
     const dist = this.root.querySelector<HTMLInputElement>('.dist-range')!;
+    const bright = this.root.querySelector<HTMLInputElement>('.bright-range')!;
+    const clouds = this.root.querySelector<HTMLInputElement>('.cloud-range')!;
+    const invert = this.root.querySelector<HTMLInputElement>('.invert-y-check')!;
+    const fps = this.root.querySelector<HTMLInputElement>('.show-fps-check')!;
+    const uw = this.root.querySelector<HTMLInputElement>('.uw-fx-check')!;
     this.settings.mouseSensitivity = Number(sens.value);
     this.settings.fov = Number(fov.value);
     this.settings.renderDistance = Number(dist.value);
+    this.settings.brightness = Number(bright.value);
+    this.settings.clouds = Number(clouds.value);
+    this.settings.invertY = invert.checked;
+    this.settings.showFps = fps.checked;
+    this.settings.underwaterFx = uw.checked;
   }
 
   private bindProfileUi(): void {

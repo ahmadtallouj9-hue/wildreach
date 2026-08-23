@@ -43,6 +43,7 @@ export class Game {
   private social: SocialClient | null = null;
   private remotePlayers: RemotePlayers | null = null;
   private playerName = 'Wanderer';
+  private prefs: Settings = loadSettings();
   private clock = new THREE.Clock();
   private running = false;
   private paused = true;
@@ -187,11 +188,16 @@ export class Game {
   applyPrefs(profile: Profile, settings: Settings, skinPixels?: Uint8ClampedArray): void {
     this.playerName = profile.name || 'Wanderer';
     this.player.mouseSensitivity = settings.mouseSensitivity;
+    this.player.invertY = settings.invertY;
     this.player.setFov(settings.fov);
     this.player.setViewMode(settings.viewMode);
     this.player.applyProfile(profile);
     if (skinPixels) this.player.applySkinPixels(skinPixels);
     this.chunks.setRenderDistance(settings.renderDistance);
+    this.sky.cloudCover = settings.clouds;
+    this.postfx.setBrightness(settings.brightness);
+    this.hud.setShowFps(settings.showFps);
+    this.prefs = settings;
     this.hud.setProfileName(profile.name, profile.accent);
   }
 
@@ -427,7 +433,7 @@ export class Game {
       this.sky.fogDensity,
       submersion,
     );
-    this.postfx.setUnderwater(submersion, dt);
+    this.postfx.setUnderwater(this.prefs.underwaterFx ? submersion : 0, dt);
     this.postfx.setSun(
       this.sky.sunDir,
       Math.max(0, this.sky.sunDir.y),
@@ -444,7 +450,8 @@ export class Game {
     this.hud.setPointerLocked(this.player.aimActive && canControl && !hudBlocking);
     this.hud.setTouchMode(this.player.touchControlsActive);
     this.touchControls?.setEnabled(canControl && !hudBlocking);
-    this.hud.setUnderwater(submersion);
+    this.hud.setUnderwater(this.prefs.underwaterFx ? submersion : 0);
+    this.hud.tickFps(dt);
     if (worldLive && !hudBlocking) {
       this.net?.tickState(dt, { t: 'state', ...this.player.getNetState() });
     }

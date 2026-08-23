@@ -158,11 +158,15 @@ export class WorldGen {
             block = this.surfaceBlock(biome, height);
           } else if (y >= height - 3) {
             block =
-              biome === BiomeId.Desert
-                ? Block.Sand
-                : biome === BiomeId.Wetlands
-                  ? Block.Clay
-                  : Block.Dirt;
+              height < SEA_LEVEL
+                ? height < SEA_LEVEL - 8
+                  ? Block.Stone
+                  : Block.Sand
+                : biome === BiomeId.Desert
+                  ? Block.Sand
+                  : biome === BiomeId.Wetlands
+                    ? Block.Clay
+                    : Block.Dirt;
           } else {
             block = Block.Stone;
           }
@@ -177,6 +181,12 @@ export class WorldGen {
   }
 
   private surfaceBlock(biome: BiomeId, height: number): number {
+    // Ocean / lake beds — sand near shore, stone/clay in the deeps (not grass).
+    if (height < SEA_LEVEL) {
+      if (height < SEA_LEVEL - 10) return Block.Stone;
+      if (height < SEA_LEVEL - 5) return Block.Clay;
+      return Block.Sand;
+    }
     switch (biome) {
       case BiomeId.Desert:
         return Block.Sand;

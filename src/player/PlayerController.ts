@@ -24,6 +24,7 @@ export class PlayerController {
 
   viewMode: ViewMode = 'first';
   mouseSensitivity = 1;
+  invertY = false;
   sitting = false;
   private keys = new Set<string>();
   private locked = false;
@@ -90,18 +91,19 @@ export class PlayerController {
   applyLookDelta(dx: number, dy: number): void {
     if (!this.inputEnabled) return;
     const sens = 0.0022 * this.mouseSensitivity;
+    const lookY = this.invertY ? dy : -dy;
     if (this.touchMode) {
       const touchSens = sens * 1.25;
       const impulse = 16;
       this.touchLookVelYaw -= dx * touchSens * impulse;
-      this.touchLookVelPitch -= dy * touchSens * impulse;
+      this.touchLookVelPitch += lookY * touchSens * impulse;
       const maxVel = 2.6;
       this.touchLookVelYaw = THREE.MathUtils.clamp(this.touchLookVelYaw, -maxVel, maxVel);
       this.touchLookVelPitch = THREE.MathUtils.clamp(this.touchLookVelPitch, -maxVel, maxVel);
       return;
     }
     this.yaw -= dx * sens;
-    this.pitch -= dy * sens;
+    this.pitch += lookY * sens;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
   }
 
@@ -270,7 +272,7 @@ export class PlayerController {
       if (!this.locked || !this.inputEnabled) return;
       const sens = 0.0022 * this.mouseSensitivity;
       this.yaw -= e.movementX * sens;
-      this.pitch -= e.movementY * sens;
+      this.pitch += (this.invertY ? e.movementY : -e.movementY) * sens;
       this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
     });
   }

@@ -150,6 +150,8 @@ export class Sky {
   fogColor = new THREE.Color('#7aadb0');
   fogDensity = 0.004;
   cloudiness = 0.7;
+  /** Player setting 0–1 multiplier for cloud cover. */
+  cloudCover = 0.7;
 
   constructor(private scene: THREE.Scene) {
     // Dome owns the background — never use a flat clear color
@@ -275,7 +277,7 @@ export class Sky {
     um.uSunColor.value.copy(this.sun.color);
     um.uTime.value += dt;
     um.uDay.value = day;
-    um.uCloud.value = this.cloudiness;
+    um.uCloud.value = this.cloudiness * this.cloudCover;
     um.uUnder.value = u;
     um.uFog.value.copy(this.fogColor);
   }

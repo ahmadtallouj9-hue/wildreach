@@ -735,16 +735,15 @@ body.title-over-session #main-menu {
   inset: 0;
   overflow: hidden;
   border-radius: inherit;
-  background: #120a20;
+  background: #0a1a2e;
 }
 
 .menu-atmosphere::before {
   content: '';
   position: absolute;
-  inset: -24px;
-  background: url('/menu-bg.png') center center / cover no-repeat;
-  filter: blur(16px) saturate(1.12) brightness(0.95);
-  transform: scale(1.08);
+  inset: 0;
+  background: url('/menu-hero.png') center center / cover no-repeat;
+  transform: scale(1.02);
 }
 
 .menu-atmosphere::after {
@@ -752,8 +751,8 @@ body.title-over-session #main-menu {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 90% 70% at 50% 35%, transparent 30%, rgba(12, 8, 24, 0.45) 100%),
-    linear-gradient(180deg, rgba(40, 20, 60, 0.12) 0%, transparent 35%, rgba(8, 12, 28, 0.35) 100%);
+    radial-gradient(ellipse 70% 55% at 50% 42%, rgba(8, 18, 36, 0.12) 0%, rgba(6, 14, 28, 0.5) 70%, rgba(4, 10, 22, 0.78) 100%),
+    linear-gradient(180deg, rgba(12, 28, 48, 0.18) 0%, transparent 30%, rgba(4, 12, 24, 0.42) 100%);
   pointer-events: none;
 }
 
@@ -4421,4 +4420,177 @@ button.mc-row {
   .mc-btn--danger:hover:not(:disabled) {
     background: #8a4a4a;
   }
+}
+
+
+/* ---- Concept-art title menu ---- */
+#main-menu:has([data-panel='home']:not([hidden])) {
+  align-items: center;
+  inset: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+}
+#main-menu:has([data-panel='home']:not([hidden])) .menu-atmosphere { border-radius: 0; }
+.menu-home-hero {
+  width: min(380px, 92vw);
+  padding: 1.5rem 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.menu-home-hero.menu-glass-window,
+.menu-home-inner.menu-home-hero {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+.menu-logo-mark--crest {
+  width: 52px;
+  height: 44px;
+  margin: 0 auto 0.65rem;
+  background: linear-gradient(180deg, #9fd4ff 0%, #6bb0e8 45%, #3d7fb8 100%);
+  clip-path: polygon(50% 0%, 78% 18%, 92% 48%, 70% 100%, 50% 86%, 30% 100%, 8% 48%, 22% 18%);
+  box-shadow: 0 0 18px rgba(120, 190, 255, 0.45);
+  border: none !important;
+}
+.menu-logo-mark--crest::after { display: none !important; }
+.menu-home-hero .menu-brand {
+  color: #d8f0ff;
+  font-size: clamp(2.4rem, 8.5vw, 3.6rem);
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 24px rgba(120, 200, 255, 0.35), 2px 3px 0 rgba(0, 40, 70, 0.55), 0 8px 24px rgba(0, 0, 0, 0.35);
+  margin-bottom: 0.7rem;
+}
+.menu-home-hero .menu-tagline,
+.menu-home-hero .menu-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  max-width: 36ch;
+  margin: 0 auto;
+  font-family: Cinzel, Georgia, serif;
+  font-size: 0.78rem;
+  color: rgba(220, 235, 250, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+.menu-tagline-text { text-align: center; line-height: 1.35; }
+.menu-rule {
+  flex: 1 1 1.2rem;
+  height: 1px;
+  max-width: 2.4rem;
+  background: linear-gradient(90deg, transparent, rgba(160, 210, 255, 0.75), transparent);
+  position: relative;
+}
+.menu-rule::after {
+  content: '◆';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.42rem;
+  color: rgba(170, 215, 255, 0.9);
+}
+.menu-home-hero .menu-header { margin-bottom: 1.25rem; }
+.menu-home-hero .menu-nav {
+  gap: 0.45rem;
+  width: min(320px, 86vw);
+  margin-bottom: 1.15rem;
+}
+.menu-hero-btn {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.6rem 1fr;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 2.85rem;
+  padding: 0.55rem 1rem 0.55rem 0.85rem;
+  border: 2px solid rgba(140, 200, 255, 0.72);
+  border-radius: 6px;
+  background: rgba(22, 32, 48, 0.55);
+  backdrop-filter: blur(8px) saturate(1.15);
+  -webkit-backdrop-filter: blur(8px) saturate(1.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.28);
+  color: #f4f8ff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.menu-hero-btn--focus {
+  grid-template-columns: 0.7rem 1.6rem 1fr 0.7rem;
+  border-color: rgba(170, 220, 255, 0.95);
+  background: rgba(28, 48, 72, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 0 16px rgba(100, 180, 255, 0.28), 0 6px 18px rgba(0,0,0,0.3);
+}
+.menu-hero-btn__icon {
+  justify-self: center;
+  color: #9fd4ff;
+  text-shadow: 0 0 8px rgba(120,190,255,0.45);
+}
+.menu-hero-btn__label { text-align: center; }
+.menu-hero-btn__chev {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0.35rem 0 0.35rem 0.45rem;
+  border-color: transparent transparent transparent #9fd4ff;
+  justify-self: center;
+}
+.menu-hero-btn__chev--end {
+  border-width: 0.35rem 0.45rem 0.35rem 0;
+  border-color: transparent #9fd4ff transparent transparent;
+}
+.menu-hero-btn:hover,
+.menu-hero-btn:focus-visible {
+  border-color: #c5e8ff;
+  background: rgba(36, 58, 86, 0.7);
+  outline: none;
+}
+.menu-hero-btn:active { transform: translateY(1px); }
+.field-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+}
+.field-check input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #6bb0e8;
+}
+.fps-chip {
+  position: fixed;
+  top: max(0.55rem, env(safe-area-inset-top));
+  right: max(0.55rem, env(safe-area-inset-right));
+  z-index: 60;
+  padding: 0.2rem 0.45rem;
+  font-family: Silkscreen, monospace;
+  font-size: 0.65rem;
+  color: #dff6ff;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.2);
+  pointer-events: none;
+}
+.fps-chip[hidden] { display: none !important; }
+@media (max-width: 860px) {
+  .menu-home-hero {
+    width: min(100%, 92vw);
+    padding: calc(1rem + env(safe-area-inset-top, 0px)) 0.75rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+  .menu-hero-btn { min-height: 3rem; font-size: 1rem; }
 }

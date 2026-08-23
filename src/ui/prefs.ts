@@ -42,6 +42,11 @@ export interface Settings {
   fov: number;
   viewMode: ViewMode;
   renderDistance: number;
+  invertY: boolean;
+  showFps: boolean;
+  clouds: number;
+  underwaterFx: boolean;
+  brightness: number;
 }
 
 const PROFILE_KEY = 'wildreach.profile';
@@ -71,6 +76,11 @@ const DEFAULT_SETTINGS: Settings = {
   fov: 75,
   viewMode: 'first',
   renderDistance: 6,
+  invertY: false,
+  showFps: false,
+  clouds: 0.7,
+  underwaterFx: true,
+  brightness: 1,
 };
 
 const HATS: HatStyle[] = ['none', 'cap', 'band', 'hood', 'beanie', 'visor', 'crown', 'helm'];
@@ -129,6 +139,11 @@ export function loadSettings(): Settings {
   s.viewMode =
     s.viewMode === 'third' || s.viewMode === 'front' ? s.viewMode : 'first';
   s.renderDistance = Math.min(8, Math.max(3, Math.round(Number(s.renderDistance) || 6)));
+  s.invertY = !!s.invertY;
+  s.showFps = !!s.showFps;
+  s.clouds = Math.min(1, Math.max(0, Number(s.clouds) || 0.7));
+  s.underwaterFx = s.underwaterFx !== false;
+  s.brightness = Math.min(1.4, Math.max(0.6, Number(s.brightness) || 1));
   return s;
 }
 

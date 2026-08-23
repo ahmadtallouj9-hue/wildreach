@@ -11,7 +11,7 @@ const UnderwaterShader = {
     tDiffuse: { value: null as THREE.Texture | null },
     underwater: { value: 0 },
     time: { value: 0 },
-    waterColor: { value: new THREE.Color(0.05, 0.28, 0.42) },
+    waterColor: { value: new THREE.Color(0.04, 0.32, 0.48) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -54,17 +54,20 @@ const UnderwaterShader = {
       uv += vec2(wobble, wobble * 0.6);
 
       vec4 col = texture2D(tDiffuse, uv);
-      vec3 tint = mix(col.rgb, col.rgb * waterColor * 1.85, u * 0.42);
-      tint = mix(tint, waterColor * 0.42, u * 0.22);
+      vec3 tint = mix(col.rgb, col.rgb * waterColor * 2.05, u * 0.5);
+      tint = mix(tint, waterColor * 0.38, u * 0.28);
 
       float caustic = noise(uv * 14.0 + vec2(time * 0.35, -time * 0.28));
       caustic += noise(uv * 22.0 - vec2(time * 0.22, time * 0.18)) * 0.5;
       caustic = smoothstep(0.45, 0.95, caustic);
-      tint += vec3(0.04, 0.14, 0.16) * caustic * u * 0.18;
+      tint += vec3(0.05, 0.18, 0.2) * caustic * u * 0.28;
 
       float rays = sin(uv.y * 6.0 - time * 0.8) * 0.5 + 0.5;
       rays *= 1.0 - uv.y;
-      tint += vec3(0.03, 0.1, 0.12) * rays * u * 0.12;
+      tint += vec3(0.05, 0.16, 0.18) * rays * u * 0.2;
+
+      // Soft depth haze
+      tint = mix(tint, waterColor * 0.55, u * u * 0.18);
 
       vec2 d = uv - 0.5;
       float vig = 1.0 - dot(d, d) * (1.4 * u);
@@ -216,6 +219,13 @@ export class PostFX {
     this.gradePass.uniforms.dayFactor.value = Math.max(0, dayFactor);
     this.bloomPass.strength = 0.28 + dayFactor * 0.28;
     this.bloomPass.threshold = 0.78 - dayFactor * 0.08;
+  }
+
+  setBrightness(amount: number): void {
+    const a = Math.min(1.4, Math.max(0.6, amount));
+    if (this.gradePass.uniforms.intensity) {
+      this.gradePass.uniforms.intensity.value = a;
+    }
   }
 
   render(): void {

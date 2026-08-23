@@ -27,6 +27,11 @@ export class Hud {
   private mpChip: HTMLElement;
   private mpLabel: HTMLElement;
   private toasts: { el: HTMLElement; t: number }[] = [];
+  private fpsEl: HTMLElement;
+  private showFps = false;
+  private fpsFrames = 0;
+  private fpsTimer = 0;
+  private fpsValue = 0;
 
   constructor(private discovery: DiscoverySystem, seed: string) {
     this.root = document.createElement('div');
@@ -84,6 +89,7 @@ export class Hud {
         <span class="uw-bubble"></span>
         <span class="uw-bubble"></span>
       </div>
+      <div class="fps-chip" hidden>0 FPS</div>
       </div>
     `;
 
@@ -105,6 +111,7 @@ export class Hud {
     this.paletteNameEl = this.root.querySelector('.palette-name')!;
     this.coordsEl = this.root.querySelector('.coords-xyz')!;
     this.coordsChunkEl = this.root.querySelector('.coords-chunk')!;
+    this.fpsEl = this.root.querySelector('.fps-chip')!;
     this.seedEl.textContent = seed;
 
     this.buildPalette();
@@ -174,6 +181,23 @@ export class Hud {
     this.underwaterOverlay.style.opacity = String(u * 0.32);
     this.underwaterOverlay.style.visibility = u > 0.02 ? 'visible' : 'hidden';
     this.underwaterOverlay.classList.toggle('uw-active', u > 0.08);
+  }
+
+  setShowFps(on: boolean): void {
+    this.showFps = on;
+    this.fpsEl.hidden = !on;
+  }
+
+  tickFps(dt: number): void {
+    if (!this.showFps) return;
+    this.fpsFrames += 1;
+    this.fpsTimer += dt;
+    if (this.fpsTimer >= 0.5) {
+      this.fpsValue = Math.round(this.fpsFrames / this.fpsTimer);
+      this.fpsEl.textContent = `${this.fpsValue} FPS`;
+      this.fpsFrames = 0;
+      this.fpsTimer = 0;
+    }
   }
 
   get isJournalOpen(): boolean {
