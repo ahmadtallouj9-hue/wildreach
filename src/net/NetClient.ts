@@ -8,6 +8,8 @@ import type {
   WorldSettingsWire,
 } from './protocol';
 
+export type NetLinkStatus = 'offline' | 'connecting' | 'connected' | 'reconnecting';
+
 export type NetHandlers = {
   onWelcome?: (
     id: string,
@@ -22,6 +24,7 @@ export type NetHandlers = {
   onChat?: (id: string, name: string, text: string) => void;
   onDisconnect?: () => void;
   onReconnecting?: () => void;
+  onStatus?: (status: NetLinkStatus) => void;
 };
 
 type JoinParams = {
@@ -40,6 +43,7 @@ export class NetClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private intentionalClose = false;
+  private linkStatus: NetLinkStatus = 'offline';
 
   constructor(private url: string) {}
 
@@ -48,7 +52,11 @@ export class NetClient {
   }
 
   get connected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.ws?.readyState === WebSocket.OPEN && this.linkStatus === 'connected';
+  }
+
+  get status(): NetLinkStatus {
+    return this.linkStatus;
   }
 
   on(handlers: NetHandlers): void {
@@ -58,6 +66,7 @@ export class NetClient {
   connect(room: string, seed: string, world: WorldSettingsWire, profile: ProfileWire): void {
     this.intentionalClose = false;
     this.joinParams = { room, seed, world, profile };
+    this.setStatus('connecting');
     this.openSocket();
   }
 
@@ -75,6 +84,7 @@ export class NetClient {
     this.id = null;
     this.joinParams = null;
     this.reconnectAttempt = 0;
+    this.setStatus('offline');
   }
 
   tickState(dt: number, state: ClientState): void {
@@ -97,9 +107,16 @@ export class NetClient {
     this.send({ t: 'chat', text: cleaned });
   }
 
+  private setStatus(status: NetLinkStatus): void {
+    if (this.linkStatus === status) return;
+    this.linkStatus = status;
+    this.handlers.onStatus?.(status);
+  }
+
   private openSocket(): void {
     if (!this.joinParams) return;
     this.ws?.close();
+    if (this.linkStatus !== 'reconnecting') this.setStatus('connecting');
     this.ws = new WebSocket(this.url);
     this.ws.addEventListener('open', () => {
       this.reconnectAttempt = 0;
@@ -118,6 +135,8 @@ export class NetClient {
       this.id = null;
       this.handlers.onDisconnect?.();
       if (!this.intentionalClose && this.joinParams) this.scheduleReconnect();
+      else if (this.intentionalClose) this.setStatus('offline');
+      else this.setStatus('offline');
     });
     this.ws.addEventListener('error', () => {
       /* close handler runs reconnect */
@@ -126,6 +145,7 @@ export class NetClient {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer || !this.joinParams) return;
+    this.setStatus('reconnecting');
     this.handlers.onReconnecting?.();
     const delay = Math.min(20_000, 800 * 2 ** this.reconnectAttempt);
     this.reconnectAttempt += 1;
@@ -144,6 +164,7 @@ export class NetClient {
     switch (msg.t) {
       case 'welcome':
         this.id = msg.id;
+        this.setStatus('connected');
         this.handlers.onWelcome?.(
           msg.id,
           msg.players.map((p) => ({

@@ -3,6 +3,8 @@ import type { DiscoveryEvent, DiscoverySystem } from '../discovery/DiscoverySyst
 import type { Landmark } from '../world/LandmarkGen';
 import { CHUNK_SIZE } from '../world/blocks';
 import { PLACEABLE, blockCssColor } from '../player/BlockInteraction';
+import type { MapPlayerMarker } from '../net/RemotePlayers';
+import type { NetLinkStatus } from '../net/NetClient';
 
 export class Hud {
   readonly root: HTMLElement;
@@ -26,6 +28,12 @@ export class Hud {
   private underwaterOverlay: HTMLElement;
   private mpChip: HTMLElement;
   private mpLabel: HTMLElement;
+  private mapRosterEl: HTMLElement;
+  private mapMetaCountEl: HTMLElement;
+  private mapWorldNameEl: HTMLElement;
+  private worldLinkStatus: NetLinkStatus = 'offline';
+  private worldDisplayName = 'World';
+  private localPlayerName = 'You';
   private toasts: { el: HTMLElement; t: number }[] = [];
   private fpsEl: HTMLElement;
   private showFps = false;
@@ -76,10 +84,17 @@ export class Hud {
       </aside>
       <aside class="map-panel" hidden>
         <header>
-          <h2>Sketch Map</h2>
+          <h2>World Map</h2>
           <button type="button" class="close-map" aria-label="Close">✕</button>
         </header>
-        <canvas class="sketch-map" width="280" height="280"></canvas>
+        <p class="map-meta"><span class="map-world-name">World</span> · <span class="map-player-count">1 here</span></p>
+        <canvas class="sketch-map" width="360" height="360"></canvas>
+        <ul class="map-legend" aria-hidden="true">
+          <li><span class="map-legend-you"></span> You</li>
+          <li><span class="map-legend-other"></span> Players</li>
+          <li><span class="map-legend-site"></span> Sites</li>
+        </ul>
+        <ul class="map-roster"></ul>
       </aside>
       <div class="underwater-overlay" aria-hidden="true">
         <span class="uw-bubble"></span>
@@ -107,6 +122,9 @@ export class Hud {
     this.underwaterOverlay = this.root.querySelector('.underwater-overlay')!;
     this.mpChip = this.root.querySelector('.mp-chip')!;
     this.mpLabel = this.root.querySelector('.mp-label')!;
+    this.mapRosterEl = this.root.querySelector('.map-roster')!;
+    this.mapMetaCountEl = this.root.querySelector('.map-player-count')!;
+    this.mapWorldNameEl = this.root.querySelector('.map-world-name')!;
     this.paletteEl = this.root.querySelector('.block-palette')!;
     this.paletteNameEl = this.root.querySelector('.palette-name')!;
     this.coordsEl = this.root.querySelector('.coords-xyz')!;
@@ -153,17 +171,60 @@ export class Hud {
     this.paletteNameEl.textContent = block ? block.name : '';
   }
 
-  setMultiplayer(count: number, online: boolean): void {
-    if (!online && count <= 1) {
-      this.mpChip.hidden = true;
-      return;
+  setWorldLink(opts: {
+    status: NetLinkStatus;
+    count: number;
+    worldName?: string;
+    others?: string[];
+  }): void {
+    this.worldLinkStatus = opts.status;
+    if (opts.worldName) {
+      this.worldDisplayName = opts.worldName;
+      if (this.mapWorldNameEl) this.mapWorldNameEl.textContent = opts.worldName;
     }
-    this.mpChip.hidden = false;
-    this.mpLabel.textContent = online
-      ? count <= 1
-        ? 'Online · waiting'
-        : `${count} playing`
-      : 'Reconnecting…';
+    const online = opts.status === 'connected';
+    const linking = opts.status === 'connecting' || opts.status === 'reconnecting';
+    this.mpChip.hidden = opts.status === 'offline';
+    this.mpChip.classList.toggle('mp-online', online);
+    this.mpChip.classList.toggle('mp-wait', linking);
+    this.mpChip.classList.toggle('mp-down', opts.status === 'offline');
+    if (opts.status === 'connecting') {
+      this.mpLabel.textContent = 'Joining world…';
+    } else if (opts.status === 'reconnecting') {
+      this.mpLabel.textContent = 'Reconnecting…';
+    } else if (online) {
+      this.mpLabel.textContent =
+        opts.count <= 1 ? 'In world · alone' : `${opts.count} in world`;
+    } else {
+      this.mpLabel.textContent = 'Offline';
+    }
+    void this.worldLinkStatus;
+    void this.worldDisplayName;
+    if (this.mapMetaCountEl) {
+      this.mapMetaCountEl.textContent =
+        opts.count <= 1 ? 'Just you' : `${opts.count} players`;
+    }
+    if (this.mapRosterEl) {
+      const rows = [
+        `<li class="you"><span class="dot"></span>${escapeMap(this.localPlayerName)} (you)</li>`,
+      ];
+      for (const name of opts.others ?? []) {
+        rows.push(`<li><span class="dot other"></span>${escapeMap(name)}</li>`);
+      }
+      this.mapRosterEl.innerHTML = rows.join('');
+    }
+  }
+
+  /** Bridge for older call sites */
+  setMultiplayer(count: number, online: boolean): void {
+    this.setWorldLink({
+      status: online ? 'connected' : count > 0 ? 'reconnecting' : 'offline',
+      count,
+    });
+  }
+
+  setLocalPlayerName(name: string): void {
+    this.localPlayerName = name.trim() || 'You';
   }
 
   showToast(title: string, detail = ''): void {
@@ -296,6 +357,7 @@ export class Hud {
     playerZ: number;
     explored: Set<string>;
     landmarks: Landmark[];
+    players?: MapPlayerMarker[];
     dt: number;
   }): void {
     const def = BIOMES[opts.biome];
@@ -338,7 +400,7 @@ export class Hud {
     }
 
     if (this.mapOpen) {
-      this.drawMap(opts.playerX, opts.playerZ, opts.facingDeg, opts.explored, opts.landmarks);
+      this.drawMap(opts.playerX, opts.playerZ, opts.facingDeg, opts.explored, opts.landmarks, opts.players ?? []);
     }
   }
 
@@ -348,13 +410,30 @@ export class Hud {
     facing: number,
     explored: Set<string>,
     landmarks: Landmark[],
+    players: MapPlayerMarker[],
   ): void {
     const ctx = this.mapCtx;
     const w = this.mapCanvas.width;
     const h = this.mapCanvas.height;
-    const scale = 1.1;
-    ctx.fillStyle = '#0c181c';
+    const scale = 1.35;
+    ctx.fillStyle = '#0a1418';
     ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(94, 196, 176, 0.08)';
+    ctx.lineWidth = 1;
+    const step = CHUNK_SIZE * scale;
+    const ox = (w / 2) % step;
+    const oy = (h / 2) % step;
+    ctx.beginPath();
+    for (let x = ox; x < w; x += step) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+    }
+    for (let y = oy; y < h; y += step) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+    }
+    ctx.stroke();
 
     const cx = Math.floor(px / CHUNK_SIZE);
     const cz = Math.floor(pz / CHUNK_SIZE);
@@ -363,7 +442,7 @@ export class Hud {
       const [sx, sz] = key.split(',').map(Number);
       const dx = (sx - cx) * CHUNK_SIZE * scale + w / 2;
       const dy = (sz - cz) * CHUNK_SIZE * scale + h / 2;
-      ctx.fillStyle = '#1e3a40';
+      ctx.fillStyle = '#1a3840';
       ctx.fillRect(dx, dy, CHUNK_SIZE * scale - 1, CHUNK_SIZE * scale - 1);
     }
 
@@ -373,22 +452,70 @@ export class Hud {
       const found = this.discovery.foundLandmarks.has(lm.id);
       ctx.fillStyle = found ? '#5ec4b0' : '#3a5a60';
       ctx.beginPath();
-      ctx.arc(dx, dy, found ? 4 : 2.5, 0, Math.PI * 2);
+      ctx.arc(dx, dy, found ? 4.5 : 2.5, 0, Math.PI * 2);
       ctx.fill();
+      if (found) {
+        ctx.fillStyle = 'rgba(232, 244, 240, 0.85)';
+        ctx.font = '600 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(lm.name, dx, dy - 8);
+      }
     }
 
-    // Player
+    for (const p of players) {
+      const dx = (p.x - px) * scale + w / 2;
+      const dy = (p.z - pz) * scale + h / 2;
+      if (dx < -20 || dy < -20 || dx > w + 20 || dy > h + 20) continue;
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.rotate(p.yaw);
+      ctx.fillStyle = p.accent || '#7aa2ff';
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(4.5, 5);
+      ctx.lineTo(0, 2.5);
+      ctx.lineTo(-4.5, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.rotate(-p.yaw);
+      ctx.fillStyle = '#f5f0e8';
+      ctx.font = '700 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(p.name, 0, 16);
+      ctx.fillText(p.name, 0, 16);
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.rotate((facing * Math.PI) / 180);
     ctx.fillStyle = '#e8f4f0';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(0, -7);
-    ctx.lineTo(5, 6);
-    ctx.lineTo(0, 3);
-    ctx.lineTo(-5, 6);
+    ctx.moveTo(0, -8);
+    ctx.lineTo(5.5, 7);
+    ctx.lineTo(0, 3.5);
+    ctx.lineTo(-5.5, 7);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
     ctx.restore();
+
+    ctx.fillStyle = 'rgba(232, 197, 106, 0.9)';
+    ctx.font = '700 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', w / 2, 14);
   }
+}
+
+function escapeMap(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] || c,
+  );
 }

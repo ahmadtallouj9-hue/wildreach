@@ -13,7 +13,7 @@ import { InventoryUi } from '../ui/InventoryUi';
 import { TouchControls } from '../ui/TouchControls';
 import { ChatUi } from '../ui/ChatUi';
 import { PauseMenu } from '../ui/PauseMenu';
-import { NetClient } from '../net/NetClient';
+import { NetClient, type NetLinkStatus } from '../net/NetClient';
 import { RemotePlayers } from '../net/RemotePlayers';
 import type { SocialClient } from '../net/SocialClient';
 import { mpUrl, worldRoomId, type ProfileWire } from '../net/protocol';
@@ -42,6 +42,7 @@ export class Game {
   private net: NetClient | null = null;
   private social: SocialClient | null = null;
   private remotePlayers: RemotePlayers | null = null;
+  private worldLinkStatus: NetLinkStatus = 'offline';
   private playerName = 'Wanderer';
   private prefs: Settings = loadSettings();
   private clock = new THREE.Clock();
@@ -456,8 +457,14 @@ export class Game {
       this.net?.tickState(dt, { t: 'state', ...this.player.getNetState() });
     }
     this.remotePlayers?.update(dt);
-    const mpCount = (this.remotePlayers?.count() ?? 0) + (this.net?.connected ? 1 : 0);
-    this.hud.setMultiplayer(mpCount, !!this.net?.connected);
+    const others = this.remotePlayers?.getMapMarkers() ?? [];
+    const mpCount = others.length + (this.worldLinkStatus === 'connected' ? 1 : 0);
+    this.hud.setWorldLink({
+      status: this.net ? this.worldLinkStatus : 'offline',
+      count: Math.max(1, mpCount),
+      worldName: worldNameFromSeed(this.seed),
+      others: others.map((p) => p.name),
+    });
     this.hud.update({
       biome,
       facingDeg: this.player.facingDegrees(),
@@ -468,6 +475,7 @@ export class Game {
       playerZ: this.player.position.z,
       explored: this.chunks.getExploredKeys(),
       landmarks,
+      players: others,
       dt: worldLive ? dt : 0,
     });
 
@@ -490,16 +498,36 @@ export class Game {
     const profileWire: ProfileWire = { ...profile };
     const room = worldRoomId(this.seed, worldWire);
 
+    this.worldLinkStatus = 'connecting';
+    this.hud.setWorldLink({
+      status: 'connecting',
+      count: 1,
+      worldName: worldNameFromSeed(this.seed),
+      others: [],
+    });
+    this.hud.setLocalPlayerName(profile.name || this.playerName);
     this.net.on({
+      onStatus: (status) => {
+        this.worldLinkStatus = status;
+      },
       onWelcome: (_id, players, edits) => {
         this.remotePlayers!.clear();
         for (const p of players) {
           this.remotePlayers!.add(p.id, p.profile, p.snapshot);
         }
         this.chunks.loadNetworkEdits(edits);
-        if (players.length > 0) {
-          this.hud.showToast('Connected', `${players.length + 1} in this world`);
-        }
+        this.worldLinkStatus = 'connected';
+        const total = players.length + 1;
+        this.hud.setWorldLink({
+          status: 'connected',
+          count: total,
+          worldName: worldNameFromSeed(this.seed),
+          others: players.map((p) => p.snapshot.name),
+        });
+        this.hud.showToast(
+          'Connected to world',
+          total > 1 ? `${total} explorers here` : 'You are the first here',
+        )
       },
       onPlayerJoin: (id, p, snapshot) => {
         this.remotePlayers!.add(id, p, snapshot);
@@ -519,10 +547,24 @@ export class Game {
         this.chatUi.push({ id, name, text });
       },
       onDisconnect: () => {
-        this.hud.setMultiplayer(1, false);
+        this.worldLinkStatus = this.net ? 'reconnecting' : 'offline';
+        this.hud.setWorldLink({
+          status: this.worldLinkStatus,
+          count: 1,
+          worldName: worldNameFromSeed(this.seed),
+          others: [],
+        });
+        this.hud.showToast('Connection lost', 'Trying to rejoin this world…');
       },
       onReconnecting: () => {
-        this.hud.showToast('Reconnecting…', 'Finding your friends');
+        this.worldLinkStatus = 'reconnecting';
+        this.hud.setWorldLink({
+          status: 'reconnecting',
+          count: 1,
+          worldName: worldNameFromSeed(this.seed),
+          others: [],
+        });
+        this.hud.showToast('Reconnecting…', 'Finding your world session');
       },
     });
 

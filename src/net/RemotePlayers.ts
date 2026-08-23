@@ -3,10 +3,21 @@ import type { PlayerStatePayload, ProfileWire } from './protocol';
 import { PlayerAvatar, type AvatarPose } from '../player/PlayerAvatar';
 import type { Profile } from '../ui/prefs';
 
+export type MapPlayerMarker = {
+  id: string;
+  name: string;
+  accent: string;
+  x: number;
+  z: number;
+  yaw: number;
+};
+
 type RemoteEntry = {
   avatar: PlayerAvatar;
   target: PlayerStatePayload;
   prev: THREE.Vector3;
+  name: string;
+  accent: string;
 };
 
 export class RemotePlayers {
@@ -24,6 +35,8 @@ export class RemotePlayers {
       avatar: model,
       target: { ...state },
       prev: new THREE.Vector3(state.x, state.y, state.z),
+      name: state.name || profile.name || 'Wanderer',
+      accent: profile.accent || '#5ec4b0',
     };
     entry.avatar.root.position.set(state.x, state.y, state.z);
     entry.avatar.root.rotation.y = state.yaw;
@@ -63,6 +76,27 @@ export class RemotePlayers {
 
   count(): number {
     return this.players.size;
+  }
+
+  /** Live positions for the sketch map. */
+  getMapMarkers(): MapPlayerMarker[] {
+    const out: MapPlayerMarker[] = [];
+    for (const [id, entry] of this.players) {
+      const pos = entry.avatar.root.position;
+      out.push({
+        id,
+        name: entry.name,
+        accent: entry.accent,
+        x: pos.x,
+        z: pos.z,
+        yaw: entry.avatar.root.rotation.y,
+      });
+    }
+    return out;
+  }
+
+  names(): string[] {
+    return [...this.players.values()].map((e) => e.name);
   }
 
   clear(): void {
