@@ -325,7 +325,7 @@ export class MainMenu {
               </button>
             </div>
             <div class="friends-add-row">
-              <input type="text" class="friends-add-input" maxlength="6" spellcheck="false" autocomplete="off" placeholder="Friend code" />
+              <input type="text" class="friends-add-input" maxlength="6" inputmode="numeric" pattern="[0-9]*" spellcheck="false" autocomplete="off" placeholder="6-digit code" />
               <button type="button" class="menu-btn primary block-btn" data-action="add-friend">Add friend</button>
             </div>
             <p class="friends-toast" hidden></p>

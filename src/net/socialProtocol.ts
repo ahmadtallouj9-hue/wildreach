@@ -82,10 +82,9 @@ export function accountToCode(accountId: string): string {
   for (let i = 0; i < accountId.length; i++) {
     h = (Math.imul(31, h) + accountId.charCodeAt(i)) >>> 0;
   }
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
   for (let i = 0; i < 6; i++) {
-    code += chars[h % chars.length];
+    code += String(h % 10);
     h = Math.imul(h, 2654435761) >>> 0;
   }
   return code;

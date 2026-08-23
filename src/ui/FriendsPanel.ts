@@ -64,6 +64,9 @@ export class FriendsPanel {
       void this.copyCode(),
     );
     host.querySelector('[data-action="add-friend"]')?.addEventListener('click', () => this.addFriend());
+    this.addInput.addEventListener('input', () => {
+      this.addInput.value = this.addInput.value.replace(/\D/g, '').slice(0, 6);
+    });
     this.addInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.addFriend();
     });
@@ -75,8 +78,9 @@ export class FriendsPanel {
     });
 
     this.social.on({
-      onRegistered: (code) => {
-        this.codeEl.textContent = code || getFriendCode();
+      onRegistered: () => {
+        // Prefer local 6-digit code so UI stays correct even if the server is mid-redeploy.
+        this.codeEl.textContent = getFriendCode();
         this.render();
       },
       onFriends: () => this.render(),
@@ -105,7 +109,7 @@ export class FriendsPanel {
     const friends = this.social.friendList;
     if (!friends.length) {
       this.listEl.innerHTML =
-        '<p class="friends-empty">No friends yet. Add someone with their 6-letter code.</p>';
+        '<p class="friends-empty">No friends yet. Add someone with their 6-digit code.</p>';
       return;
     }
 

@@ -118,6 +118,10 @@ export function editKey(x: number, y: number, z: number): string {
 export function mpUrl(): string {
   const env = import.meta.env.VITE_MP_URL as string | undefined;
   if (env) return env;
+  // Production default: Render multiplayer / friends server
+  if (typeof location !== 'undefined' && location.hostname.endsWith('vercel.app')) {
+    return 'wss://wildreach-mp.onrender.com';
+  }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${location.host}/ws`;
 }

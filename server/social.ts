@@ -128,11 +128,10 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
 
   if (raw.t === 'social_friend_add') {
     const code = String(raw.code ?? '')
-      .trim()
-      .toUpperCase()
+      .replace(/\D/g, '')
       .slice(0, 6);
-    if (!code) {
-      send(ws, { t: 'social_error', msg: 'Enter a friend code' });
+    if (code.length !== 6) {
+      send(ws, { t: 'social_error', msg: 'Enter a 6-digit friend code' });
       return true;
     }
     const targetId = codeIndex.get(code);

@@ -83,7 +83,7 @@ export class SocialClient {
   }
 
   addFriend(code: string): void {
-    this.send({ t: 'social_friend_add', code: code.trim().toUpperCase() });
+    this.send({ t: 'social_friend_add', code: code.replace(/\D/g, '').slice(0, 6) });
   }
 
   removeFriend(accountId: string): void {
