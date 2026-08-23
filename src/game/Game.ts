@@ -207,6 +207,7 @@ export class Game {
     this.hud.setMenuOpen(paused);
     this.pauseMenu.setOpen(paused);
     if (paused) this.syncPauseSocial();
+    else this.reportPresence();
     this.inventoryUi.root.classList.toggle('menu-hidden', paused);
     this.chatUi.root.classList.toggle('menu-hidden', paused);
     if (paused) {
@@ -217,6 +218,20 @@ export class Game {
       // Returning from Game Menu — recapture mouse like Minecraft.
       window.setTimeout(() => this.requestPointerLock(), 0);
     }
+    this.syncControlState();
+  }
+
+  /** Leave to title: keep the world paused, close pause UI, mark yourself as in menu. */
+  returnToTitle(): void {
+    this.paused = true;
+    this.pauseMenu.setOpen(false);
+    this.hud.setMenuOpen(true);
+    this.inventoryUi.root.classList.add('menu-hidden');
+    this.chatUi.root.classList.add('menu-hidden');
+    this.inventoryUi.setOpen(false);
+    this.chatUi.setOpen(false);
+    this.exitPointerLockQuiet();
+    this.social?.setPresence({ inGame: false });
     this.syncControlState();
   }
 
@@ -257,21 +272,26 @@ export class Game {
 
   private syncPauseSocial(): void {
     if (!this.social) return;
-    this.pauseMenu.setJoinRequests(
-      this.social.incomingRequests.map((r) => ({
+    this.pauseMenu.setSocial({
+      requests: this.social.incomingRequests.map((r) => ({
         id: r.id,
         name: r.from.profile.name || 'Friend',
       })),
-    );
-    this.pauseMenu.setFriends(
-      this.social.friendList.map((f) => ({
+      friends: this.social.friendList.map((f) => ({
         accountId: f.accountId,
         name: f.profile.name || 'Wanderer',
-        status: !f.online ? 'Offline' : f.inGame ? (f.worldName ? `In ${f.worldName}` : 'In world') : 'Online',
+        status: !f.online
+          ? 'Not connected'
+          : f.inGame
+            ? f.worldName
+              ? f.worldName
+              : 'Playing'
+            : 'Title screen',
         online: f.online,
-        canInvite: f.online,
+        inGame: f.inGame,
+        canInvite: f.online && !f.inGame,
       })),
-    );
+    });
   }
 
   private reportPresence(): void {

@@ -254,13 +254,17 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
   }
 
   if (raw.t === 'social_presence') {
-    self.presence = {
-      inGame: !!raw.inGame,
-      seed: raw.seed,
-      room: raw.room,
-      world: raw.world,
-      worldName: raw.worldName,
-    };
+    if (raw.inGame) {
+      self.presence = {
+        inGame: true,
+        seed: raw.seed,
+        room: raw.room,
+        world: raw.world,
+        worldName: raw.worldName,
+      };
+    } else {
+      self.presence = { inGame: false };
+    }
     notifyFriendsOf(accountId);
     return true;
   }
