@@ -249,6 +249,39 @@ export function handleSocialMessage(ws: WebSocket, raw: SocialClientMessage): bo
     return true;
   }
 
+  if (raw.t === 'social_world_invite') {
+    const to = String(raw.to ?? '').trim();
+    if (!self.friends.has(to)) {
+      send(ws, { t: 'social_error', msg: 'Not on your friend list' });
+      return true;
+    }
+    if (!self.presence.inGame || !self.presence.seed || !self.presence.room || !self.presence.world) {
+      send(ws, { t: 'social_error', msg: 'Enter a world before inviting' });
+      return true;
+    }
+    const guest = accounts.get(to);
+    const guestWs = sockets.get(to);
+    if (!guest || !guestWs) {
+      send(ws, { t: 'social_error', msg: 'Friend is offline' });
+      return true;
+    }
+    send(guestWs, {
+      t: 'social_join_invite',
+      seed: self.presence.seed,
+      room: self.presence.room,
+      world: self.presence.world,
+      worldName: self.presence.worldName ?? self.presence.seed,
+      hostName: self.profile.name ?? 'Friend',
+    });
+    send(ws, { t: 'social_toast', title: 'Invite sent', body: guest.profile.name ?? 'Friend' });
+    send(guestWs, {
+      t: 'social_toast',
+      title: 'World invite',
+      body: `${self.profile.name ?? 'Friend'} invited you`,
+    });
+    return true;
+  }
+
   return false;
 }
 

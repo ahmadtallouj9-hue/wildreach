@@ -99,6 +99,11 @@ export class SocialClient {
     this.joinRequests = this.joinRequests.filter((r) => r.id !== requestId);
   }
 
+  /** Invite an online friend into your current world. */
+  inviteToWorld(accountId: string): void {
+    this.send({ t: 'social_world_invite', to: accountId });
+  }
+
   setPresence(presence: PresencePayload): void {
     this.send({ t: 'social_presence', ...presence });
   }

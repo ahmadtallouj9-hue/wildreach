@@ -28,6 +28,8 @@ export type SocialPresence = {
 };
 export type SocialJoinRequest = { t: 'social_join_request'; to: string };
 export type SocialJoinRespond = { t: 'social_join_respond'; requestId: string; accept: boolean };
+/** Host invites an online friend into the host's current world. */
+export type SocialWorldInvite = { t: 'social_world_invite'; to: string };
 
 export type SocialClientMessage =
   | SocialRegister
@@ -35,7 +37,8 @@ export type SocialClientMessage =
   | SocialFriendRemove
   | SocialPresence
   | SocialJoinRequest
-  | SocialJoinRespond;
+  | SocialJoinRespond
+  | SocialWorldInvite;
 
 export type SocialRegistered = {
   t: 'social_registered';
@@ -71,6 +74,7 @@ const SOCIAL_CLIENT_TYPES = new Set<string>([
   'social_presence',
   'social_join_request',
   'social_join_respond',
+  'social_world_invite',
 ]);
 
 export function isSocialClientMessage(msg: { t?: string }): msg is SocialClientMessage {

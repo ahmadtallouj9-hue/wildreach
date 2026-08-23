@@ -206,7 +206,7 @@ export class Game {
     this.paused = paused;
     this.hud.setMenuOpen(paused);
     this.pauseMenu.setOpen(paused);
-    if (paused) this.syncPauseJoinRequests();
+    if (paused) this.syncPauseSocial();
     this.inventoryUi.root.classList.toggle('menu-hidden', paused);
     this.chatUi.root.classList.toggle('menu-hidden', paused);
     if (paused) {
@@ -235,26 +235,41 @@ export class Game {
     this.reportPresence();
     this.social.on({
       onJoinRequest: () => {
-        this.syncPauseJoinRequests();
+        this.syncPauseSocial();
         this.showJoinRequestToast();
       },
+      onFriends: () => this.syncPauseSocial(),
+      onToast: (title, body) => this.hud.showToast(title, body ?? ''),
     });
     this.pauseMenu.onJoinRequestRespond((id, accept) => {
       this.social?.respondJoin(id, accept);
-      this.syncPauseJoinRequests();
+      this.syncPauseSocial();
     });
+    this.pauseMenu.onFriendInvite((accountId) => {
+      this.social?.inviteToWorld(accountId);
+    });
+    this.syncPauseSocial();
   }
 
   showJoinRequestToast(): void {
     this.hud.showToast('Join request', 'Press Esc to accept or deny');
   }
 
-  private syncPauseJoinRequests(): void {
+  private syncPauseSocial(): void {
     if (!this.social) return;
     this.pauseMenu.setJoinRequests(
       this.social.incomingRequests.map((r) => ({
         id: r.id,
         name: r.from.profile.name || 'Friend',
+      })),
+    );
+    this.pauseMenu.setFriends(
+      this.social.friendList.map((f) => ({
+        accountId: f.accountId,
+        name: f.profile.name || 'Wanderer',
+        status: !f.online ? 'Offline' : f.inGame ? (f.worldName ? `In ${f.worldName}` : 'In world') : 'Online',
+        online: f.online,
+        canInvite: f.online,
       })),
     );
   }
