@@ -3550,9 +3550,10 @@ html.touch-device {
   --mob-safe-bottom: env(safe-area-inset-bottom, 0px);
   --mob-safe-left: env(safe-area-inset-left, 0px);
   --mob-safe-right: env(safe-area-inset-right, 0px);
-  --mob-btn: 2.75rem;
-  --mob-hotbar-h: 3.25rem;
-  --mob-dock-h: calc(var(--mob-btn) * 2 + 0.35rem);
+  --mob-btn: 3rem;
+  --mob-util: 2.35rem;
+  --mob-hotbar-h: 2.85rem;
+  --mob-dock-h: calc(var(--mob-btn) * 2 + 0.5rem);
   --mob-ui-bottom: calc(var(--mob-hotbar-h) + var(--mob-dock-h) + var(--mob-safe-bottom) + 0.65rem);
 }
 
@@ -3610,10 +3611,10 @@ html.touch-device .menu-share-hint {
 
 .touch-top-bar {
   position: absolute;
-  top: max(0.4rem, var(--mob-safe-top));
-  right: max(0.4rem, var(--mob-safe-right));
+  top: max(0.35rem, var(--mob-safe-top));
+  right: max(0.35rem, var(--mob-safe-right));
   display: flex;
-  gap: 0.35rem;
+  gap: 0.4rem;
   pointer-events: auto;
   z-index: 2;
 }
@@ -3655,22 +3656,22 @@ html.touch-device .menu-share-hint {
 
 .touch-dock {
   position: absolute;
-  left: max(0.4rem, var(--mob-safe-left));
-  right: max(0.4rem, var(--mob-safe-right));
-  bottom: calc(var(--mob-safe-bottom) + 0.15rem);
+  left: max(0.5rem, var(--mob-safe-left));
+  right: max(0.5rem, var(--mob-safe-right));
+  bottom: calc(var(--mob-safe-bottom) + 0.2rem);
   height: var(--mob-dock-h);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.75rem;
   pointer-events: none;
 }
 
 .touch-stick-wrap {
   position: relative;
-  width: var(--mob-btn);
-  height: var(--mob-btn);
-  flex: 0 0 var(--mob-btn);
+  width: calc(var(--mob-btn) * 1.35);
+  height: calc(var(--mob-btn) * 1.35);
+  flex: 0 0 calc(var(--mob-btn) * 1.35);
   pointer-events: auto;
   touch-action: none;
 }
@@ -3703,7 +3704,7 @@ html.touch-device .menu-share-hint {
   display: grid;
   grid-template-columns: repeat(2, var(--mob-btn));
   grid-template-rows: repeat(2, var(--mob-btn));
-  gap: 0.35rem;
+  gap: 0.5rem;
   pointer-events: auto;
 }
 
@@ -3712,9 +3713,9 @@ html.touch-device .menu-share-hint {
   min-height: var(--mob-btn);
   min-width: var(--mob-btn);
   padding: 0;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 0.5rem;
-  background: rgba(8, 6, 14, 0.42);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.55rem;
+  background: rgba(8, 6, 14, 0.48);
   color: #f5f0e8;
   font-family: var(--font-body);
   font-size: 1.15rem;
@@ -3725,9 +3726,12 @@ html.touch-device .menu-share-hint {
 }
 
 .touch-util-btn {
-  width: var(--mob-btn);
-  height: var(--mob-btn);
-  font-size: 0.85rem;
+  width: var(--mob-util);
+  height: var(--mob-util);
+  min-width: var(--mob-util);
+  min-height: var(--mob-util);
+  font-size: 0.78rem;
+  border-radius: 0.45rem;
 }
 
 .touch-action-btn:active,
@@ -3783,12 +3787,13 @@ html.touch-device #hud .biome-chip .dot {
 }
 
 html.touch-device #hud .mp-chip {
-  top: calc(2rem + var(--mob-safe-top));
+  top: max(0.35rem, var(--mob-safe-top));
   left: 50%;
   right: auto;
   transform: translateX(-50%);
   font-size: 0.55rem;
   padding: 0.15rem 0.4rem;
+  z-index: 1;
 }
 
 html.touch-device #hud .coords {
@@ -3831,12 +3836,16 @@ html.touch-device #hud .sketch-map {
 
 html.touch-device .hotbar-wrap {
   pointer-events: auto;
-  left: max(0.35rem, var(--mob-safe-left));
-  right: max(0.35rem, var(--mob-safe-right));
-  bottom: calc(var(--mob-dock-h) + var(--mob-safe-bottom) + 0.45rem);
-  transform: none;
-  width: auto;
+  left: 50%;
+  right: auto;
+  bottom: calc(var(--mob-dock-h) + var(--mob-safe-bottom) + 0.4rem);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(
+    100vw - max(0.7rem, var(--mob-safe-left)) - max(0.7rem, var(--mob-safe-right))
+  );
   z-index: 27;
+  align-items: center;
 }
 
 html.touch-device .hotbar-name {
@@ -3847,7 +3856,8 @@ html.touch-device .hotbar {
   pointer-events: auto;
   display: flex;
   flex-wrap: nowrap;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   padding: 3px;
   border-width: 2px;
   box-shadow:
@@ -3868,7 +3878,10 @@ html.touch-device .hotbar::-webkit-scrollbar {
 html.touch-device .hotbar .slot {
   pointer-events: auto;
   flex: 0 0 var(--mob-hotbar-h);
+  flex-grow: 0;
+  flex-shrink: 0;
   min-width: var(--mob-hotbar-h);
+  max-width: var(--mob-hotbar-h);
   width: var(--mob-hotbar-h);
   height: var(--mob-hotbar-h);
   scroll-snap-align: center;
@@ -3950,18 +3963,20 @@ html.touch-device .menu-stage.panel {
 
 @media (max-width: 480px) {
   html.touch-device {
-    --mob-btn: 2.65rem;
-    --mob-hotbar-h: 3.1rem;
-    --mob-dock-h: calc(var(--mob-btn) * 2 + 0.3rem);
+    --mob-btn: 2.85rem;
+    --mob-util: 2.2rem;
+    --mob-hotbar-h: 2.65rem;
+    --mob-dock-h: calc(var(--mob-btn) * 2 + 0.45rem);
   }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
   html.touch-device {
-    --mob-btn: 2.45rem;
-    --mob-hotbar-h: 2.85rem;
-    --mob-dock-h: calc(var(--mob-btn) * 2 + 0.3rem);
-    --mob-ui-bottom: calc(var(--mob-hotbar-h) + var(--mob-dock-h) + var(--mob-safe-bottom) + 0.5rem);
+    --mob-btn: 2.7rem;
+    --mob-util: 2.05rem;
+    --mob-hotbar-h: 2.45rem;
+    --mob-dock-h: calc(var(--mob-btn) * 2 + 0.4rem);
+    --mob-ui-bottom: calc(var(--mob-hotbar-h) + var(--mob-dock-h) + var(--mob-safe-bottom) + 0.45rem);
   }
 
   html.touch-device .touch-hint {
@@ -3969,25 +3984,47 @@ html.touch-device .menu-stage.panel {
   }
 
   html.touch-device .touch-look-zone {
-    inset: calc(1.6rem + var(--mob-safe-top)) 0 var(--mob-ui-bottom) 0;
+    inset: calc(1.5rem + var(--mob-safe-top)) 0 var(--mob-ui-bottom) 0;
+  }
+
+  html.touch-device .touch-top-bar {
+    top: max(0.25rem, var(--mob-safe-top));
+    right: max(0.3rem, var(--mob-safe-right));
+    gap: 0.3rem;
   }
 
   html.touch-device .touch-dock {
-    left: max(0.35rem, var(--mob-safe-left));
-    right: max(0.35rem, var(--mob-safe-right));
-    bottom: calc(var(--mob-safe-bottom) + 0.15rem);
+    left: max(0.4rem, var(--mob-safe-left));
+    right: max(0.4rem, var(--mob-safe-right));
+    bottom: calc(var(--mob-safe-bottom) + 0.12rem);
     width: auto;
   }
 
+  html.touch-device .touch-actions {
+    gap: 0.4rem;
+  }
+
   html.touch-device .hotbar-wrap {
-    left: calc(var(--mob-btn) + 0.85rem);
-    right: calc(var(--mob-btn) * 2 + 1rem);
-    bottom: calc(var(--mob-dock-h) + var(--mob-safe-bottom) + 0.35rem);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(
+      100vw - (var(--mob-btn) * 1.35) - (var(--mob-btn) * 2) - 2.4rem -
+        max(0.4rem, var(--mob-safe-left)) - max(0.4rem, var(--mob-safe-right))
+    );
+    bottom: calc(var(--mob-dock-h) + var(--mob-safe-bottom) + 0.28rem);
+  }
+
+  html.touch-device #hud .mp-chip {
+    top: max(0.3rem, var(--mob-safe-top));
+    font-size: 0.5rem;
+    padding: 0.12rem 0.35rem;
   }
 
   html.touch-device #hud .biome-chip {
     top: auto;
-    bottom: calc(var(--mob-hotbar-h) + var(--mob-dock-h) + var(--mob-safe-bottom) + 0.5rem);
+    bottom: calc(var(--mob-hotbar-h) + var(--mob-dock-h) + var(--mob-safe-bottom) + 0.4rem);
     left: 50%;
     transform: translateX(-50%);
   }
