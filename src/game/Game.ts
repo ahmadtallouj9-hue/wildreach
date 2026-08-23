@@ -21,6 +21,7 @@ import { loadProfile, loadSettings, type Profile, type Settings } from '../ui/pr
 import { loadWorldSettings, WORLD_TIME_VALUES, type WorldSettings } from '../ui/worldSettings';
 import { worldNameFromSeed } from '../ui/worldNames';
 import { isTouchDevice } from '../util/isTouchDevice';
+import { applyHudLayout, HudLayoutEditor, loadHudLayout } from '../ui/HudLayout';
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
@@ -39,6 +40,8 @@ export class Game {
   private discovery: DiscoverySystem;
   private hud: Hud;
   private touchControls: TouchControls | null = null;
+  private hudEditor = new HudLayoutEditor();
+  private editingHud = false;
   private net: NetClient | null = null;
   private social: SocialClient | null = null;
   private remotePlayers: RemotePlayers | null = null;
@@ -126,8 +129,13 @@ export class Game {
         this.requestPointerLock();
         return;
       }
+      if (action === 'edit-hud') {
+        this.beginHudEdit();
+        return;
+      }
       this.onMenuRequest?.();
     });
+    applyHudLayout(loadHudLayout());
 
     this.interaction = new BlockInteraction(
       this.scene,
@@ -337,7 +345,35 @@ export class Game {
     });
   }
 
+  
+  /** Close pause and open the drag-to-move HUD editor (does not quit to title). */
+  private beginHudEdit(): void {
+    this.editingHud = true;
+    this.pauseMenu.setOpen(false);
+    this.hud.setMenuOpen(false);
+    this.inventoryUi.root.classList.remove('menu-hidden');
+    this.chatUi.root.classList.add('menu-hidden');
+    // Keep the world paused so you don't walk while dragging, but show controls.
+    this.paused = true;
+    this.player.setInputEnabled(false);
+    this.interaction.setEnabled(false);
+    this.touchControls?.setEnabled(true);
+    this.exitPointerLockQuiet();
+
+    this.hudEditor.start(() => {
+      this.editingHud = false;
+      this.setPaused(false);
+      if (!isTouchDevice()) this.requestPointerLock();
+    });
+  }
+
   private syncControlState(): void {
+    if (this.editingHud) {
+      this.player.setInputEnabled(false);
+      this.interaction.setEnabled(false);
+      this.touchControls?.setEnabled(true);
+      return;
+    }
     const canControl =
       !this.paused && !this.inventoryUi.isOpen && !this.chatUi.isOpen;
     this.player.setInputEnabled(canControl);
@@ -397,9 +433,10 @@ export class Game {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const worldLive = !this.paused && !this.inventoryUi.isOpen;
     const canControl = worldLive && !this.chatUi.isOpen;
-    const hudBlocking = this.hud.isJournalOpen || this.hud.isMapOpen;
+    // Journal is modal; map is an overlay — keep walking/looking while it's open.
+    const journalBlocking = this.hud.isJournalOpen;
 
-    if (worldLive && !hudBlocking) {
+    if (worldLive && !journalBlocking) {
       this.chunks.updateAround(this.player.position.x, this.player.position.z, 3);
       if (canControl) {
         this.player.update(dt);
@@ -448,12 +485,12 @@ export class Game {
       landmarks,
     );
 
-    this.hud.setPointerLocked(this.player.aimActive && canControl && !hudBlocking);
+    this.hud.setPointerLocked(this.player.aimActive && canControl && !journalBlocking);
     this.hud.setTouchMode(this.player.touchControlsActive);
-    this.touchControls?.setEnabled(canControl && !hudBlocking);
+    this.touchControls?.setEnabled(this.editingHud || (canControl && !journalBlocking));
     this.hud.setUnderwater(this.prefs.underwaterFx ? submersion : 0);
     this.hud.tickFps(dt);
-    if (worldLive && !hudBlocking) {
+    if (worldLive && !journalBlocking) {
       this.net?.tickState(dt, { t: 'state', ...this.player.getNetState() });
     }
     this.remotePlayers?.update(dt);
