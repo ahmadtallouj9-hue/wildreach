@@ -122,8 +122,11 @@ const waterFrag = /* glsl */ `
 
     vec3 V = normalize(cameraPosition - vWorldPos);
     vec3 L = normalize(sunDir);
-    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.6);
-    float spec = pow(max(dot(reflect(-L, N), V), 0.0), 88.0);
+    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+    // Soft, narrow sun sparkle — keep it from blowing out to white.
+    float specRaw = pow(max(dot(reflect(-L, N), V), 0.0), 160.0);
+    float spec = specRaw * (0.4 + 0.35 * max(L.y, 0.0));
+    spec = min(spec, 0.35);
 
     float ripple = noise(vWorldPos.xz * 0.35 + flow * 3.0) * 0.5
                  + noise(vWorldPos.xz * 0.75 - flow * 2.0) * 0.25;
@@ -132,15 +135,18 @@ const waterFrag = /* glsl */ `
     caustic = smoothstep(0.35, 0.92, caustic);
 
     float columnDepth = clamp(vDepth * 16.0, 1.0, 24.0);
-    vec3 shallow = vec3(0.12, 0.52, 0.58) + tex.rgb * 0.12;
-    vec3 deep = vec3(0.02, 0.14, 0.32);
+    vec3 shallow = vec3(0.1, 0.42, 0.5) + tex.rgb * 0.1;
+    vec3 deep = vec3(0.02, 0.12, 0.28);
     vec3 color = mix(shallow, deep, clamp(columnDepth / 14.0, 0.0, 1.0));
-    color += ripple * 0.09;
-    color += vec3(0.06, 0.14, 0.12) * caustic * (1.0 - clamp(columnDepth / 18.0, 0.0, 1.0));
+    color += ripple * 0.07;
+    color += vec3(0.05, 0.12, 0.1) * caustic * (1.0 - clamp(columnDepth / 18.0, 0.0, 1.0)) * 0.45;
 
-    color += sunColor * spec * (0.35 + fresnel * 0.55);
-    color += ambientColor * 0.25 * (1.0 - fresnel);
-    color = mix(color, color * 1.08 + vec3(0.04, 0.08, 0.1), fresnel * 0.35);
+    // Muted specular — sky-tinted, not blown sun white.
+    vec3 sparkle = mix(sunColor, vec3(0.45, 0.62, 0.78), 0.55);
+    color += sparkle * spec * (0.08 + fresnel * 0.12);
+    color += ambientColor * 0.22 * (1.0 - fresnel);
+    color = mix(color, color * 1.03 + vec3(0.02, 0.05, 0.07), fresnel * 0.22);
+    color = min(color, vec3(0.78));
 
     float dist = length(vWorldPos - cameraPosition);
     float fog = clamp(1.0 - exp(-dist * fogDensity), 0.0, 0.62);

@@ -136,7 +136,7 @@ const BslGradeShader = {
         shaft /= 12.0;
         float lum = dot(shaft, vec3(0.299, 0.587, 0.114));
         float radial = 1.0 - smoothstep(0.0, 0.85, length(vUv - sun));
-        col += shaft * lum * radial * strength * 0.55;
+        col += shaft * lum * radial * strength * 0.32;
         col += vec3(1.0, 0.92, 0.75) * pow(radial, 2.5) * strength * 0.12 * dayFactor;
       }
 
@@ -181,7 +181,7 @@ export class PostFX {
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
 
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.45, 0.55, 0.82);
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.32, 0.5, 0.88);
     this.composer.addPass(this.bloomPass);
 
     this.underwaterPass = new ShaderPass(UnderwaterShader);
@@ -214,11 +214,11 @@ export class PostFX {
     const y = this.sunNdc.y * 0.5 + 0.5;
     this.gradePass.uniforms.sunScreen.value.set(x, y);
     const onScreen = this.sunNdc.z < 1 && x > -0.2 && x < 1.2 && y > -0.2 && y < 1.2;
-    const strength = onScreen ? Math.max(0, dayFactor) * 0.7 : 0;
+    const strength = onScreen ? Math.max(0, dayFactor) * 0.38 : 0;
     this.gradePass.uniforms.sunStrength.value = strength;
     this.gradePass.uniforms.dayFactor.value = Math.max(0, dayFactor);
-    this.bloomPass.strength = 0.28 + dayFactor * 0.28;
-    this.bloomPass.threshold = 0.78 - dayFactor * 0.08;
+    this.bloomPass.strength = 0.14 + dayFactor * 0.1;
+    this.bloomPass.threshold = 0.92 - dayFactor * 0.03;
   }
 
   setBrightness(amount: number): void {
