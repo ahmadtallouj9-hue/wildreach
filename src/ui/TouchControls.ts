@@ -23,6 +23,9 @@ export class TouchControls {
   private knobEl: HTMLElement;
   private handlers: TouchControlHandlers;
 
+  /** True while Move HUD editor is open — ignore gameplay input. */
+  private layoutEditMode = false;
+
   constructor(handlers: TouchControlHandlers = {}) {
     this.handlers = handlers;
     this.root = document.createElement('div');
@@ -61,8 +64,22 @@ export class TouchControls {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    this.root.hidden = !enabled;
+    this.root.hidden = !enabled && !this.layoutEditMode;
     if (!enabled) this.resetStick();
+  }
+
+  /** Keep controls visible but ignore stick/look/buttons (Move HUD mode). */
+  setLayoutEditMode(on: boolean): void {
+    this.layoutEditMode = on;
+    this.root.classList.toggle('touch-controls--layout-edit', on);
+    if (on) {
+      this.root.hidden = false;
+      this.resetStick();
+    }
+  }
+
+  private gameplayLive(): boolean {
+    return this.enabled && !this.layoutEditMode;
   }
 
   private bind(): void {
@@ -71,7 +88,7 @@ export class TouchControls {
 
     const onStickDown = (evt: Event) => {
       const e = evt as PointerEvent;
-      if (!this.enabled || e.pointerType === 'mouse') return;
+      if (!this.gameplayLive() || e.pointerType === 'mouse') return;
       e.preventDefault();
       this.stickPointerId = e.pointerId;
       const rect = stickWrap.getBoundingClientRect();
@@ -101,7 +118,7 @@ export class TouchControls {
 
     const onLookDown = (evt: Event) => {
       const e = evt as PointerEvent;
-      if (!this.enabled || e.pointerType === 'mouse') return;
+      if (!this.gameplayLive() || e.pointerType === 'mouse') return;
       if ((e.target as HTMLElement).closest('button')) return;
       e.preventDefault();
       this.lookPointerId = e.pointerId;
@@ -142,7 +159,7 @@ export class TouchControls {
 
     this.root.querySelector('[data-action="jump"]')!.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
+      if (!this.gameplayLive()) return;
       this.handlers.onJump?.(true);
     });
     this.root.querySelector('[data-action="jump"]')!.addEventListener('pointerup', () => {
@@ -156,7 +173,7 @@ export class TouchControls {
     let sneakOn = false;
     sneakBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
+      if (!this.gameplayLive()) return;
       sneakOn = !sneakOn;
       sneakBtn.classList.toggle('active', sneakOn);
       this.handlers.onSneak?.(sneakOn);
@@ -164,31 +181,31 @@ export class TouchControls {
 
     this.root.querySelector('[data-action="place"]')!.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
+      if (!this.gameplayLive()) return;
       this.handlers.onPlace?.();
     });
 
     this.root.querySelector('[data-action="pack"]')!.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
+      if (!this.gameplayLive()) return;
       this.handlers.onPack?.();
     });
 
     this.root.querySelector('[data-action="journal"]')!.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
+      if (!this.gameplayLive()) return;
       this.handlers.onJournal?.();
     });
 
     this.root.querySelector('[data-action="map"]')!.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
+      if (!this.gameplayLive()) return;
       this.handlers.onMap?.();
     });
 
     this.root.querySelector('[data-action="chat"]')!.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
+      if (!this.gameplayLive()) return;
       this.handlers.onChat?.();
     });
 

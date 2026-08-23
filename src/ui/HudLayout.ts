@@ -3,6 +3,7 @@ export type HudPos = { x: number; y: number };
 
 export type HudLayout = {
   hotbarScale: number;
+  controlsScale: number;
   hotbar?: HudPos;
   stick?: HudPos;
   actions?: HudPos;
@@ -11,6 +12,7 @@ export type HudLayout = {
 
 export const DEFAULT_HUD_LAYOUT: HudLayout = {
   hotbarScale: 0.72,
+  controlsScale: 1,
 };
 
 const LAYOUT_KEY = 'wildreach.hudLayout';
@@ -34,7 +36,12 @@ export function loadHudLayout(): HudLayout {
     if (!raw) return { ...DEFAULT_HUD_LAYOUT };
     const parsed = JSON.parse(raw) as Partial<HudLayout>;
     return {
-      hotbarScale: clamp(Number(parsed.hotbarScale) || DEFAULT_HUD_LAYOUT.hotbarScale, 0.45, 1.15),
+      hotbarScale: clamp(Number(parsed.hotbarScale) || DEFAULT_HUD_LAYOUT.hotbarScale, 0.45, 1.2),
+      controlsScale: clamp(
+        Number(parsed.controlsScale) || DEFAULT_HUD_LAYOUT.controlsScale,
+        0.7,
+        1.35,
+      ),
       hotbar: readPos(parsed.hotbar),
       stick: readPos(parsed.stick),
       actions: readPos(parsed.actions),
@@ -66,6 +73,7 @@ function setPosVar(prefix: string, pos: HudPos | undefined): void {
 export function applyHudLayout(layout: HudLayout): void {
   const root = document.documentElement;
   root.style.setProperty('--hud-hotbar-scale', String(layout.hotbarScale));
+  root.style.setProperty('--hud-controls-scale', String(layout.controlsScale));
   setPosVar('hotbar', layout.hotbar);
   setPosVar('stick', layout.stick);
   setPosVar('actions', layout.actions);
@@ -74,20 +82,29 @@ export function applyHudLayout(layout: HudLayout): void {
 
 type DragTarget = 'hotbar' | 'stick' | 'actions' | 'utils';
 
-const TARGETS: { key: DragTarget; selector: string }[] = [
-  { key: 'hotbar', selector: '.hotbar-wrap' },
-  { key: 'stick', selector: '.touch-stick-wrap' },
-  { key: 'actions', selector: '.touch-actions' },
-  { key: 'utils', selector: '.touch-top-bar' },
+const TARGETS: { key: DragTarget; selector: string; label: string }[] = [
+  { key: 'hotbar', selector: '.hotbar-wrap', label: 'Hotbar' },
+  { key: 'stick', selector: '.touch-stick-wrap', label: 'Move stick' },
+  { key: 'actions', selector: '.touch-actions', label: 'Actions' },
+  { key: 'utils', selector: '.touch-top-bar', label: 'Quick buttons' },
 ];
 
+function centerPos(el: HTMLElement): HudPos {
+  const r = el.getBoundingClientRect();
+  return {
+    x: clamp(((r.left + r.width / 2) / window.innerWidth) * 100, 4, 96),
+    y: clamp(((r.top + r.height / 2) / window.innerHeight) * 100, 4, 96),
+  };
+}
+
 /**
- * Full-screen drag editor for touch HUD pieces.
- * Call start() while in-game (pause closed). Resolves when the player taps Done/Reset.
+ * Drag editor for every on-screen play control (hotbar, stick, actions, quick bar).
+ * Built for phones: touch-first, seeds free positions so pieces leave the dock.
  */
 export class HudLayoutEditor {
   private overlay: HTMLElement | null = null;
   private layout: HudLayout = loadHudLayout();
+  private boundEls: { key: DragTarget; el: HTMLElement; onDown: (e: PointerEvent) => void }[] = [];
   private dragging: {
     key: DragTarget;
     el: HTMLElement;
@@ -101,17 +118,28 @@ export class HudLayoutEditor {
     if (this.overlay) return;
     this.onDone = onDone;
     this.layout = loadHudLayout();
+
+    // Free every visible piece from dock/flex so all can be dragged on mobile.
+    for (const t of TARGETS) {
+      const el = document.querySelector<HTMLElement>(t.selector);
+      if (!el || el.offsetParent === null) continue;
+      if (!this.layout[t.key]) this.layout[t.key] = centerPos(el);
+    }
     applyHudLayout(this.layout);
 
     this.overlay = document.createElement('div');
     this.overlay.className = 'hud-edit-overlay';
     this.overlay.innerHTML = `
       <div class="hud-edit-bar">
-        <p class="hud-edit-title">Move HUD — drag the highlighted pieces</p>
+        <p class="hud-edit-title">Move HUD — drag every highlighted control</p>
         <div class="hud-edit-actions">
           <label class="hud-edit-scale">
-            Hotbar size
-            <input type="range" class="hud-edit-scale-range" min="0.45" max="1.1" step="0.05" value="${this.layout.hotbarScale}" />
+            Hotbar
+            <input type="range" class="hud-edit-hotbar-scale" min="0.45" max="1.15" step="0.05" value="${this.layout.hotbarScale}" />
+          </label>
+          <label class="hud-edit-scale">
+            Controls
+            <input type="range" class="hud-edit-controls-scale" min="0.7" max="1.35" step="0.05" value="${this.layout.controlsScale}" />
           </label>
           <button type="button" class="hud-edit-btn" data-act="reset">Reset</button>
           <button type="button" class="hud-edit-btn primary" data-act="done">Done</button>
@@ -121,35 +149,66 @@ export class HudLayoutEditor {
     document.body.appendChild(this.overlay);
     document.documentElement.classList.add('hud-editing');
 
-    const scale = this.overlay.querySelector<HTMLInputElement>('.hud-edit-scale-range')!;
-    scale.addEventListener('input', () => {
-      this.layout.hotbarScale = Number(scale.value);
+    const hotbarScale = this.overlay.querySelector<HTMLInputElement>('.hud-edit-hotbar-scale')!;
+    const controlsScale = this.overlay.querySelector<HTMLInputElement>('.hud-edit-controls-scale')!;
+    hotbarScale.addEventListener('input', () => {
+      this.layout.hotbarScale = Number(hotbarScale.value);
+      applyHudLayout(this.layout);
+    });
+    controlsScale.addEventListener('input', () => {
+      this.layout.controlsScale = Number(controlsScale.value);
       applyHudLayout(this.layout);
     });
 
-    this.overlay.querySelector('[data-act="done"]')!.addEventListener('click', () => this.finish(false));
-    this.overlay.querySelector('[data-act="reset"]')!.addEventListener('click', () => {
+    this.overlay.querySelector('[data-act="done"]')!.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.finish(false);
+    });
+    this.overlay.querySelector('[data-act="reset"]')!.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       this.layout = { ...DEFAULT_HUD_LAYOUT };
-      scale.value = String(this.layout.hotbarScale);
+      // Re-seed live centers after reset clears custom coords.
+      applyHudLayout(this.layout);
+      for (const t of TARGETS) {
+        const el = document.querySelector<HTMLElement>(t.selector);
+        if (!el || el.offsetParent === null) continue;
+        this.layout[t.key] = centerPos(el);
+      }
+      hotbarScale.value = String(this.layout.hotbarScale);
+      controlsScale.value = String(this.layout.controlsScale);
       applyHudLayout(this.layout);
     });
 
+    this.boundEls = [];
     for (const t of TARGETS) {
       const el = document.querySelector<HTMLElement>(t.selector);
       if (!el) continue;
       el.classList.add('hud-drag-target');
-      el.addEventListener('pointerdown', (e) => this.onPointerDown(e, t.key, el));
+      el.dataset.hudLabel = t.label;
+      const onDown = (e: PointerEvent) => this.onPointerDown(e, t.key, el);
+      el.addEventListener('pointerdown', onDown, { capture: true });
+      this.boundEls.push({ key: t.key, el, onDown });
     }
-    window.addEventListener('pointermove', this.onPointerMove);
+
+    window.addEventListener('pointermove', this.onPointerMove, { passive: false });
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('pointercancel', this.onPointerUp);
   }
 
   private onPointerDown = (e: PointerEvent, key: DragTarget, el: HTMLElement): void => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    // Ignore chrome inside the edit bar.
+    if ((e.target as HTMLElement).closest?.('.hud-edit-bar')) return;
     e.preventDefault();
     e.stopPropagation();
-    el.setPointerCapture(e.pointerId);
+    e.stopImmediatePropagation();
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     const rect = el.getBoundingClientRect();
     this.dragging = {
       key,
@@ -158,6 +217,7 @@ export class HudLayoutEditor {
       grabX: e.clientX - (rect.left + rect.width / 2),
       grabY: e.clientY - (rect.top + rect.height / 2),
     };
+    el.classList.add('hud-dragging');
   };
 
   private onPointerMove = (e: PointerEvent): void => {
@@ -165,13 +225,13 @@ export class HudLayoutEditor {
     e.preventDefault();
     const cx = ((e.clientX - this.dragging.grabX) / window.innerWidth) * 100;
     const cy = ((e.clientY - this.dragging.grabY) / window.innerHeight) * 100;
-    const pos = { x: clamp(cx, 4, 96), y: clamp(cy, 4, 96) };
-    this.layout[this.dragging.key] = pos;
+    this.layout[this.dragging.key] = { x: clamp(cx, 4, 96), y: clamp(cy, 4, 96) };
     applyHudLayout(this.layout);
   };
 
   private onPointerUp = (e: PointerEvent): void => {
     if (!this.dragging || e.pointerId !== this.dragging.pid) return;
+    this.dragging.el.classList.remove('hud-dragging');
     this.dragging = null;
   };
 
@@ -182,9 +242,12 @@ export class HudLayoutEditor {
     } else {
       applyHudLayout(loadHudLayout());
     }
-    for (const t of TARGETS) {
-      document.querySelector(t.selector)?.classList.remove('hud-drag-target');
+    for (const { el, onDown } of this.boundEls) {
+      el.classList.remove('hud-drag-target', 'hud-dragging');
+      delete el.dataset.hudLabel;
+      el.removeEventListener('pointerdown', onDown, { capture: true });
     }
+    this.boundEls = [];
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('pointercancel', this.onPointerUp);

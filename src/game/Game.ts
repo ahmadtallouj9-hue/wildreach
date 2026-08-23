@@ -353,15 +353,17 @@ export class Game {
     this.hud.setMenuOpen(false);
     this.inventoryUi.root.classList.remove('menu-hidden');
     this.chatUi.root.classList.add('menu-hidden');
-    // Keep the world paused so you don't walk while dragging, but show controls.
+    // Keep world paused so you don't walk while dragging; show all controls.
     this.paused = true;
     this.player.setInputEnabled(false);
     this.interaction.setEnabled(false);
     this.touchControls?.setEnabled(true);
+    this.touchControls?.setLayoutEditMode(true);
     this.exitPointerLockQuiet();
 
     this.hudEditor.start(() => {
       this.editingHud = false;
+      this.touchControls?.setLayoutEditMode(false);
       this.setPaused(false);
       if (!isTouchDevice()) this.requestPointerLock();
     });
@@ -372,6 +374,7 @@ export class Game {
       this.player.setInputEnabled(false);
       this.interaction.setEnabled(false);
       this.touchControls?.setEnabled(true);
+      this.touchControls?.setLayoutEditMode(true);
       return;
     }
     const canControl =

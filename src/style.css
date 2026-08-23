@@ -5052,6 +5052,7 @@ button.mc-row {
 /* ---- Movable HUD layout ---- */
 html {
   --hud-hotbar-scale: 0.72;
+  --hud-controls-scale: 1;
 }
 
 html.touch-device .hotbar-wrap {
@@ -5059,13 +5060,22 @@ html.touch-device .hotbar-wrap {
   transform-origin: bottom center;
 }
 
+html.touch-device .touch-stick-wrap,
+html.touch-device .touch-actions,
+html.touch-device .touch-top-bar {
+  transform: scale(var(--hud-controls-scale, 1));
+  transform-origin: center center;
+}
+
 html.hud-pos-hotbar .hotbar-wrap {
+  position: fixed !important;
   left: var(--hud-hotbar-x) !important;
   top: var(--hud-hotbar-y) !important;
   right: auto !important;
   bottom: auto !important;
   transform: translate(-50%, -50%) scale(var(--hud-hotbar-scale, 0.72)) !important;
   transform-origin: center center !important;
+  z-index: 32;
 }
 
 html.hud-pos-stick .touch-stick-wrap {
@@ -5074,8 +5084,9 @@ html.hud-pos-stick .touch-stick-wrap {
   top: var(--hud-stick-y) !important;
   right: auto !important;
   bottom: auto !important;
-  transform: translate(-50%, -50%);
-  z-index: 30;
+  margin: 0 !important;
+  transform: translate(-50%, -50%) scale(var(--hud-controls-scale, 1)) !important;
+  z-index: 32;
 }
 
 html.hud-pos-actions .touch-actions {
@@ -5084,8 +5095,9 @@ html.hud-pos-actions .touch-actions {
   top: var(--hud-actions-y) !important;
   right: auto !important;
   bottom: auto !important;
-  transform: translate(-50%, -50%);
-  z-index: 30;
+  margin: 0 !important;
+  transform: translate(-50%, -50%) scale(var(--hud-controls-scale, 1)) !important;
+  z-index: 32;
 }
 
 html.hud-pos-utils .touch-top-bar {
@@ -5093,8 +5105,9 @@ html.hud-pos-utils .touch-top-bar {
   left: var(--hud-utils-x) !important;
   top: var(--hud-utils-y) !important;
   right: auto !important;
-  transform: translate(-50%, -50%);
-  z-index: 30;
+  margin: 0 !important;
+  transform: translate(-50%, -50%) scale(var(--hud-controls-scale, 1)) !important;
+  z-index: 32;
 }
 
 .hud-edit-overlay {
@@ -5108,23 +5121,23 @@ html.hud-pos-utils .touch-top-bar {
   pointer-events: auto;
   position: absolute;
   left: 50%;
-  top: max(0.5rem, env(safe-area-inset-top));
+  top: max(0.4rem, env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
-  width: min(520px, calc(100vw - 1rem));
-  padding: 0.65rem 0.75rem;
-  background: rgba(10, 8, 18, 0.88);
-  border: 2px solid #222;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  width: min(560px, calc(100vw - 0.75rem));
+  padding: 0.55rem 0.65rem 0.65rem;
+  background: rgba(8, 6, 16, 0.92);
+  border: 2px solid #1a1a1a;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
   color: #f5f0e8;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .hud-edit-title {
   margin: 0;
   font-family: var(--font-display, monospace);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -5133,50 +5146,98 @@ html.hud-pos-utils .touch-top-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .hud-edit-scale {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  flex: 1 1 auto;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  flex: 1 1 9rem;
 }
 
+.hud-edit-hotbar-scale,
+.hud-edit-controls-scale,
 .hud-edit-scale-range {
-  flex: 1 1 8rem;
-  min-width: 6rem;
+  flex: 1 1 5rem;
+  min-width: 4.5rem;
 }
 
 .hud-edit-btn {
   font-family: var(--font-display, monospace);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  padding: 0.4rem 0.7rem;
+  padding: 0.45rem 0.75rem;
   border: 2px solid #111;
   background: #8b8b8b;
   color: #111;
   box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #555;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .hud-edit-btn.primary {
   background: #5ec4b0;
 }
 
+/* While editing: every piece is a fat drag handle with a label */
+html.hud-editing .touch-controls {
+  pointer-events: none !important;
+}
+
+html.hud-editing .touch-controls--layout-edit,
+html.hud-editing .touch-controls--layout-edit .touch-dock,
+html.hud-editing .hotbar-wrap,
+html.hud-editing .hud-drag-target {
+  pointer-events: auto !important;
+}
+
+html.hud-editing .touch-look-zone,
+html.hud-editing .touch-hint {
+  display: none !important;
+}
+
 html.hud-editing .hud-drag-target {
   outline: 2px solid #ffd166;
-  outline-offset: 3px;
-  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.25);
-  pointer-events: auto !important;
-  z-index: 81;
+  outline-offset: 4px;
+  box-shadow: 0 0 0 6px rgba(255, 209, 102, 0.28);
+  z-index: 85 !important;
+  touch-action: none !important;
+  cursor: grab;
 }
 
-html.hud-editing .touch-controls {
+html.hud-editing .hud-drag-target.hud-dragging {
+  cursor: grabbing;
+  outline-color: #5ec4b0;
+  box-shadow: 0 0 0 8px rgba(94, 196, 176, 0.35);
+}
+
+html.hud-editing .hud-drag-target::after {
+  content: attr(data-hud-label);
+  position: absolute;
+  left: 50%;
+  top: -1.35rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-display, monospace);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #111;
+  background: #ffd166;
+  padding: 0.12rem 0.4rem;
+  border: 1px solid #111;
   pointer-events: none;
+  z-index: 2;
 }
 
-html.hud-editing .hud-drag-target {
-  pointer-events: auto !important;
+html.hud-editing .touch-action-btn,
+html.hud-editing .touch-util-btn {
+  pointer-events: none !important;
+}
+
+html.hud-editing .touch-dock {
+  /* Dock is only a grouping shell while editing; children are free. */
+  pointer-events: none !important;
 }
