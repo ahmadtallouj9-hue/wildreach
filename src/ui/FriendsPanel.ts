@@ -253,9 +253,9 @@ export class FriendsPanel {
     const friends = this.social.friendList;
     if (!friends.length) {
       this.listEl.innerHTML = `
-        <div class="friends-empty-card">
+        <div class="friends-empty-card mc-empty">
           <p class="friends-empty">No friends yet</p>
-          <p class="friends-empty-hint">Ask a friend for their 6-digit code, type it above, then tap Add friend. They must open Wildreach once so their code is online.</p>
+          <p class="friends-empty-hint">Ask a friend for their 6-digit code, type it above, then tap Add. They must open Wildreach once so their code is online.</p>
         </div>
       `;
       return;
@@ -263,15 +263,15 @@ export class FriendsPanel {
 
     const online = friends.filter((f) => f.online).length;
     this.listEl.innerHTML = `
-      <p class="friends-list-meta">${friends.length} friend${friends.length === 1 ? '' : 's'} · ${online} online</p>
+      <p class="friends-list-meta mc-list-meta">${friends.length} friend${friends.length === 1 ? '' : 's'} · ${online} online</p>
       ${friends
         .map(
           (f) => `
-      <article class="friend-row" data-id="${f.accountId}">
-        <button type="button" class="friend-row-main" data-action="view-friend" data-id="${f.accountId}">
+      <article class="friend-row mc-row" data-id="${f.accountId}">
+        <button type="button" class="friend-row-main mc-row-main" data-action="view-friend" data-id="${f.accountId}">
           <canvas class="friend-row-skin" width="32" height="64" data-friend-skin="${f.accountId}" aria-hidden="true"></canvas>
-          <span class="friend-dot ${statusClass(f)}"></span>
-          <span class="friend-row-text">
+          <span class="friend-dot mc-dot ${statusClass(f)}"></span>
+          <span class="friend-row-text mc-row-text">
             <strong>${escapeHtml(f.profile.name || 'Wanderer')}</strong>
             <span class="friend-row-status-line">
               ${statusBadge(f)}
@@ -279,13 +279,13 @@ export class FriendsPanel {
             </span>
           </span>
         </button>
-        <div class="friend-row-actions">
+        <div class="friend-row-actions mc-row-actions">
           ${
             f.inGame
-              ? `<button type="button" class="menu-btn primary block-btn friend-join-btn" data-action="request-join" data-id="${f.accountId}">Join</button>`
-              : `<button type="button" class="menu-btn ghost block-btn" data-action="view-friend" data-id="${f.accountId}">Profile</button>`
+              ? `<button type="button" class="mc-btn mc-btn--small mc-btn--primary friend-join-btn" data-action="request-join" data-id="${f.accountId}">Join</button>`
+              : `<button type="button" class="mc-btn mc-btn--small mc-btn--ghost" data-action="view-friend" data-id="${f.accountId}">Profile</button>`
           }
-          <button type="button" class="menu-btn quiet" data-action="remove-friend" data-id="${f.accountId}" title="Remove">✕</button>
+          <button type="button" class="mc-btn mc-btn--icon" data-action="remove-friend" data-id="${f.accountId}" title="Remove" aria-label="Remove friend">✕</button>
         </div>
       </article>
     `,
@@ -330,15 +330,15 @@ export class FriendsPanel {
     }
     this.requestsEl.hidden = false;
     this.requestsEl.innerHTML = `
-      <p class="friends-section-title">Join requests</p>
+      <p class="mc-section-title friends-section-title">Join requests</p>
       ${reqs
         .map(
           (r) => `
-        <div class="friend-request-row" data-id="${r.id}">
-          <span><strong>${escapeHtml(r.from.profile.name || 'Friend')}</strong> wants to join your world</span>
-          <div class="friend-request-actions">
-            <button type="button" class="menu-btn primary block-btn" data-action="accept-join" data-id="${r.id}">Accept</button>
-            <button type="button" class="menu-btn ghost block-btn" data-action="deny-join" data-id="${r.id}">Deny</button>
+        <div class="friend-request-row mc-row mc-row--stack" data-id="${r.id}">
+          <span class="mc-row-text"><strong>${escapeHtml(r.from.profile.name || 'Friend')}</strong> wants to join your world</span>
+          <div class="friend-request-actions mc-row-actions">
+            <button type="button" class="mc-btn mc-btn--small mc-btn--primary" data-action="accept-join" data-id="${r.id}">Accept</button>
+            <button type="button" class="mc-btn mc-btn--small mc-btn--ghost" data-action="deny-join" data-id="${r.id}">Deny</button>
           </div>
         </div>
       `,

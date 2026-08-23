@@ -73,3 +73,27 @@ export function saveWorldSettings(seed: string, settings: WorldSettings): void {
   store[seed] = normalize(settings);
   writeStore(store);
 }
+
+export type SavedWorldEntry = {
+  seed: string;
+  settings: WorldSettings;
+};
+
+/** All worlds saved on this device (Minecraft-style select list). */
+export function listSavedWorlds(): SavedWorldEntry[] {
+  const store = readStore();
+  return Object.entries(store)
+    .map(([seed, settings]) => ({ seed, settings: normalize(settings) }))
+    .sort((a, b) => {
+      const an = (a.settings.name || a.seed).toLowerCase();
+      const bn = (b.settings.name || b.seed).toLowerCase();
+      return an.localeCompare(bn);
+    });
+}
+
+export function deleteWorldSettings(seed: string): void {
+  const store = readStore();
+  if (!(seed in store)) return;
+  delete store[seed];
+  writeStore(store);
+}

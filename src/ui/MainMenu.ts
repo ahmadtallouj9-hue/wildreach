@@ -33,6 +33,8 @@ import {
 } from './SkinPresets';
 import { loadLastWorld, saveLastWorld, worldNameFromSeed, worldTagFromSeed } from './worldNames';
 import {
+  deleteWorldSettings,
+  listSavedWorlds,
   loadWorldSettings,
   saveWorldSettings,
   type TerrainType,
@@ -59,6 +61,18 @@ function readSeedFromUrl(): string {
   return randomSeed();
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/'/g, '&#39;');
+}
+
 type Panel = 'home' | 'settings' | 'customize' | 'multiplayer' | 'world';
 
 export class MainMenu {
@@ -74,6 +88,8 @@ export class MainMenu {
   private activePresetId: string | null = null;
   private previewPresetId: string | null = null;
   private friendsPanel: FriendsPanel | null = null;
+  private selectedWorldSeed: string | null = null;
+  private worldView: 'list' | 'create' = 'list';
 
   constructor(private social?: SocialClient) {
     this.root = document.createElement('div');
@@ -305,35 +321,33 @@ export class MainMenu {
       </div>
 
       <div class="menu-stage menu-home mp-panel" data-panel="multiplayer" hidden>
-        <div class="menu-home-inner menu-glass-window mp-glass-window">
-          <header class="mp-topbar">
+        <div class="menu-home-inner menu-glass-window mp-glass-window mc-panel-window">
+          <header class="mp-topbar mc-topbar">
             <button type="button" class="panel-back block-btn" data-action="home">← BACK</button>
-            <h2 class="panel-title">Friends</h2>
+            <h2 class="panel-title">Multiplayer</h2>
           </header>
-          <div class="mp-shell friends-shell">
-            <p class="mp-lead">Add friends by code, see their profile, and request to join their world.</p>
-            <p class="mp-status">Friends server: connecting…</p>
-            <div class="friends-code-row">
-              <span class="friends-code-label">Your code</span>
-              <code class="friends-my-code"></code>
-              <button type="button" class="menu-framed-btn friends-copy-btn" data-action="copy-friend-code">
-                <span class="menu-framed-btn__frame">
-                  <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                  <span class="menu-framed-btn__label">Copy</span>
-                  <span class="menu-framed-btn__star" aria-hidden="true">✦</span>
-                </span>
-              </button>
+          <div class="mp-shell friends-shell mc-shell">
+            <p class="mp-status mc-status">Friends server: connecting…</p>
+            <div class="mc-block">
+              <p class="mc-section-title">Your friend code</p>
+              <div class="friends-code-row">
+                <code class="friends-my-code"></code>
+                <button type="button" class="mc-btn mc-btn--small friends-copy-btn" data-action="copy-friend-code">Copy</button>
+              </div>
             </div>
-            <div class="friends-add-row">
-              <input type="text" class="friends-add-input" maxlength="6" inputmode="numeric" pattern="[0-9]*" spellcheck="false" autocomplete="off" placeholder="6-digit code" />
-              <button type="button" class="menu-btn primary block-btn" data-action="add-friend">Add friend</button>
+            <div class="mc-block">
+              <p class="mc-section-title">Add a friend</p>
+              <div class="friends-add-row">
+                <input type="text" class="friends-add-input mc-input" maxlength="6" inputmode="numeric" pattern="[0-9]*" spellcheck="false" autocomplete="off" placeholder="6-digit code" />
+                <button type="button" class="mc-btn mc-btn--primary mc-btn--small" data-action="add-friend">Add</button>
+              </div>
             </div>
             <p class="friends-toast" hidden></p>
-            <div class="friends-requests" hidden></div>
-            <p class="friends-section-title">Friends</p>
-            <div class="friends-list"></div>
-            <div class="friends-tips">
-              <p class="friends-tips-title">Quick tips</p>
+            <div class="friends-requests mc-list" hidden></div>
+            <p class="mc-section-title friends-section-title">Friends list</p>
+            <div class="friends-list mc-list"></div>
+            <div class="friends-tips mc-tips">
+              <p class="friends-tips-title mc-section-title">Quick tips</p>
               <ul>
                 <li>Share your code so friends can add you</li>
                 <li>Tap a friend to open their profile</li>
@@ -352,72 +366,86 @@ export class MainMenu {
       </div>
 
       <div class="menu-stage panel profile-panel blocky world-panel" data-panel="world" hidden>
-        <header class="profile-topbar">
-          <button type="button" class="panel-back block-btn" data-action="home">← BACK</button>
-          <h2 class="panel-title">WORLDS</h2>
-          <button type="button" class="menu-btn primary block-btn" data-action="create-world">CREATE</button>
+        <header class="profile-topbar mc-topbar">
+          <button type="button" class="panel-back block-btn" data-action="world-back">← BACK</button>
+          <h2 class="panel-title world-panel-title">Select World</h2>
+          <span class="mc-topbar-spacer" aria-hidden="true"></span>
         </header>
-        <div class="world-shell">
-          <div class="world-card block-card">
-            <label class="field field-tight">
-              <span>World name</span>
-              <input type="text" class="world-name-input" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Optional" />
-            </label>
-            <p class="world-preview-name">Misty Reach</p>
-            <p class="world-preview-tag">Rolling hills and open sky.</p>
-            <label class="field field-tight">
-              <span>World seed</span>
-              <div class="seed-row">
-                <input type="text" class="world-seed-input" maxlength="24" spellcheck="false" autocomplete="off" />
-                <button type="button" class="menu-btn quiet" data-action="random-world" title="New seed">↻</button>
+        <div class="world-shell mc-shell">
+          <div class="world-view" data-world-view="list">
+            <div class="mc-list world-select-list" role="listbox" aria-label="Saved worlds"></div>
+            <p class="mc-empty world-select-empty" hidden>No worlds yet. Create a new world to start exploring.</p>
+            <div class="mc-action-bar world-select-actions">
+              <button type="button" class="mc-btn mc-btn--primary" data-action="play-selected-world" disabled>Play Selected World</button>
+              <div class="mc-action-bar__row">
+                <button type="button" class="mc-btn" data-action="show-create-world">Create New World</button>
+                <button type="button" class="mc-btn mc-btn--danger" data-action="delete-selected-world" disabled>Delete</button>
               </div>
-            </label>
-            <p class="world-seed-note">Your seed defines the terrain. Friends can request to join when you are in this world.</p>
-
-            <div class="world-settings-card block-card">
-              <p class="profile-section-title">World options</p>
-
-              <span class="world-option-label">Terrain type</span>
-              <div class="seg-wrap world-terrain-seg">
-                <button type="button" class="seg-btn active" data-terrain="balanced">Balanced</button>
-                <button type="button" class="seg-btn" data-terrain="flat">Flat</button>
-                <button type="button" class="seg-btn" data-terrain="mountains">Peaks</button>
-                <button type="button" class="seg-btn" data-terrain="islands">Islands</button>
-                <button type="button" class="seg-btn" data-terrain="wild">Wild</button>
-              </div>
-
-              <div class="world-option-row">
-                <span class="world-option-label">Caves</span>
-                <div class="seg-wrap world-caves-seg">
-                  <button type="button" class="seg-btn active" data-caves="1">On</button>
-                  <button type="button" class="seg-btn" data-caves="0">Off</button>
-                </div>
-              </div>
-
-              <div class="world-option-row">
-                <span class="world-option-label">Structures</span>
-                <div class="seg-wrap world-structures-seg">
-                  <button type="button" class="seg-btn active" data-structures="1">On</button>
-                  <button type="button" class="seg-btn" data-structures="0">Off</button>
-                </div>
-              </div>
-
-              <span class="world-option-label">Starting time</span>
-              <div class="seg-wrap world-time-seg">
-                <button type="button" class="seg-btn active" data-time="day">Day</button>
-                <button type="button" class="seg-btn" data-time="noon">Noon</button>
-                <button type="button" class="seg-btn" data-time="sunset">Sunset</button>
-                <button type="button" class="seg-btn" data-time="night">Night</button>
-              </div>
-
-              <label class="field field-tight">
-                <span>Render distance <em class="world-dist-val">6</em></span>
-                <input type="range" class="world-dist-range" min="3" max="8" step="1" value="6" />
-              </label>
             </div>
+          </div>
+          <div class="world-view" data-world-view="create" hidden>
+            <div class="world-card block-card mc-block">
+              <label class="field field-tight">
+                <span>World name</span>
+                <input type="text" class="world-name-input mc-input" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Optional" />
+              </label>
+              <p class="world-preview-name">Misty Reach</p>
+              <p class="world-preview-tag">Rolling hills and open sky.</p>
+              <label class="field field-tight">
+                <span>World seed</span>
+                <div class="seed-row">
+                  <input type="text" class="world-seed-input mc-input" maxlength="24" spellcheck="false" autocomplete="off" />
+                  <button type="button" class="mc-btn mc-btn--small" data-action="random-world" title="New seed">↻</button>
+                </div>
+              </label>
+              <p class="world-seed-note">Your seed defines the terrain. Friends can request to join when you are in this world.</p>
 
-            <div class="world-actions">
-              <button type="button" class="menu-btn primary block-btn" data-action="create-world">CREATE & ENTER</button>
+              <div class="world-settings-card block-card">
+                <p class="mc-section-title">World options</p>
+
+                <span class="world-option-label">Terrain type</span>
+                <div class="seg-wrap world-terrain-seg">
+                  <button type="button" class="seg-btn active" data-terrain="balanced">Balanced</button>
+                  <button type="button" class="seg-btn" data-terrain="flat">Flat</button>
+                  <button type="button" class="seg-btn" data-terrain="mountains">Peaks</button>
+                  <button type="button" class="seg-btn" data-terrain="islands">Islands</button>
+                  <button type="button" class="seg-btn" data-terrain="wild">Wild</button>
+                </div>
+
+                <div class="world-option-row">
+                  <span class="world-option-label">Caves</span>
+                  <div class="seg-wrap world-caves-seg">
+                    <button type="button" class="seg-btn active" data-caves="1">On</button>
+                    <button type="button" class="seg-btn" data-caves="0">Off</button>
+                  </div>
+                </div>
+
+                <div class="world-option-row">
+                  <span class="world-option-label">Structures</span>
+                  <div class="seg-wrap world-structures-seg">
+                    <button type="button" class="seg-btn active" data-structures="1">On</button>
+                    <button type="button" class="seg-btn" data-structures="0">Off</button>
+                  </div>
+                </div>
+
+                <span class="world-option-label">Starting time</span>
+                <div class="seg-wrap world-time-seg">
+                  <button type="button" class="seg-btn active" data-time="day">Day</button>
+                  <button type="button" class="seg-btn" data-time="noon">Noon</button>
+                  <button type="button" class="seg-btn" data-time="sunset">Sunset</button>
+                  <button type="button" class="seg-btn" data-time="night">Night</button>
+                </div>
+
+                <label class="field field-tight">
+                  <span>Render distance <em class="world-dist-val">6</em></span>
+                  <input type="range" class="world-dist-range" min="3" max="8" step="1" value="6" />
+                </label>
+              </div>
+
+              <div class="world-actions mc-action-bar">
+                <button type="button" class="mc-btn mc-btn--primary" data-action="create-world">Create New World</button>
+                <button type="button" class="mc-btn" data-action="cancel-create-world">Cancel</button>
+              </div>
             </div>
           </div>
         </div>
@@ -445,6 +473,24 @@ export class MainMenu {
     });
     this.root.querySelector('[data-action="world"]')!.addEventListener('click', () =>
       this.openWorldPanel(),
+    );
+    this.root.querySelector('[data-action="world-back"]')?.addEventListener('click', () => {
+      if (this.worldView === 'create') this.setWorldView('list');
+      else this.showPanel('home');
+    });
+    this.root.querySelector('[data-action="show-create-world"]')?.addEventListener('click', () => {
+      this.worldSeedInput.value = randomSeed();
+      this.syncWorldUi();
+      this.setWorldView('create');
+    });
+    this.root.querySelector('[data-action="cancel-create-world"]')?.addEventListener('click', () =>
+      this.setWorldView('list'),
+    );
+    this.root.querySelector('[data-action="play-selected-world"]')?.addEventListener('click', () =>
+      this.playSelectedWorld(),
+    );
+    this.root.querySelector('[data-action="delete-selected-world"]')?.addEventListener('click', () =>
+      this.deleteSelectedWorld(),
     );
     this.root.querySelectorAll('[data-action="create-world"]').forEach((el) => {
       el.addEventListener('click', () => this.emitCreateWorld());
@@ -534,6 +580,11 @@ export class MainMenu {
   private emitPlay(): void {
     const seed = this.getPlaySeed();
     this.worldSeedInput.value = seed;
+    this.worldSettings = loadWorldSettings(seed);
+    if (!this.worldSettings.name) {
+      this.worldSettings = { ...this.worldSettings, name: worldNameFromSeed(seed) };
+    }
+    saveWorldSettings(seed, this.worldSettings);
     replaceSeedInUrl(seed);
     saveLastWorld(seed);
     this.hasSession = true;
@@ -548,15 +599,118 @@ export class MainMenu {
     saveWorldSettings(seed, this.worldSettings);
     replaceSeedInUrl(seed);
     saveLastWorld(seed);
+    this.selectedWorldSeed = seed;
     this.hasSession = true;
     this.emitPrefs();
     this.onAction?.({ type: 'play', seed });
   }
 
   private openWorldPanel(): void {
-    this.worldSeedInput.value = loadLastWorld() ?? readSeedFromUrl();
+    const last = loadLastWorld();
+    this.selectedWorldSeed = last;
+    this.worldSeedInput.value = last ?? readSeedFromUrl();
     this.syncWorldUi();
+    this.setWorldView('list');
     this.showPanel('world');
+  }
+
+  private setWorldView(view: 'list' | 'create'): void {
+    this.worldView = view;
+    this.root.querySelectorAll<HTMLElement>('[data-world-view]').forEach((el) => {
+      el.hidden = el.dataset.worldView !== view;
+    });
+    const title = this.root.querySelector('.world-panel-title');
+    if (title) title.textContent = view === 'create' ? 'Create New World' : 'Select World';
+    if (view === 'list') this.renderWorldList();
+  }
+
+  private renderWorldList(): void {
+    const listEl = this.root.querySelector('.world-select-list');
+    const emptyEl = this.root.querySelector<HTMLElement>('.world-select-empty');
+    const playBtn = this.root.querySelector<HTMLButtonElement>('[data-action="play-selected-world"]');
+    const deleteBtn = this.root.querySelector<HTMLButtonElement>('[data-action="delete-selected-world"]');
+    if (!listEl || !emptyEl || !playBtn || !deleteBtn) return;
+
+    const worlds = listSavedWorlds();
+    if (
+      this.selectedWorldSeed &&
+      !worlds.some((w) => w.seed === this.selectedWorldSeed)
+    ) {
+      this.selectedWorldSeed = worlds[0]?.seed ?? null;
+    }
+    if (!this.selectedWorldSeed && worlds.length) {
+      this.selectedWorldSeed = worlds[0]!.seed;
+    }
+
+    emptyEl.hidden = worlds.length > 0;
+    listEl.innerHTML = worlds
+      .map((w) => {
+        const name = w.settings.name.trim() || worldNameFromSeed(w.seed);
+        const tag = worldTagFromSeed(w.seed);
+        const selected = w.seed === this.selectedWorldSeed;
+        return `
+          <button type="button"
+            class="mc-row world-select-row${selected ? ' is-selected' : ''}"
+            role="option"
+            aria-selected="${selected ? 'true' : 'false'}"
+            data-action="select-world"
+            data-seed="${escapeAttr(w.seed)}">
+            <span class="mc-row-text">
+              <strong>${escapeHtml(name)}</strong>
+              <em>Seed: ${escapeHtml(w.seed)} · ${escapeHtml(w.settings.terrain)} · ${escapeHtml(tag)}</em>
+            </span>
+          </button>
+        `;
+      })
+      .join('');
+
+    listEl.querySelectorAll('[data-action="select-world"]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const seed = (el as HTMLElement).dataset.seed;
+        if (!seed) return;
+        this.selectedWorldSeed = seed;
+        this.renderWorldList();
+      });
+      el.addEventListener('dblclick', () => {
+        const seed = (el as HTMLElement).dataset.seed;
+        if (!seed) return;
+        this.selectedWorldSeed = seed;
+        this.playSelectedWorld();
+      });
+    });
+
+    const hasSelection = Boolean(this.selectedWorldSeed);
+    playBtn.disabled = !hasSelection;
+    deleteBtn.disabled = !hasSelection;
+  }
+
+  private playSelectedWorld(): void {
+    const seed = this.selectedWorldSeed;
+    if (!seed) return;
+    this.worldSeedInput.value = seed;
+    this.worldSettings = loadWorldSettings(seed);
+    replaceSeedInUrl(seed);
+    saveLastWorld(seed);
+    this.hasSession = true;
+    this.emitPrefs();
+    this.onAction?.({ type: 'play', seed });
+  }
+
+  private deleteSelectedWorld(): void {
+    const seed = this.selectedWorldSeed;
+    if (!seed) return;
+    const name = loadWorldSettings(seed).name.trim() || worldNameFromSeed(seed);
+    if (!confirm(`Delete world "${name}"? This only removes it from this device.`)) return;
+    deleteWorldSettings(seed);
+    if (loadLastWorld() === seed) {
+      try {
+        localStorage.removeItem('wildreach.lastWorld');
+      } catch {
+        /* ignore */
+      }
+    }
+    this.selectedWorldSeed = null;
+    this.renderWorldList();
   }
 
   private openMultiplayerPanel(): void {
@@ -675,7 +829,10 @@ export class MainMenu {
     });
     if (panel !== 'multiplayer') this.friendsPanel?.hideProfile();
     if (panel === 'settings') this.syncSettingsUi();
-    if (panel === 'world') this.syncWorldUi();
+    if (panel === 'world') {
+      if (this.worldView === 'list') this.renderWorldList();
+      else this.syncWorldUi();
+    }
     if (panel === 'customize') {
       this.ensureHeroPreview();
       this.ensureSkinEditor();
