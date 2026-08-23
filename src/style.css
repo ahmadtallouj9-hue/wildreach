@@ -735,25 +735,287 @@ body.title-over-session #main-menu {
   inset: 0;
   overflow: hidden;
   border-radius: inherit;
-  background: #0a1a2e;
-}
-
-.menu-atmosphere::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: url('/menu-hero.png') center center / cover no-repeat;
-  transform: scale(1.02);
-}
-
-.menu-atmosphere::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 70% 55% at 50% 42%, rgba(8, 18, 36, 0.12) 0%, rgba(6, 14, 28, 0.5) 70%, rgba(4, 10, 22, 0.78) 100%),
-    linear-gradient(180deg, rgba(12, 28, 48, 0.18) 0%, transparent 30%, rgba(4, 12, 24, 0.42) 100%);
+  background: #071525;
   pointer-events: none;
+}
+
+.menu-atmosphere__hero {
+  position: absolute;
+  inset: -3%;
+  background: url('/menu-hero.png') center center / cover no-repeat;
+  transform-origin: 50% 40%;
+  animation: menu-kenburns 42s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.menu-atmosphere__stars {
+  position: absolute;
+  inset: 0 0 45% 0;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.menu-star {
+  position: absolute;
+  left: var(--sx);
+  top: var(--sy);
+  width: var(--ss);
+  height: var(--ss);
+  border-radius: 50%;
+  background: rgba(230, 245, 255, var(--sb));
+  box-shadow:
+    0 0 4px rgba(200, 230, 255, 0.85),
+    0 0 10px rgba(140, 200, 255, 0.35);
+  animation: menu-twinkle var(--su) ease-in-out var(--sd) infinite;
+  opacity: 0.35;
+}
+
+.menu-star:nth-child(3n) {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  border-radius: 0;
+  background: rgba(255, 250, 230, var(--sb));
+}
+
+.menu-atmosphere__glow {
+  position: absolute;
+  left: -10%;
+  top: 18%;
+  width: 55%;
+  height: 55%;
+  background: radial-gradient(ellipse at center, rgba(255, 190, 110, 0.22) 0%, rgba(255, 160, 80, 0.08) 40%, transparent 70%);
+  animation: menu-sunpulse 8s ease-in-out infinite;
+  z-index: 1;
+  mix-blend-mode: screen;
+}
+
+.menu-atmosphere__shimmer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 42%;
+  bottom: 18%;
+  background:
+    linear-gradient(
+      105deg,
+      transparent 0%,
+      rgba(180, 230, 255, 0.04) 40%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(180, 230, 255, 0.04) 60%,
+      transparent 100%
+    );
+  background-size: 220% 100%;
+  animation: menu-water-shimmer 11s linear infinite;
+  z-index: 2;
+  mix-blend-mode: soft-light;
+  opacity: 0.7;
+}
+
+.menu-atmosphere__leaves {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+}
+
+.menu-leaf {
+  position: absolute;
+  top: -8%;
+  left: var(--lx);
+  width: var(--ls);
+  height: calc(var(--ls) * 1.35);
+  background: linear-gradient(145deg, hsl(var(--lh) 55% 42%), hsl(calc(var(--lh) + 20) 50% 28%));
+  border-radius: 2% 80% 20% 80%;
+  box-shadow: inset -2px -2px 0 rgba(0, 0, 0, 0.18);
+  opacity: 0.82;
+  animation: menu-leaf-fall var(--lu) linear var(--ld) infinite;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.menu-leaf::after {
+  content: '';
+  position: absolute;
+  left: 48%;
+  top: 8%;
+  bottom: 10%;
+  width: 1px;
+  background: rgba(40, 70, 20, 0.45);
+}
+
+.menu-atmosphere__grass {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: 0;
+  height: min(24vh, 170px);
+  z-index: 6;
+  pointer-events: none;
+}
+
+.menu-blade {
+  position: absolute;
+  bottom: 0;
+  left: var(--bx);
+  width: 3px;
+  height: var(--bh);
+  transform-origin: 50% 100%;
+  background: linear-gradient(
+    180deg,
+    hsl(105, 55%, calc(var(--bc) + 12%)) 0%,
+    hsl(120, 48%, calc(var(--bc) - 5%)) 55%,
+    hsl(130, 40%, calc(var(--bc) - 18%)) 100%
+  );
+  border-radius: 40% 40% 10% 10%;
+  animation: menu-blade-sway var(--bu) ease-in-out var(--bd) infinite;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.menu-plant {
+  position: absolute;
+  bottom: 2px;
+  left: var(--px);
+  width: 28px;
+  height: 36px;
+  transform-origin: 50% 100%;
+  animation: menu-plant-sway 3.4s ease-in-out var(--pd) infinite;
+}
+
+.menu-plant i {
+  position: absolute;
+  bottom: 0;
+  width: 9px;
+  height: 28px;
+  border-radius: 60% 60% 20% 20%;
+  background: linear-gradient(180deg, #7dce5a 0%, #3f8a3a 70%, #2a5e28 100%);
+  transform-origin: 50% 100%;
+}
+
+.menu-plant i:nth-child(1) {
+  left: 2px;
+  height: 22px;
+  --plant-rot: -28deg;
+  animation: menu-leaf-nod 2.6s ease-in-out infinite;
+}
+.menu-plant i:nth-child(2) {
+  left: 9px;
+  height: 32px;
+  --plant-rot: -4deg;
+  background: linear-gradient(180deg, #8ada62 0%, #458f3c 100%);
+  animation: menu-leaf-nod 2.9s ease-in-out 0.2s infinite;
+}
+.menu-plant i:nth-child(3) {
+  left: 16px;
+  height: 24px;
+  --plant-rot: 24deg;
+  animation: menu-leaf-nod 2.4s ease-in-out 0.35s infinite;
+}
+.menu-plant i:nth-child(4) {
+  left: 6px;
+  width: 14px;
+  height: 14px;
+  bottom: 18px;
+  --plant-rot: 12deg;
+  border-radius: 60% 10% 60% 10%;
+  background: radial-gradient(circle at 30% 30%, #9ae86e, #4a9a3e 70%);
+  animation: menu-leaf-nod 3.1s ease-in-out 0.1s infinite;
+}
+
+.menu-atmosphere__veil {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background:
+    radial-gradient(ellipse 78% 58% at 50% 38%, rgba(6, 16, 32, 0.05) 0%, rgba(4, 12, 24, 0.28) 70%, rgba(2, 8, 18, 0.48) 100%),
+    linear-gradient(180deg, rgba(8, 22, 40, 0.1) 0%, transparent 30%, rgba(2, 10, 18, 0.18) 78%, rgba(2, 10, 18, 0.08) 100%);
+}
+
+@keyframes menu-kenburns {
+  from { transform: scale(1.02) translate3d(0, 0, 0); }
+  to { transform: scale(1.08) translate3d(-1.2%, 0.8%, 0); }
+}
+
+@keyframes menu-twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+
+@keyframes menu-sunpulse {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+@keyframes menu-water-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
+@keyframes menu-blade-sway {
+  0%, 100% { transform: rotate(var(--bl)) skewX(-2deg); }
+  50% { transform: rotate(calc(var(--bl) + 10deg)) skewX(3deg); }
+}
+
+@keyframes menu-plant-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(4deg); }
+}
+
+@keyframes menu-leaf-nod {
+  0%, 100% { transform: rotate(var(--plant-rot, 0deg)) translateX(0); }
+  50% { transform: rotate(calc(var(--plant-rot, 0deg) + 8deg)) translateX(1px); }
+}
+
+@keyframes menu-leaf-fall {
+  0% {
+    transform: translate3d(0, -10vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  8% { opacity: 0.85; }
+  100% {
+    transform: translate3d(var(--lw), 110vh, 0) rotate(520deg);
+    opacity: 0.15;
+  }
+}
+
+#main-menu[hidden] .menu-atmosphere__hero,
+#main-menu[hidden] .menu-star,
+#main-menu[hidden] .menu-blade,
+#main-menu[hidden] .menu-plant,
+#main-menu[hidden] .menu-leaf,
+#main-menu[hidden] .menu-atmosphere__glow,
+#main-menu[hidden] .menu-atmosphere__shimmer {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-atmosphere__hero,
+  .menu-star,
+  .menu-blade,
+  .menu-plant,
+  .menu-plant i,
+  .menu-leaf,
+  .menu-atmosphere__glow,
+  .menu-atmosphere__shimmer {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .menu-atmosphere__grass {
+    height: min(18vh, 120px);
+  }
+  .menu-atmosphere__stars .menu-star:nth-child(n + 30) {
+    display: none;
+  }
+  .menu-atmosphere__leaves .menu-leaf:nth-child(n + 9) {
+    display: none;
+  }
+}
+
+/* Keep hero layer when old ::before styles linger — neutralize */
+.menu-atmosphere::before,
+.menu-atmosphere::after {
+  content: none !important;
+  display: none !important;
 }
 
 .menu-stage {

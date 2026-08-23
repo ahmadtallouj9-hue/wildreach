@@ -95,7 +95,15 @@ export class MainMenu {
     this.root = document.createElement('div');
     this.root.id = 'main-menu';
     this.root.innerHTML = `
-      <div class="menu-atmosphere" aria-hidden="true"></div>
+      <div class="menu-atmosphere" aria-hidden="true">
+        <div class="menu-atmosphere__hero"></div>
+        <div class="menu-atmosphere__stars"></div>
+        <div class="menu-atmosphere__glow"></div>
+        <div class="menu-atmosphere__shimmer"></div>
+        <div class="menu-atmosphere__leaves"></div>
+        <div class="menu-atmosphere__grass"></div>
+        <div class="menu-atmosphere__veil"></div>
+      </div>
       <div class="menu-stage menu-home" data-panel="home">
         <div class="menu-home-inner menu-home-hero">
           <header class="menu-header">
@@ -457,6 +465,7 @@ export class MainMenu {
     `;
 
     this.worldSeedInput = this.root.querySelector('.world-seed-input')!;
+    this.buildAtmosphereFx();
 
     if (this.social) {
       this.friendsPanel = new FriendsPanel(this.root, this.social);
@@ -564,6 +573,57 @@ export class MainMenu {
 
   get visible(): boolean {
     return !this.root.hidden;
+  }
+
+  private buildAtmosphereFx(): void {
+    const stars = this.root.querySelector('.menu-atmosphere__stars');
+    const grass = this.root.querySelector('.menu-atmosphere__grass');
+    const leaves = this.root.querySelector('.menu-atmosphere__leaves');
+    if (!stars || !grass || !leaves) return;
+
+    const starN = 48;
+    let starHtml = '';
+    for (let i = 0; i < starN; i++) {
+      const x = (i * 67 + 13) % 100;
+      const y = (i * 37 + 5) % 42;
+      const size = 1.2 + ((i * 17) % 20) / 10;
+      const delay = ((i * 29) % 80) / 10;
+      const dur = 2.4 + ((i * 13) % 30) / 10;
+      const bright = 0.45 + ((i * 11) % 55) / 100;
+      starHtml += `<span class="menu-star" style="--sx:${x}%;--sy:${y}%;--ss:${size}px;--sd:${delay}s;--su:${dur}s;--sb:${bright}"></span>`;
+    }
+    stars.innerHTML = starHtml;
+
+    const bladeN = 56;
+    let grassHtml = '';
+    for (let i = 0; i < bladeN; i++) {
+      const x = (i / (bladeN - 1)) * 100;
+      const h = 18 + ((i * 47) % 34);
+      const delay = ((i * 19) % 40) / 10;
+      const dur = 2.2 + ((i * 23) % 25) / 10;
+      const shade = 40 + ((i * 31) % 35);
+      const lean = -8 + ((i * 41) % 16);
+      grassHtml += `<span class="menu-blade" style="--bx:${x}%;--bh:${h}px;--bd:${delay}s;--bu:${dur}s;--bc:${shade}%;--bl:${lean}deg"></span>`;
+    }
+    // A few denser plant clumps
+    for (let i = 0; i < 7; i++) {
+      const x = 6 + i * 14 + ((i * 7) % 5);
+      grassHtml += `<span class="menu-plant" style="--px:${x}%;--pd:${(i * 0.35).toFixed(2)}s"><i></i><i></i><i></i><i></i></span>`;
+    }
+    grass.innerHTML = grassHtml;
+
+    const leafN = 14;
+    let leafHtml = '';
+    for (let i = 0; i < leafN; i++) {
+      const x = (i * 53 + 9) % 100;
+      const delay = ((i * 31) % 90) / 10;
+      const dur = 9 + ((i * 17) % 80) / 10;
+      const size = 10 + ((i * 13) % 12);
+      const drift = 40 + ((i * 29) % 50);
+      const hue = 85 + ((i * 19) % 45);
+      leafHtml += `<span class="menu-leaf" style="--lx:${x}%;--ld:${delay}s;--lu:${dur}s;--ls:${size}px;--lw:${drift}px;--lh:${hue}"></span>`;
+    }
+    leaves.innerHTML = leafHtml;
   }
 
   private onPlayClick(): void {
