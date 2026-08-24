@@ -114,17 +114,9 @@ export class MainMenu {
               <h1 class="menu-brand menu-brand--vythera">VYTHERA</h1>
               <div class="menu-brand-ornament" aria-hidden="true">
                 <span class="menu-brand-line"></span>
-                <span class="menu-lotus" aria-hidden="true">
-                  <svg viewBox="0 0 48 40" width="36" height="30" fill="none">
-                    <path d="M24 34c-2.2-4.8-8.5-8.2-14-9.5 4.2-1.2 8.8.2 12.2 3.4C20.5 20.2 18 12 18 6c3.2 3.8 5.4 8.8 6 14.8.6-6 2.8-11 6-14.8 0 6-2.5 14.2-4.2 21.9 3.4-3.2 8-4.6 12.2-3.4-5.5 1.3-11.8 4.7-14 9.5z" fill="url(#lotusGlow)"/>
-                    <path d="M24 30c-1.4-3.2-5.6-5.6-9.4-6.6 2.9-.7 6.1.3 8.4 2.5-.9-5.2-2.6-10.4-2.6-14.4 2.1 2.6 3.6 6.2 4 10.4.4-4.2 1.9-7.8 4-10.4 0 4-1.7 9.2-2.6 14.4 2.3-2.2 5.5-3.2 8.4-2.5-3.8 1-8 3.4-9.4 6.6z" fill="#d7ecff" opacity=".9"/>
-                    <defs>
-                      <linearGradient id="lotusGlow" x1="24" y1="6" x2="24" y2="34" gradientUnits="userSpaceOnUse">
-                        <stop stop-color="#f2f8ff"/>
-                        <stop offset=".45" stop-color="#9cc8f5"/>
-                        <stop offset="1" stop-color="#4f8fd4"/>
-                      </linearGradient>
-                    </defs>
+                <span class="menu-brand-mark" aria-hidden="true">
+                  <svg viewBox="0 0 28 18" width="22" height="14" fill="none">
+                    <path d="M14 2 L4 16 H8.2 L14 7.2 L19.8 16 H24 Z" fill="#fff" stroke="#d9ecff" stroke-width="0.6"/>
                   </svg>
                 </span>
                 <span class="menu-brand-line"></span>
@@ -134,7 +126,7 @@ export class MainMenu {
           <nav class="menu-nav menu-nav--vythera" aria-label="Main menu">
             <button type="button" class="menu-hero-btn menu-hero-btn--play" data-action="play">
               <span class="menu-hero-btn__gem" aria-hidden="true"></span>
-              <span class="menu-hero-btn__label">Play</span>
+              <span class="menu-hero-btn__label">PLAY</span>
               <span class="menu-hero-btn__gem" aria-hidden="true"></span>
             </button>
             <button type="button" class="menu-hero-btn" data-action="world">
@@ -142,37 +134,37 @@ export class MainMenu {
                 <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><ellipse cx="8" cy="8" rx="2.5" ry="6.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 8h12M3.5 5h9M3.5 11h9" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
               </span>
               <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-              <span class="menu-hero-btn__label">Worlds</span>
+              <span class="menu-hero-btn__label">WORLDS</span>
             </button>
             <button type="button" class="menu-hero-btn" data-action="settings">
               <span class="menu-hero-btn__icon" aria-hidden="true">
                 <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="2.2" fill="currentColor"/><path d="M8 1.5l1.1 2.2 2.4-.2-.2 2.4 2.2 1.1-2.2 1.1.2 2.4-2.4-.2L8 14.5l-1.1-2.2-2.4.2.2-2.4L2.5 9.1l2.2-1.1-.2-2.4 2.4.2z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
               </span>
               <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-              <span class="menu-hero-btn__label">Settings</span>
+              <span class="menu-hero-btn__label">SETTINGS</span>
             </button>
             <button type="button" class="menu-hero-btn" data-action="customize">
               <span class="menu-hero-btn__icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M4 3h8M5 3v2.5c0 1.5-1 2.5-1 4v1h8v-1c0-1.5-1-2.5-1-4V3M8 10.5V14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/></svg>
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M5 13h6l-1-3.2V5.5c0-1.4-1-2.5-2-2.5s-2 1.1-2 2.5V9.8L5 13z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.2 5.2h3.6" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="3.2" r="1" fill="currentColor"/></svg>
               </span>
               <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-              <span class="menu-hero-btn__label">Customize</span>
+              <span class="menu-hero-btn__label">CUSTOMIZE</span>
             </button>
             <button type="button" class="menu-hero-btn" data-action="skins">
               <span class="menu-hero-btn__icon" aria-hidden="true">
                 <svg viewBox="0 0 16 16" width="16" height="16"><path d="M8 1.5l1.6 4.2H14l-3.4 2.8 1.2 4.5L8 10.6 4.2 13l1.2-4.5L2 5.7h4.4z" fill="currentColor"/></svg>
               </span>
               <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-              <span class="menu-hero-btn__label">Skins</span>
+              <span class="menu-hero-btn__label">SKINS</span>
             </button>
           </nav>
-          <button type="button" class="menu-friends-link" data-action="multiplayer">Friends</button>
+          <button type="button" class="menu-friends-link" data-action="multiplayer">FRIENDS</button>
         </div>
       </div>
 
       <div class="menu-stage panel" data-panel="settings" hidden>
         <button type="button" class="panel-back" data-action="home">← Back</button>
-        <h2 class="panel-title">Settings</h2>
+        <h2 class="panel-title">SETTINGS</h2>
         <label class="field">
           <span>Mouse sensitivity <em class="sens-val">1.0</em></span>
           <input type="range" class="sens-range" min="0.35" max="2.5" step="0.05" />
@@ -622,15 +614,41 @@ export class MainMenu {
   }
 
   private buildAtmosphereFx(): void {
+    const cloudSvg = (tone: 'cool' | 'warm' | 'blush', id: string): string => {
+      const fills =
+        tone === 'cool'
+          ? ['#9eb6d2', '#c5d4e6', '#e8eef6']
+          : tone === 'warm'
+            ? ['#b0abc4', '#d0cbdd', '#efeaf4']
+            : ['#c4a99e', '#e0c8bc', '#f4e6de'];
+      return `<svg class="menu-cloud__art" viewBox="0 0 220 90" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${fills[2]}"/>
+            <stop offset="55%" stop-color="${fills[1]}"/>
+            <stop offset="100%" stop-color="${fills[0]}"/>
+          </linearGradient>
+        </defs>
+        <g fill="url(#${id})">
+          <ellipse cx="48" cy="58" rx="40" ry="26"/>
+          <ellipse cx="92" cy="42" rx="48" ry="36"/>
+          <ellipse cx="140" cy="50" rx="44" ry="32"/>
+          <ellipse cx="178" cy="60" rx="34" ry="22"/>
+          <ellipse cx="72" cy="64" rx="38" ry="20"/>
+          <ellipse cx="122" cy="66" rx="42" ry="18"/>
+        </g>
+      </svg>`;
+    };
+
     const layers: Array<{
       sel: string;
       count: number;
       tone: 'cool' | 'warm' | 'blush';
       scale: number;
     }> = [
-      { sel: '.menu-clouds--far', count: 6, tone: 'cool', scale: 1.35 },
-      { sel: '.menu-clouds--mid', count: 7, tone: 'warm', scale: 1.15 },
-      { sel: '.menu-clouds--near', count: 5, tone: 'blush', scale: 1 },
+      { sel: '.menu-clouds--far', count: 7, tone: 'cool', scale: 1.15 },
+      { sel: '.menu-clouds--mid', count: 8, tone: 'warm', scale: 1 },
+      { sel: '.menu-clouds--near', count: 6, tone: 'blush', scale: 0.9 },
     ];
 
     layers.forEach(({ sel, count, tone, scale }, layerIndex) => {
@@ -640,12 +658,13 @@ export class MainMenu {
       for (let pass = 0; pass < 2; pass++) {
         for (let i = 0; i < count; i++) {
           const n = layerIndex * 17 + i * 3 + pass * 11;
-          const top = 6 + ((n * 19) % 58);
-          const w = Math.round((140 + ((n * 23) % 180)) * scale);
-          const h = Math.round((48 + ((n * 13) % 46)) * scale);
-          const left = pass * 100 + ((i * 97 + n * 7) % 82);
-          const opacity = 0.35 + ((n * 9) % 40) / 100;
-          html += `<span class="menu-cloud menu-cloud--${tone}" style="--ct:${top}%;--cl:${left}%;--cw:${w}px;--ch:${h}px;--co:${opacity}"><i></i><i></i><i></i><i></i></span>`;
+          const top = 8 + ((n * 19) % 54);
+          const w = Math.round((170 + ((n * 23) % 150)) * scale);
+          const h = Math.round((58 + ((n * 13) % 32)) * scale);
+          const left = pass * 100 + ((i * 97 + n * 7) % 78);
+          const opacity = 0.9 + ((n * 9) % 10) / 100;
+          const id = `cg${layerIndex}${pass}${i}`;
+          html += `<span class="menu-cloud menu-cloud--${tone}" style="--ct:${top}%;--cl:${left}%;--cw:${w}px;--ch:${h}px;--co:${opacity}">${cloudSvg(tone, id)}</span>`;
         }
       }
       html += '</div>';

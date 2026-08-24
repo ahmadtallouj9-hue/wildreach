@@ -861,7 +861,7 @@ body.title-over-session #main-menu {
   animation: none !important;
 }
 
-/* ---- VYTHERA crisp sunset sky + sharp drifting clouds ---- */
+/* ---- VYTHERA sharp sky + solid drifting clouds (no blur) ---- */
 .menu-atmosphere {
   position: absolute;
   inset: 0;
@@ -869,7 +869,7 @@ body.title-over-session #main-menu {
   border-radius: inherit;
   pointer-events: none;
   z-index: 0;
-  background: #3a78c8;
+  background: #4a82d4;
 }
 
 .menu-home-inner,
@@ -881,58 +881,40 @@ body.title-over-session #main-menu {
 .menu-atmosphere__sky {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 90% 42% at 50% 100%, #ffc49a 0%, transparent 58%),
-    radial-gradient(ellipse 70% 32% at 50% 88%, #ff9e88 0%, transparent 62%),
-    linear-gradient(
-      180deg,
-      #2b6ac8 0%,
-      #3f84de 24%,
-      #6aa0ea 44%,
-      #a9b6df 60%,
-      #e2b4aa 76%,
-      #f0b898 88%,
-      #f6c8a8 100%
-    );
+  background: linear-gradient(
+    180deg,
+    #3f78d0 0%,
+    #5b90e0 28%,
+    #8aa6d8 52%,
+    #c9b0b8 70%,
+    #e8a888 86%,
+    #f0b890 100%
+  );
 }
 
-.menu-atmosphere__haze {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background:
-    radial-gradient(ellipse 70% 36% at 18% 28%, rgba(255, 255, 255, 0.1) 0%, transparent 60%),
-    radial-gradient(ellipse 55% 28% at 82% 20%, rgba(190, 220, 255, 0.1) 0%, transparent 55%);
-  opacity: 0.9;
-  animation: none;
-}
+.menu-atmosphere__haze { display: none !important; }
+.menu-atmosphere__rays { display: none !important; }
 
 .menu-atmosphere__sun {
   position: absolute;
   left: 50%;
-  top: 78%;
-  width: min(28vw, 220px);
-  height: min(28vw, 220px);
-  transform: translate(-50%, -40%);
+  bottom: -8%;
+  width: min(46vw, 340px);
+  height: min(46vw, 340px);
+  transform: translateX(-50%);
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%,
-      #fffdf6 0%,
-      #ffe9c4 28%,
-      #ffc48a 52%,
-      rgba(255, 170, 120, 0.35) 72%,
-      transparent 100%
-    );
-  box-shadow:
-    0 0 40px 18px rgba(255, 210, 160, 0.45),
-    0 0 90px 40px rgba(255, 160, 120, 0.22);
-  filter: none;
-  animation: menu-sun-breathe 10s ease-in-out infinite;
+  background: radial-gradient(
+    circle at 50% 42%,
+    #fff8e8 0%,
+    #ffe2a8 20%,
+    #ffb070 46%,
+    rgba(255, 140, 90, 0.4) 66%,
+    transparent 76%
+  );
+  box-shadow: 0 0 50px 16px rgba(255, 170, 110, 0.3);
+  filter: none !important;
   z-index: 1;
-}
-
-.menu-atmosphere__rays {
-  display: none;
+  animation: none !important;
 }
 
 .menu-clouds {
@@ -940,12 +922,12 @@ body.title-over-session #main-menu {
   inset: 0;
   overflow: hidden;
   z-index: 2;
-  filter: none;
+  filter: none !important;
 }
 
-.menu-clouds--far { z-index: 2; opacity: 0.78; filter: none; }
-.menu-clouds--mid { z-index: 3; opacity: 0.88; filter: none; }
-.menu-clouds--near { z-index: 4; opacity: 0.95; filter: none; }
+.menu-clouds--far { z-index: 2; opacity: 0.9; }
+.menu-clouds--mid { z-index: 3; opacity: 0.95; }
+.menu-clouds--near { z-index: 4; opacity: 1; }
 
 .menu-cloud-track {
   position: absolute;
@@ -953,12 +935,12 @@ body.title-over-session #main-menu {
   width: 200%;
   animation: menu-cloud-drift linear infinite;
   will-change: transform;
-  filter: none;
+  filter: none !important;
 }
 
-.menu-clouds--far .menu-cloud-track { animation-duration: 140s; }
-.menu-clouds--mid .menu-cloud-track { animation-duration: 95s; }
-.menu-clouds--near .menu-cloud-track { animation-duration: 60s; }
+.menu-clouds--far .menu-cloud-track { animation-duration: 48s; }
+.menu-clouds--mid .menu-cloud-track { animation-duration: 34s; }
+.menu-clouds--near .menu-cloud-track { animation-duration: 22s; }
 
 .menu-cloud {
   position: absolute;
@@ -968,74 +950,26 @@ body.title-over-session #main-menu {
   height: var(--ch);
   opacity: var(--co);
   pointer-events: none;
-  filter: none;
-}
-
-/* Sharp layered cloud puffs — no CSS blur */
-.menu-cloud i {
-  position: absolute;
-  display: block;
-  border-radius: 50%;
   filter: none !important;
-  background: #f4f8ff;
-  box-shadow:
-    inset -6px -4px 0 rgba(170, 195, 220, 0.35),
-    inset 5px 4px 0 rgba(255, 255, 255, 0.55);
 }
 
-.menu-cloud i:nth-child(1) {
-  left: 4%;
-  bottom: 8%;
-  width: 42%;
-  height: 70%;
-}
-.menu-cloud i:nth-child(2) {
-  left: 22%;
-  bottom: 18%;
-  width: 48%;
-  height: 88%;
-}
-.menu-cloud i:nth-child(3) {
-  left: 48%;
-  bottom: 10%;
-  width: 38%;
-  height: 72%;
-}
-.menu-cloud i:nth-child(4) {
-  left: 68%;
-  bottom: 6%;
-  width: 30%;
-  height: 58%;
+.menu-cloud__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: none !important;
 }
 
-.menu-cloud--cool i {
-  background: linear-gradient(180deg, #ffffff 0%, #e8f1ff 55%, #d5e4f8 100%);
-  box-shadow:
-    inset -5px -3px 0 rgba(150, 180, 210, 0.35),
-    inset 4px 3px 0 rgba(255, 255, 255, 0.65);
-}
-.menu-cloud--warm i {
-  background: linear-gradient(180deg, #fff9fb 0%, #ffe8ee 55%, #f5d5df 100%);
-  box-shadow:
-    inset -5px -3px 0 rgba(210, 160, 175, 0.28),
-    inset 4px 3px 0 rgba(255, 255, 255, 0.6);
-}
-.menu-cloud--blush i {
-  background: linear-gradient(180deg, #fff6f2 0%, #ffd8cc 55%, #f5c0b0 100%);
-  box-shadow:
-    inset -5px -3px 0 rgba(210, 140, 120, 0.28),
-    inset 4px 3px 0 rgba(255, 255, 255, 0.55);
-}
+.menu-cloud i { display: none !important; }
 
 .menu-atmosphere__veil {
   position: absolute;
   inset: 0;
   z-index: 5;
-  background:
-    radial-gradient(ellipse 80% 55% at 50% 38%, transparent 0%, rgba(20, 45, 90, 0.1) 100%),
-    linear-gradient(180deg, rgba(35, 75, 145, 0.05) 0%, transparent 28%, rgba(255, 150, 110, 0.08) 100%);
+  background: linear-gradient(180deg, rgba(30, 70, 140, 0.04) 0%, transparent 35%, rgba(255, 150, 110, 0.06) 100%);
   pointer-events: none;
-  filter: none;
+  filter: none !important;
 }
 
 @keyframes menu-cloud-drift {
@@ -1044,22 +978,10 @@ body.title-over-session #main-menu {
 }
 
 @keyframes menu-sun-breathe {
-  0%, 100% { opacity: 0.95; transform: translate(-50%, -40%) scale(1); }
-  50% { opacity: 1; transform: translate(-50%, -40%) scale(1.04); }
+  from, to { opacity: 1; }
 }
 
-@keyframes menu-haze-shift {
-  from { opacity: 0.85; }
-  to { opacity: 1; }
-}
-
-@keyframes menu-rays-drift {
-  from { transform: translate(-50%, -55%) rotate(0deg); }
-  to { transform: translate(-50%, -55%) rotate(12deg); }
-}
-
-#main-menu[hidden] .menu-cloud-track,
-#main-menu[hidden] .menu-atmosphere__sun {
+#main-menu[hidden] .menu-cloud-track {
   animation-play-state: paused !important;
 }
 
@@ -1070,16 +992,13 @@ body.title-over-session #main-menu {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .menu-cloud-track,
-  .menu-atmosphere__sun {
-    animation: none !important;
-  }
+  .menu-cloud-track { animation: none !important; }
 }
 
 @media (max-width: 860px) {
-  .menu-clouds--far .menu-cloud:nth-child(n + 5),
-  .menu-clouds--mid .menu-cloud:nth-child(n + 6),
-  .menu-clouds--near .menu-cloud:nth-child(n + 4) {
+  .menu-clouds--far .menu-cloud:nth-child(n + 6),
+  .menu-clouds--mid .menu-cloud:nth-child(n + 7),
+  .menu-clouds--near .menu-cloud:nth-child(n + 5) {
     display: none;
   }
 }
