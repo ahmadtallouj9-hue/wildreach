@@ -869,13 +869,27 @@ body.title-over-session #main-menu {
   border-radius: inherit;
   pointer-events: none;
   z-index: 0;
-  background: #2f5eb8;
+  background: transparent;
 }
 
 .menu-home-inner,
 .menu-home-hero {
   position: relative;
   z-index: 2;
+}
+
+.menu-sky-stack {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: #2f5eb8;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center center;
+}
+
+.menu-sky-canvas--unused {
+  display: none !important;
 }
 
 .menu-sky-canvas,
@@ -886,7 +900,6 @@ body.title-over-session #main-menu {
   height: 100% !important;
   display: block;
   filter: none !important;
-  image-rendering: auto;
 }
 
 .menu-stage.menu-home[hidden] .menu-atmosphere,

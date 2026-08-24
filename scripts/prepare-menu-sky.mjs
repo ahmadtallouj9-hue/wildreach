@@ -5,6 +5,7 @@
 import sharp from 'sharp';
 
 const src = 'public/menu-sky-source.png';
+const SCALE = 4;
 const outBase = 'public/menu-sky-base.png';
 const outClouds = [
   'public/menu-sky-clouds-0.png',
@@ -145,7 +146,7 @@ for (let y = 0; y < height; y++) {
   }
 }
 
-async function writePng(buf, width, height, path, scale = 3) {
+async function writePng(buf, width, height, path, scale = SCALE) {
   let pipe = sharp(buf, { raw: { width, height, channels: 4 } });
   if (scale > 1) {
     pipe = pipe.resize(width * scale, height * scale, { kernel: 'nearest' });
@@ -158,8 +159,7 @@ for (let i = 0; i < 3; i++) {
   await writePng(clouds[i], width, height, outClouds[i]);
 }
 
-// Upscaled source for sharper full-res sampling
-await sharp(src).resize(width * 3, height * 3, { kernel: 'nearest' }).png().toFile('public/menu-sky-source-hd.png');
+await sharp(src).resize(width * SCALE, height * SCALE, { kernel: 'nearest' }).png().toFile('public/menu-sky-source-hd.png');
 
 console.log('Prepared menu sky assets:', width, height);
 console.log('  base:', outBase);
