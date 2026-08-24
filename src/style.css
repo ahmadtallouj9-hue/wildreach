@@ -861,7 +861,7 @@ body.title-over-session #main-menu {
   animation: none !important;
 }
 
-/* ---- VYTHERA sharp sky + solid drifting clouds (no blur) ---- */
+/* ---- VYTHERA canvas title sky ---- */
 .menu-atmosphere {
   position: absolute;
   inset: 0;
@@ -869,7 +869,7 @@ body.title-over-session #main-menu {
   border-radius: inherit;
   pointer-events: none;
   z-index: 0;
-  background: #4a82d4;
+  background: #3a74cc;
 }
 
 .menu-home-inner,
@@ -878,129 +878,23 @@ body.title-over-session #main-menu {
   z-index: 2;
 }
 
-.menu-atmosphere__sky {
+.title-sky {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    #3f78d0 0%,
-    #5b90e0 28%,
-    #8aa6d8 52%,
-    #c9b0b8 70%,
-    #e8a888 86%,
-    #f0b890 100%
-  );
-}
-
-.menu-atmosphere__haze { display: none !important; }
-.menu-atmosphere__rays { display: none !important; }
-
-.menu-atmosphere__sun {
-  position: absolute;
-  left: 50%;
-  bottom: -8%;
-  width: min(46vw, 340px);
-  height: min(46vw, 340px);
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 50% 42%,
-    #fff8e8 0%,
-    #ffe2a8 20%,
-    #ffb070 46%,
-    rgba(255, 140, 90, 0.4) 66%,
-    transparent 76%
-  );
-  box-shadow: 0 0 50px 16px rgba(255, 170, 110, 0.3);
-  filter: none !important;
-  z-index: 1;
-  animation: none !important;
-}
-
-.menu-clouds {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  z-index: 2;
-  filter: none !important;
-}
-
-.menu-clouds--far { z-index: 2; opacity: 0.9; }
-.menu-clouds--mid { z-index: 3; opacity: 0.95; }
-.menu-clouds--near { z-index: 4; opacity: 1; }
-
-.menu-cloud-track {
-  position: absolute;
-  inset: 0;
-  width: 200%;
-  animation: menu-cloud-drift linear infinite;
-  will-change: transform;
-  filter: none !important;
-}
-
-.menu-clouds--far .menu-cloud-track { animation-duration: 48s; }
-.menu-clouds--mid .menu-cloud-track { animation-duration: 34s; }
-.menu-clouds--near .menu-cloud-track { animation-duration: 22s; }
-
-.menu-cloud {
-  position: absolute;
-  left: var(--cl);
-  top: var(--ct);
-  width: var(--cw);
-  height: var(--ch);
-  opacity: var(--co);
-  pointer-events: none;
-  filter: none !important;
-}
-
-.menu-cloud__art {
-  display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  display: block;
   filter: none !important;
-}
-
-.menu-cloud i { display: none !important; }
-
-.menu-atmosphere__veil {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  background: linear-gradient(180deg, rgba(30, 70, 140, 0.04) 0%, transparent 35%, rgba(255, 150, 110, 0.06) 100%);
-  pointer-events: none;
-  filter: none !important;
-}
-
-@keyframes menu-cloud-drift {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-50%, 0, 0); }
-}
-
-@keyframes menu-sun-breathe {
-  from, to { opacity: 1; }
-}
-
-#main-menu[hidden] .menu-cloud-track {
-  animation-play-state: paused !important;
+  image-rendering: auto;
 }
 
 .menu-stage.menu-home[hidden] .menu-atmosphere,
-.menu-stage.menu-home[hidden] .menu-atmosphere * {
+.menu-stage.menu-home[hidden] .title-sky {
   display: none !important;
-  animation: none !important;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .menu-cloud-track { animation: none !important; }
-}
-
-@media (max-width: 860px) {
-  .menu-clouds--far .menu-cloud:nth-child(n + 6),
-  .menu-clouds--mid .menu-cloud:nth-child(n + 7),
-  .menu-clouds--near .menu-cloud:nth-child(n + 5) {
-    display: none;
-  }
+#main-menu[hidden] .title-sky {
+  visibility: hidden;
 }
 
 /* Keep hero layer when old ::before styles linger — neutralize */

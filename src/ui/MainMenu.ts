@@ -44,6 +44,7 @@ import {
 import { replaceSeedInUrl } from './shareUrl';
 import { SocialClient } from '../net/SocialClient';
 import { FriendsPanel } from './FriendsPanel';
+import { TitleSky } from './TitleSky';
 
 export type MenuAction =
   | { type: 'play'; seed: string }
@@ -91,22 +92,14 @@ export class MainMenu {
   private friendsPanel: FriendsPanel | null = null;
   private selectedWorldSeed: string | null = null;
   private worldView: 'list' | 'create' = 'list';
+  private titleSky = new TitleSky();
 
   constructor(private social?: SocialClient) {
     this.root = document.createElement('div');
     this.root.id = 'main-menu';
     this.root.innerHTML = `
       <div class="menu-stage menu-home" data-panel="home">
-        <div class="menu-atmosphere" aria-hidden="true">
-          <div class="menu-atmosphere__sky"></div>
-          <div class="menu-atmosphere__haze"></div>
-          <div class="menu-atmosphere__sun"></div>
-          <div class="menu-atmosphere__rays"></div>
-          <div class="menu-clouds menu-clouds--far"></div>
-          <div class="menu-clouds menu-clouds--mid"></div>
-          <div class="menu-clouds menu-clouds--near"></div>
-          <div class="menu-atmosphere__veil"></div>
-        </div>
+        <div class="menu-atmosphere" aria-hidden="true"></div>
         <div class="menu-home-inner menu-home-hero">
           <header class="menu-header menu-header--vythera">
             <div class="menu-brand-wrap">
@@ -483,7 +476,11 @@ export class MainMenu {
     `;
 
     this.worldSeedInput = this.root.querySelector('.world-seed-input')!;
-    this.buildAtmosphereFx();
+    const atmosphere = this.root.querySelector('.menu-atmosphere');
+    if (atmosphere) {
+      this.titleSky.mount(atmosphere as HTMLElement);
+      this.titleSky.start();
+    }
 
     if (this.social) {
       this.friendsPanel = new FriendsPanel(this.root, this.social);
@@ -591,86 +588,22 @@ export class MainMenu {
   hide(): void {
     this.heroPreview?.stop();
     this.skinEditor?.setActive(false);
+    this.titleSky.stop();
     this.root.hidden = true;
-    // Belt-and-suspenders: never leave title FX over the world.
-    this.root.querySelectorAll('.menu-atmosphere').forEach((el) => {
-      (el as HTMLElement).style.visibility = 'hidden';
-    });
   }
 
   show(opts?: { resumable?: boolean }): void {
     this.hasSession = opts?.resumable ?? this.hasSession;
-    const playLabel = this.root.querySelector('.menu-framed-btn--play .menu-framed-btn__label');
-    if (playLabel) playLabel.textContent = 'Play';
-    this.root.querySelectorAll('.menu-atmosphere').forEach((el) => {
-      (el as HTMLElement).style.visibility = '';
-    });
-    this.showPanel('home');
     this.root.hidden = false;
+    this.showPanel('home');
+    this.titleSky.start();
   }
 
   get visible(): boolean {
     return !this.root.hidden;
   }
 
-  private buildAtmosphereFx(): void {
-    const cloudSvg = (tone: 'cool' | 'warm' | 'blush', id: string): string => {
-      const fills =
-        tone === 'cool'
-          ? ['#9eb6d2', '#c5d4e6', '#e8eef6']
-          : tone === 'warm'
-            ? ['#b0abc4', '#d0cbdd', '#efeaf4']
-            : ['#c4a99e', '#e0c8bc', '#f4e6de'];
-      return `<svg class="menu-cloud__art" viewBox="0 0 220 90" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="${fills[2]}"/>
-            <stop offset="55%" stop-color="${fills[1]}"/>
-            <stop offset="100%" stop-color="${fills[0]}"/>
-          </linearGradient>
-        </defs>
-        <g fill="url(#${id})">
-          <ellipse cx="48" cy="58" rx="40" ry="26"/>
-          <ellipse cx="92" cy="42" rx="48" ry="36"/>
-          <ellipse cx="140" cy="50" rx="44" ry="32"/>
-          <ellipse cx="178" cy="60" rx="34" ry="22"/>
-          <ellipse cx="72" cy="64" rx="38" ry="20"/>
-          <ellipse cx="122" cy="66" rx="42" ry="18"/>
-        </g>
-      </svg>`;
-    };
-
-    const layers: Array<{
-      sel: string;
-      count: number;
-      tone: 'cool' | 'warm' | 'blush';
-      scale: number;
-    }> = [
-      { sel: '.menu-clouds--far', count: 7, tone: 'cool', scale: 1.15 },
-      { sel: '.menu-clouds--mid', count: 8, tone: 'warm', scale: 1 },
-      { sel: '.menu-clouds--near', count: 6, tone: 'blush', scale: 0.9 },
-    ];
-
-    layers.forEach(({ sel, count, tone, scale }, layerIndex) => {
-      const host = this.root.querySelector(sel);
-      if (!host) return;
-      let html = '<div class="menu-cloud-track">';
-      for (let pass = 0; pass < 2; pass++) {
-        for (let i = 0; i < count; i++) {
-          const n = layerIndex * 17 + i * 3 + pass * 11;
-          const top = 8 + ((n * 19) % 54);
-          const w = Math.round((170 + ((n * 23) % 150)) * scale);
-          const h = Math.round((58 + ((n * 13) % 32)) * scale);
-          const left = pass * 100 + ((i * 97 + n * 7) % 78);
-          const opacity = 0.9 + ((n * 9) % 10) / 100;
-          const id = `cg${layerIndex}${pass}${i}`;
-          html += `<span class="menu-cloud menu-cloud--${tone}" style="--ct:${top}%;--cl:${left}%;--cw:${w}px;--ch:${h}px;--co:${opacity}">${cloudSvg(tone, id)}</span>`;
-        }
-      }
-      html += '</div>';
-      host.innerHTML = html;
-    });
-  }
+  
 
   private onPlayClick(): void {
     if (this.hasSession) {
@@ -934,6 +867,9 @@ export class MainMenu {
   }
 
   private showPanel(panel: Panel): void {
+    if (panel === 'home') this.titleSky.start();
+    else this.titleSky.stop();
+
     this.root.querySelectorAll<HTMLElement>('.menu-stage').forEach((el) => {
       el.hidden = el.dataset.panel !== panel;
     });
