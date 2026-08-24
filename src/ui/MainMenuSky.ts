@@ -10,8 +10,8 @@ export interface MainMenuSkyOptions {
   verticalWobble?: number;
 }
 
-const DEFAULT_SPEED: MainMenuSkySpeeds = [0.018, 0.028, 0.04];
-const DEFAULT_DRIFT: MainMenuSkySpeeds = [0.035, 0.055, 0.08];
+const DEFAULT_SPEED: MainMenuSkySpeeds = [0.015, 0.024, 0.034];
+const DEFAULT_DRIFT: MainMenuSkySpeeds = [0.022, 0.034, 0.048];
 const SKY_URL = '/menu-sky-base.png';
 const FULL_URL = '/menu-sky-source.png';
 const CLOUD_URLS = ['/menu-sky-clouds-0.png', '/menu-sky-clouds-1.png', '/menu-sky-clouds-2.png'] as const;
@@ -60,14 +60,15 @@ float pingPong(float t, float speed) {
 }
 
 vec4 sampleCloudLayer(sampler2D maskTex, vec2 uv, float drift, float speed, float wobblePhase) {
-  float shift = (pingPong(uTime, speed) * 2.0 - 1.0) * drift;
+  float edge = smoothstep(0.0, 0.08, uv.x) * smoothstep(0.0, 0.08, 1.0 - uv.x);
+  float shift = (pingPong(uTime, speed) * 2.0 - 1.0) * drift * edge;
   vec4 mask = texture(maskTex, uv);
   if (mask.a < 0.01) return vec4(0.0);
   vec2 cuv = uv;
   cuv.x = clamp(uv.x + shift, 0.0, 1.0);
-  cuv.y = clamp(uv.y + sin(uTime * 0.35 + wobblePhase) * uWobble, 0.0, 1.0);
+  cuv.y = clamp(uv.y + sin(uTime * 0.35 + wobblePhase) * uWobble * edge, 0.0, 1.0);
   vec3 shifted = texture(uFull, cuv).rgb;
-  return vec4(shifted, mask.a);
+  return vec4(shifted, mask.a * edge);
 }
 
 void main() {
