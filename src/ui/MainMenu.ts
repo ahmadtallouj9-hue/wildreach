@@ -44,7 +44,7 @@ import {
 import { replaceSeedInUrl } from './shareUrl';
 import { SocialClient } from '../net/SocialClient';
 import { FriendsPanel } from './FriendsPanel';
-import { TitleSky } from './TitleSky';
+import { MainMenuSky } from './MainMenuSky';
 
 export type MenuAction =
   | { type: 'play'; seed: string }
@@ -92,7 +92,7 @@ export class MainMenu {
   private friendsPanel: FriendsPanel | null = null;
   private selectedWorldSeed: string | null = null;
   private worldView: 'list' | 'create' = 'list';
-  private titleSky = new TitleSky();
+  private menuSky = new MainMenuSky();
 
   constructor(private social?: SocialClient) {
     this.root = document.createElement('div');
@@ -471,7 +471,7 @@ export class MainMenu {
     this.worldSeedInput = this.root.querySelector('.world-seed-input')!;
     const atmosphere = this.root.querySelector('.menu-atmosphere');
     if (atmosphere) {
-      this.titleSky.mount(atmosphere as HTMLElement);
+      this.menuSky.mount(atmosphere as HTMLElement);
     }
 
     if (this.social) {
@@ -577,7 +577,7 @@ export class MainMenu {
   hide(): void {
     this.heroPreview?.stop();
     this.skinEditor?.setActive(false);
-    this.titleSky.stop();
+    this.menuSky.stop();
     this.root.hidden = true;
   }
 
@@ -585,7 +585,7 @@ export class MainMenu {
     this.hasSession = opts?.resumable ?? this.hasSession;
     this.root.hidden = false;
     this.showPanel('home');
-    requestAnimationFrame(() => this.titleSky.start());
+    requestAnimationFrame(() => this.menuSky.start());
   }
 
   get visible(): boolean {
@@ -826,8 +826,8 @@ export class MainMenu {
   }
 
   private showPanel(panel: Panel): void {
-    if (panel === 'home') this.titleSky.start();
-    else this.titleSky.stop();
+    if (panel === 'home') this.menuSky.start();
+    else this.menuSky.stop();
 
     this.root.querySelectorAll<HTMLElement>('.menu-stage').forEach((el) => {
       el.hidden = el.dataset.panel !== panel;

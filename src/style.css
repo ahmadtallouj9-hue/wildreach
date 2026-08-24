@@ -861,7 +861,7 @@ body.title-over-session #main-menu {
   animation: none !important;
 }
 
-/* ---- VYTHERA canvas title sky ---- */
+/* ---- VYTHERA GPU menu sky (pixel art + parallax clouds) ---- */
 .menu-atmosphere {
   position: absolute;
   inset: 0;
@@ -869,7 +869,7 @@ body.title-over-session #main-menu {
   border-radius: inherit;
   pointer-events: none;
   z-index: 0;
-  background: #3a74cc;
+  background: #2f5eb8;
 }
 
 .menu-home-inner,
@@ -878,6 +878,7 @@ body.title-over-session #main-menu {
   z-index: 2;
 }
 
+.menu-sky-canvas,
 .title-sky {
   position: absolute;
   inset: 0;
@@ -885,14 +886,17 @@ body.title-over-session #main-menu {
   height: 100% !important;
   display: block;
   filter: none !important;
-  image-rendering: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .menu-stage.menu-home[hidden] .menu-atmosphere,
+.menu-stage.menu-home[hidden] .menu-sky-canvas,
 .menu-stage.menu-home[hidden] .title-sky {
   display: none !important;
 }
 
+#main-menu[hidden] .menu-sky-canvas,
 #main-menu[hidden] .title-sky {
   visibility: hidden;
 }
