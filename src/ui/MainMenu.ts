@@ -99,7 +99,9 @@ export class MainMenu {
       <div class="menu-stage menu-home" data-panel="home">
         <div class="menu-atmosphere" aria-hidden="true">
           <div class="menu-atmosphere__sky"></div>
+          <div class="menu-atmosphere__haze"></div>
           <div class="menu-atmosphere__sun"></div>
+          <div class="menu-atmosphere__rays"></div>
           <div class="menu-clouds menu-clouds--far"></div>
           <div class="menu-clouds menu-clouds--mid"></div>
           <div class="menu-clouds menu-clouds--near"></div>
@@ -112,7 +114,19 @@ export class MainMenu {
               <h1 class="menu-brand menu-brand--vythera">VYTHERA</h1>
               <div class="menu-brand-ornament" aria-hidden="true">
                 <span class="menu-brand-line"></span>
-                <span class="menu-lotus"></span>
+                <span class="menu-lotus" aria-hidden="true">
+                  <svg viewBox="0 0 48 40" width="36" height="30" fill="none">
+                    <path d="M24 34c-2.2-4.8-8.5-8.2-14-9.5 4.2-1.2 8.8.2 12.2 3.4C20.5 20.2 18 12 18 6c3.2 3.8 5.4 8.8 6 14.8.6-6 2.8-11 6-14.8 0 6-2.5 14.2-4.2 21.9 3.4-3.2 8-4.6 12.2-3.4-5.5 1.3-11.8 4.7-14 9.5z" fill="url(#lotusGlow)"/>
+                    <path d="M24 30c-1.4-3.2-5.6-5.6-9.4-6.6 2.9-.7 6.1.3 8.4 2.5-.9-5.2-2.6-10.4-2.6-14.4 2.1 2.6 3.6 6.2 4 10.4.4-4.2 1.9-7.8 4-10.4 0 4-1.7 9.2-2.6 14.4 2.3-2.2 5.5-3.2 8.4-2.5-3.8 1-8 3.4-9.4 6.6z" fill="#d7ecff" opacity=".9"/>
+                    <defs>
+                      <linearGradient id="lotusGlow" x1="24" y1="6" x2="24" y2="34" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#f2f8ff"/>
+                        <stop offset=".45" stop-color="#9cc8f5"/>
+                        <stop offset="1" stop-color="#4f8fd4"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </span>
                 <span class="menu-brand-line"></span>
               </div>
             </div>
@@ -608,25 +622,30 @@ export class MainMenu {
   }
 
   private buildAtmosphereFx(): void {
-    const layers: Array<{ sel: string; count: number; tone: 'cool' | 'warm' | 'blush' }> = [
-      { sel: '.menu-clouds--far', count: 7, tone: 'cool' },
-      { sel: '.menu-clouds--mid', count: 8, tone: 'warm' },
-      { sel: '.menu-clouds--near', count: 6, tone: 'blush' },
+    const layers: Array<{
+      sel: string;
+      count: number;
+      tone: 'cool' | 'warm' | 'blush';
+      scale: number;
+    }> = [
+      { sel: '.menu-clouds--far', count: 6, tone: 'cool', scale: 1.35 },
+      { sel: '.menu-clouds--mid', count: 7, tone: 'warm', scale: 1.15 },
+      { sel: '.menu-clouds--near', count: 5, tone: 'blush', scale: 1 },
     ];
 
-    layers.forEach(({ sel, count, tone }, layerIndex) => {
+    layers.forEach(({ sel, count, tone, scale }, layerIndex) => {
       const host = this.root.querySelector(sel);
       if (!host) return;
       let html = '<div class="menu-cloud-track">';
       for (let pass = 0; pass < 2; pass++) {
         for (let i = 0; i < count; i++) {
           const n = layerIndex * 17 + i * 3 + pass * 11;
-          const top = 8 + ((n * 19) % 62);
-          const w = 70 + ((n * 23) % 110);
-          const h = 22 + ((n * 13) % 28);
-          const left = pass * 100 + ((i * 97 + n * 7) % 88);
-          const opacity = 0.55 + ((n * 9) % 35) / 100;
-          html += `<span class="menu-cloud menu-cloud--${tone}" style="--ct:${top}%;--cl:${left}%;--cw:${w}px;--ch:${h}px;--co:${opacity}"></span>`;
+          const top = 6 + ((n * 19) % 58);
+          const w = Math.round((140 + ((n * 23) % 180)) * scale);
+          const h = Math.round((48 + ((n * 13) % 46)) * scale);
+          const left = pass * 100 + ((i * 97 + n * 7) % 82);
+          const opacity = 0.35 + ((n * 9) % 40) / 100;
+          html += `<span class="menu-cloud menu-cloud--${tone}" style="--ct:${top}%;--cl:${left}%;--cw:${w}px;--ch:${h}px;--co:${opacity}"><i></i><i></i><i></i><i></i></span>`;
         }
       }
       html += '</div>';
