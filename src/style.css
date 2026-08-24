@@ -885,13 +885,34 @@ body.title-over-session #main-menu {
   background: #1470c3;
 }
 
-.menu-sky-canvas {
+.menu-sky-img {
+  display: none !important;
+}
+
+.menu-sky-video {
   position: absolute;
   inset: 0;
-  width: 100% !important;
-  height: 100% !important;
   display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Keep the horizon-ish glow / clouds in view for the title card. */
+  object-position: 50% 56%;
   pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
+}
+
+.menu-sky-canvas {
+  position: absolute;
+  display: none !important;
+  max-width: none;
+  pointer-events: none;
+  will-change: transform;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
 }
 
 .menu-sky-canvas--unused {
@@ -899,22 +920,24 @@ body.title-over-session #main-menu {
 }
 
 .menu-sky-canvas,
+.menu-sky-video,
 .title-sky {
-  position: absolute;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
   filter: none !important;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .menu-stage.menu-home[hidden] .menu-atmosphere,
 .menu-stage.menu-home[hidden] .menu-sky-canvas,
+.menu-stage.menu-home[hidden] .menu-sky-video,
+.menu-stage.menu-home[hidden] .menu-sky-img,
 .menu-stage.menu-home[hidden] .title-sky {
   display: none !important;
 }
 
 #main-menu[hidden] .menu-sky-canvas,
+#main-menu[hidden] .menu-sky-video,
+#main-menu[hidden] .menu-sky-img,
 #main-menu[hidden] .title-sky {
   visibility: hidden;
 }
