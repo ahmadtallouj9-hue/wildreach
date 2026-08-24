@@ -882,10 +882,16 @@ body.title-over-session #main-menu {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background-color: #2f5eb8;
-  background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center bottom;
+  background: #1470c3;
+}
+
+.menu-sky-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  pointer-events: none;
 }
 
 .menu-sky-canvas--unused {
