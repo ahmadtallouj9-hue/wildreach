@@ -98,47 +98,61 @@ export class MainMenu {
     this.root.innerHTML = `
       <div class="menu-stage menu-home" data-panel="home">
         <div class="menu-atmosphere" aria-hidden="true">
-          <div class="menu-atmosphere__hero"></div>
-          <div class="menu-atmosphere__stars"></div>
-          <div class="menu-atmosphere__glow"></div>
-          <div class="menu-atmosphere__shimmer"></div>
-          <div class="menu-atmosphere__leaves"></div>
+          <div class="menu-atmosphere__sky"></div>
+          <div class="menu-atmosphere__sun"></div>
+          <div class="menu-clouds menu-clouds--far"></div>
+          <div class="menu-clouds menu-clouds--mid"></div>
+          <div class="menu-clouds menu-clouds--near"></div>
           <div class="menu-atmosphere__veil"></div>
         </div>
         <div class="menu-home-inner menu-home-hero">
-          <header class="menu-header">
-            <div class="menu-logo-mark menu-logo-mark--crest" aria-hidden="true"></div>
-            <h1 class="menu-brand">WILDREACH</h1>
-            <p class="menu-tagline">
-              <span class="menu-rule" aria-hidden="true"></span>
-              <span class="menu-tagline-text">Wander seeded reaches. Chart what you find.</span>
-              <span class="menu-rule" aria-hidden="true"></span>
-            </p>
+          <header class="menu-header menu-header--vythera">
+            <div class="menu-brand-wrap">
+              <span class="menu-brand-spark" aria-hidden="true"></span>
+              <h1 class="menu-brand menu-brand--vythera">VYTHERA</h1>
+              <div class="menu-brand-ornament" aria-hidden="true">
+                <span class="menu-brand-line"></span>
+                <span class="menu-lotus"></span>
+                <span class="menu-brand-line"></span>
+              </div>
+            </div>
           </header>
-          <nav class="menu-nav" aria-label="Main menu">
-            <button type="button" class="menu-hero-btn menu-hero-btn--focus" data-action="play">
-              <span class="menu-hero-btn__chev" aria-hidden="true"></span>
-              <span class="menu-hero-btn__icon" aria-hidden="true">*</span>
+          <nav class="menu-nav menu-nav--vythera" aria-label="Main menu">
+            <button type="button" class="menu-hero-btn menu-hero-btn--play" data-action="play">
+              <span class="menu-hero-btn__gem" aria-hidden="true"></span>
               <span class="menu-hero-btn__label">Play</span>
-              <span class="menu-hero-btn__chev menu-hero-btn__chev--end" aria-hidden="true"></span>
+              <span class="menu-hero-btn__gem" aria-hidden="true"></span>
             </button>
             <button type="button" class="menu-hero-btn" data-action="world">
-              <span class="menu-hero-btn__icon" aria-hidden="true">o</span>
+              <span class="menu-hero-btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><ellipse cx="8" cy="8" rx="2.5" ry="6.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 8h12M3.5 5h9M3.5 11h9" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+              </span>
+              <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
               <span class="menu-hero-btn__label">Worlds</span>
             </button>
-            <button type="button" class="menu-hero-btn" data-action="multiplayer">
-              <span class="menu-hero-btn__icon" aria-hidden="true">+</span>
-              <span class="menu-hero-btn__label">Friends</span>
-            </button>
-            <button type="button" class="menu-hero-btn" data-action="customize">
-              <span class="menu-hero-btn__icon" aria-hidden="true">@</span>
-              <span class="menu-hero-btn__label">Customize</span>
-            </button>
             <button type="button" class="menu-hero-btn" data-action="settings">
-              <span class="menu-hero-btn__icon" aria-hidden="true">#</span>
+              <span class="menu-hero-btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="2.2" fill="currentColor"/><path d="M8 1.5l1.1 2.2 2.4-.2-.2 2.4 2.2 1.1-2.2 1.1.2 2.4-2.4-.2L8 14.5l-1.1-2.2-2.4.2.2-2.4L2.5 9.1l2.2-1.1-.2-2.4 2.4.2z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
               <span class="menu-hero-btn__label">Settings</span>
             </button>
+            <button type="button" class="menu-hero-btn" data-action="customize">
+              <span class="menu-hero-btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M4 3h8M5 3v2.5c0 1.5-1 2.5-1 4v1h8v-1c0-1.5-1-2.5-1-4V3M8 10.5V14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/></svg>
+              </span>
+              <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
+              <span class="menu-hero-btn__label">Customize</span>
+            </button>
+            <button type="button" class="menu-hero-btn" data-action="skins">
+              <span class="menu-hero-btn__icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M8 1.5l1.6 4.2H14l-3.4 2.8 1.2 4.5L8 10.6 4.2 13l1.2-4.5L2 5.7h4.4z" fill="currentColor"/></svg>
+              </span>
+              <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
+              <span class="menu-hero-btn__label">Skins</span>
+            </button>
           </nav>
+          <button type="button" class="menu-friends-link" data-action="multiplayer">Friends</button>
         </div>
       </div>
 
@@ -476,6 +490,15 @@ export class MainMenu {
     this.root.querySelector('[data-action="customize"]')!.addEventListener('click', () =>
       this.showPanel('customize'),
     );
+    this.root.querySelector('[data-action="skins"]')!.addEventListener('click', () => {
+      this.showPanel('customize');
+      requestAnimationFrame(() => {
+        this.root.querySelector('.skins-preset-grid')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      });
+    });
     this.root.querySelector('[data-action="multiplayer"]')!.addEventListener('click', () =>
       this.openMultiplayerPanel(),
     );
@@ -585,35 +608,30 @@ export class MainMenu {
   }
 
   private buildAtmosphereFx(): void {
-    const stars = this.root.querySelector('.menu-atmosphere__stars');
-    const leaves = this.root.querySelector('.menu-atmosphere__leaves');
-    if (!stars || !leaves) return;
+    const layers: Array<{ sel: string; count: number; tone: 'cool' | 'warm' | 'blush' }> = [
+      { sel: '.menu-clouds--far', count: 7, tone: 'cool' },
+      { sel: '.menu-clouds--mid', count: 8, tone: 'warm' },
+      { sel: '.menu-clouds--near', count: 6, tone: 'blush' },
+    ];
 
-    const starN = 48;
-    let starHtml = '';
-    for (let i = 0; i < starN; i++) {
-      const x = (i * 67 + 13) % 100;
-      const y = (i * 37 + 5) % 42;
-      const size = 1.2 + ((i * 17) % 20) / 10;
-      const delay = ((i * 29) % 80) / 10;
-      const dur = 2.4 + ((i * 13) % 30) / 10;
-      const bright = 0.45 + ((i * 11) % 55) / 100;
-      starHtml += `<span class="menu-star" style="--sx:${x}%;--sy:${y}%;--ss:${size}px;--sd:${delay}s;--su:${dur}s;--sb:${bright}"></span>`;
-    }
-    stars.innerHTML = starHtml;
-
-    const leafN = 14;
-    let leafHtml = '';
-    for (let i = 0; i < leafN; i++) {
-      const x = (i * 53 + 9) % 100;
-      const delay = ((i * 31) % 90) / 10;
-      const dur = 9 + ((i * 17) % 80) / 10;
-      const size = 10 + ((i * 13) % 12);
-      const drift = 40 + ((i * 29) % 50);
-      const hue = 85 + ((i * 19) % 45);
-      leafHtml += `<span class="menu-leaf" style="--lx:${x}%;--ld:${delay}s;--lu:${dur}s;--ls:${size}px;--lw:${drift}px;--lh:${hue}"></span>`;
-    }
-    leaves.innerHTML = leafHtml;
+    layers.forEach(({ sel, count, tone }, layerIndex) => {
+      const host = this.root.querySelector(sel);
+      if (!host) return;
+      let html = '<div class="menu-cloud-track">';
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < count; i++) {
+          const n = layerIndex * 17 + i * 3 + pass * 11;
+          const top = 8 + ((n * 19) % 62);
+          const w = 70 + ((n * 23) % 110);
+          const h = 22 + ((n * 13) % 28);
+          const left = pass * 100 + ((i * 97 + n * 7) % 88);
+          const opacity = 0.55 + ((n * 9) % 35) / 100;
+          html += `<span class="menu-cloud menu-cloud--${tone}" style="--ct:${top}%;--cl:${left}%;--cw:${w}px;--ch:${h}px;--co:${opacity}"></span>`;
+        }
+      }
+      html += '</div>';
+      host.innerHTML = html;
+    });
   }
 
   private onPlayClick(): void {
