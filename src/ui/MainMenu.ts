@@ -122,13 +122,6 @@ export class MainMenu {
               <span class="menu-hero-btn__label">PLAY</span>
               <span class="menu-hero-btn__gem" aria-hidden="true"></span>
             </button>
-            <button type="button" class="menu-hero-btn" data-action="world">
-              <span class="menu-hero-btn__icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><ellipse cx="8" cy="8" rx="2.5" ry="6.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 8h12M3.5 5h9M3.5 11h9" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
-              </span>
-              <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-              <span class="menu-hero-btn__label">WORLDS</span>
-            </button>
             <button type="button" class="menu-hero-btn" data-action="settings">
               <span class="menu-hero-btn__icon" aria-hidden="true">
                 <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="2.2" fill="currentColor"/><path d="M8 1.5l1.1 2.2 2.4-.2-.2 2.4 2.2 1.1-2.2 1.1.2 2.4-2.4-.2L8 14.5l-1.1-2.2-2.4.2.2-2.4L2.5 9.1l2.2-1.1-.2-2.4 2.4.2z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
@@ -485,7 +478,7 @@ export class MainMenu {
       this.friendsPanel = new FriendsPanel(this.root, this.social);
     }
 
-    this.root.querySelector('[data-action="play"]')!.addEventListener('click', () => this.onPlayClick());
+    this.root.querySelector('[data-action="play"]')!.addEventListener('click', () => this.openWorldPanel());
     this.root.querySelector('[data-action="settings"]')!.addEventListener('click', () =>
       this.showPanel('settings'),
     );
@@ -507,9 +500,6 @@ export class MainMenu {
     this.root.querySelectorAll('[data-action="home"]').forEach((el) => {
       el.addEventListener('click', () => this.showPanel('home'));
     });
-    this.root.querySelector('[data-action="world"]')!.addEventListener('click', () =>
-      this.openWorldPanel(),
-    );
     this.root.querySelector('[data-action="world-back"]')?.addEventListener('click', () => {
       if (this.worldView === 'create') this.setWorldView('list');
       else this.showPanel('home');
@@ -603,36 +593,6 @@ export class MainMenu {
   }
 
   
-
-  private onPlayClick(): void {
-    if (this.hasSession) {
-      this.onAction?.({ type: 'resume' });
-      return;
-    }
-    this.emitPlay();
-  }
-
-  private getPlaySeed(): string {
-    const params = new URLSearchParams(window.location.search);
-    const fromUrl = params.get('seed')?.trim();
-    if (fromUrl) return fromUrl;
-    return loadLastWorld() ?? randomSeed();
-  }
-
-  private emitPlay(): void {
-    const seed = this.getPlaySeed();
-    this.worldSeedInput.value = seed;
-    this.worldSettings = loadWorldSettings(seed);
-    if (!this.worldSettings.name) {
-      this.worldSettings = { ...this.worldSettings, name: worldNameFromSeed(seed) };
-    }
-    saveWorldSettings(seed, this.worldSettings);
-    replaceSeedInUrl(seed);
-    saveLastWorld(seed);
-    this.hasSession = true;
-    this.emitPrefs();
-    this.onAction?.({ type: 'play', seed });
-  }
 
   private emitCreateWorld(): void {
     const seed = this.worldSeedInput.value.trim() || randomSeed();
