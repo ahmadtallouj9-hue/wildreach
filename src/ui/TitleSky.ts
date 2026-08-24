@@ -17,6 +17,7 @@ export class TitleSky {
     seed: number;
   }> = [];
   private onResize = (): void => this.resize();
+  private ro: ResizeObserver | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -29,15 +30,18 @@ export class TitleSky {
 
   mount(host: HTMLElement): void {
     host.replaceChildren(this.canvas);
-    this.resize();
+    this.ro?.disconnect();
+    this.ro = new ResizeObserver(() => this.resize());
+    this.ro.observe(host);
     window.addEventListener('resize', this.onResize);
+    requestAnimationFrame(() => this.resize());
   }
 
   start(): void {
+    this.resize();
     if (this.running) return;
     this.running = true;
     this.t0 = performance.now();
-    this.resize();
     const tick = (now: number): void => {
       if (!this.running) return;
       this.draw((now - this.t0) / 1000);
@@ -54,14 +58,23 @@ export class TitleSky {
 
   dispose(): void {
     this.stop();
+    this.ro?.disconnect();
+    this.ro = null;
     window.removeEventListener('resize', this.onResize);
     this.canvas.remove();
   }
 
   private resize(): void {
     const parent = this.canvas.parentElement;
-    const w = Math.max(1, parent?.clientWidth ?? window.innerWidth);
-    const h = Math.max(1, parent?.clientHeight ?? window.innerHeight);
+    let w = parent?.clientWidth ?? 0;
+    let h = parent?.clientHeight ?? 0;
+    if (w < 2 || h < 2) {
+      w = window.innerWidth;
+      h = window.innerHeight;
+    }
+    w = Math.max(2, Math.floor(w));
+    h = Math.max(2, Math.floor(h));
+    if (w === this.w && h === this.h && this.canvas.width > 1) return;
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.w = w;
     this.h = h;

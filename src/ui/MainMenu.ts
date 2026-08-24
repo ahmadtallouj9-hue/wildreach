@@ -479,7 +479,6 @@ export class MainMenu {
     const atmosphere = this.root.querySelector('.menu-atmosphere');
     if (atmosphere) {
       this.titleSky.mount(atmosphere as HTMLElement);
-      this.titleSky.start();
     }
 
     if (this.social) {
@@ -596,7 +595,7 @@ export class MainMenu {
     this.hasSession = opts?.resumable ?? this.hasSession;
     this.root.hidden = false;
     this.showPanel('home');
-    this.titleSky.start();
+    requestAnimationFrame(() => this.titleSky.start());
   }
 
   get visible(): boolean {
