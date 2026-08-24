@@ -886,8 +886,7 @@ body.title-over-session #main-menu {
   height: 100% !important;
   display: block;
   filter: none !important;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+  image-rendering: auto;
 }
 
 .menu-stage.menu-home[hidden] .menu-atmosphere,

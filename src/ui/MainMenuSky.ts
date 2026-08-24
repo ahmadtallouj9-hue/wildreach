@@ -13,14 +13,14 @@ export interface MainMenuSkyOptions {
 const DEFAULT_SPEED: MainMenuSkySpeeds = [0.015, 0.024, 0.034];
 const DEFAULT_DRIFT: MainMenuSkySpeeds = [0.022, 0.034, 0.048];
 const SKY_URL = '/menu-sky-base.png';
-const FULL_URL = '/menu-sky-source.png';
+const FULL_URL = '/menu-sky-source-hd.png';
 const CLOUD_URLS = ['/menu-sky-clouds-0.png', '/menu-sky-clouds-1.png', '/menu-sky-clouds-2.png'] as const;
 
 const VS = `#version 300 es
 in vec2 aPos;
 out vec2 vUv;
 void main() {
-  vUv = aPos * 0.5 + 0.5;
+  vUv = vec2(aPos.x * 0.5 + 0.5, 1.0 - (aPos.y * 0.5 + 0.5));
   gl_Position = vec4(aPos, 0.0, 1.0);
 }`;
 
@@ -149,6 +149,7 @@ export class MainMenuSky {
   private t0 = 0;
   private w = 1;
   private h = 1;
+  private dpr = 1;
   private ready = false;
   private onResize = (): void => this.resize();
   private ro: ResizeObserver | null = null;
@@ -302,14 +303,17 @@ export class MainMenuSky {
     }
     w = Math.max(2, Math.floor(w));
     h = Math.max(2, Math.floor(h));
-    if (w === this.w && h === this.h && this.canvas.width > 1) return;
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    const bw = Math.floor(w * this.dpr);
+    const bh = Math.floor(h * this.dpr);
+    if (w === this.w && h === this.h && this.canvas.width === bw && this.canvas.height > 1) return;
     this.w = w;
     this.h = h;
-    this.canvas.width = w;
-    this.canvas.height = h;
+    this.canvas.width = bw;
+    this.canvas.height = bh;
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
-    this.gl?.viewport(0, 0, w, h);
+    this.gl?.viewport(0, 0, bw, bh);
   }
 
   private draw(t: number): void {

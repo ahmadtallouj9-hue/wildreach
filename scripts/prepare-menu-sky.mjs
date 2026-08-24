@@ -145,10 +145,21 @@ for (let y = 0; y < height; y++) {
   }
 }
 
-await sharp(base, { raw: { width, height, channels: 4 } }).png().toFile(outBase);
-for (let i = 0; i < 3; i++) {
-  await sharp(clouds[i], { raw: { width, height, channels: 4 } }).png().toFile(outClouds[i]);
+async function writePng(buf, width, height, path, scale = 3) {
+  let pipe = sharp(buf, { raw: { width, height, channels: 4 } });
+  if (scale > 1) {
+    pipe = pipe.resize(width * scale, height * scale, { kernel: 'nearest' });
+  }
+  await pipe.png().toFile(path);
 }
+
+await writePng(base, width, height, outBase);
+for (let i = 0; i < 3; i++) {
+  await writePng(clouds[i], width, height, outClouds[i]);
+}
+
+// Upscaled source for sharper full-res sampling
+await sharp(src).resize(width * 3, height * 3, { kernel: 'nearest' }).png().toFile('public/menu-sky-source-hd.png');
 
 console.log('Prepared menu sky assets:', width, height);
 console.log('  base:', outBase);
