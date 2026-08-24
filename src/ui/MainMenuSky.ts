@@ -1,11 +1,12 @@
-/** Main-menu sky: 2D canvas cover blit + wrapping cloud layers. */
+/** Main-menu sky: full artwork + clipped ping-pong cloud drift (no tile seams). */
 export type MainMenuSkySpeeds = readonly [number, number, number];
 
 export interface MainMenuSkyOptions {
+  /** Oscillation period in seconds per layer (high / mid / low). */
   cloudSpeed?: MainMenuSkySpeeds;
 }
 
-const ASSET_V = '9';
+const ASSET_V = '10';
 const BASE_URL = `/menu-sky-base.png?v=${ASSET_V}`;
 const CLOUD_URLS = [
   `/menu-sky-clouds-0.png?v=${ASSET_V}`,
@@ -13,8 +14,8 @@ const CLOUD_URLS = [
   `/menu-sky-clouds-2.png?v=${ASSET_V}`,
 ] as const;
 
-/** Pixels per second at 1080p-height, high/mid/low clouds. */
-const DEFAULT_SPEED: MainMenuSkySpeeds = [18, 32, 48];
+/** Seconds per full drift cycle. */
+const DEFAULT_SECONDS: MainMenuSkySpeeds = [90, 65, 45];
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -32,7 +33,7 @@ export class MainMenuSky {
   private ctx: CanvasRenderingContext2D | null = null;
   private base: HTMLImageElement | null = null;
   private clouds: HTMLImageElement[] = [];
-  private speeds: MainMenuSkySpeeds;
+  private periods = DEFAULT_SECONDS;
   private running = false;
   private raf = 0;
   private t0 = 0;
@@ -44,7 +45,7 @@ export class MainMenuSky {
   private ro: ResizeObserver | null = null;
 
   constructor(opts: MainMenuSkyOptions = {}) {
-    this.speeds = opts.cloudSpeed ?? DEFAULT_SPEED;
+    this.periods = opts.cloudSpeed ?? DEFAULT_SECONDS;
     this.root = document.createElement('div');
     this.root.className = 'menu-sky-stack';
     this.root.setAttribute('aria-hidden', 'true');
@@ -53,8 +54,8 @@ export class MainMenuSky {
     this.root.append(this.canvas);
   }
 
-  setCloudSpeed(speed: MainMenuSkySpeeds): void {
-    this.speeds = speed;
+  setCloudSpeed(seconds: MainMenuSkySpeeds): void {
+    this.periods = seconds;
   }
 
   mount(host: HTMLElement): void {
@@ -85,6 +86,7 @@ export class MainMenuSky {
     this.running = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (this.ready) this.draw(0);
   }
 
   dispose(): void {
@@ -131,11 +133,17 @@ export class MainMenuSky {
     this.ctx?.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  private cover(imgW: number, imgH: number): { dx: number; dy: number; dw: number; dh: number } {
-    const scale = Math.max(this.w / imgW, this.h / imgH);
+  /** Fit art to full screen height; letterbox sides. */
+  private fit(imgW: number, imgH: number): { dx: number; dy: number; dw: number; dh: number } {
+    const scale = this.h / imgH;
     const dw = imgW * scale;
-    const dh = imgH * scale;
-    return { dx: (this.w - dw) / 2, dy: (this.h - dh) / 2, dw, dh };
+    const dh = this.h;
+    return { dx: (this.w - dw) / 2, dy: 0, dw, dh };
+  }
+
+  private drift(t: number, period: number, amount: number): number {
+    const wave = Math.sin((t / period) * Math.PI * 2);
+    return wave * amount;
   }
 
   private draw(t: number): void {
@@ -144,19 +152,31 @@ export class MainMenuSky {
     if (!ctx || !base || !this.ready || this.clouds.length < 3) return;
 
     ctx.imageSmoothingEnabled = false;
+    const { dx, dy, dw, dh } = this.fit(base.naturalWidth, base.naturalHeight);
 
-    const { dx, dy, dw, dh } = this.cover(base.naturalWidth, base.naturalHeight);
-    ctx.fillStyle = '#1470c3';
+    const edge = ctx.createLinearGradient(0, 0, 0, this.h);
+    edge.addColorStop(0, '#1a5cb0');
+    edge.addColorStop(0.55, '#7a88c0');
+    edge.addColorStop(1, '#efb080');
+    ctx.fillStyle = edge;
     ctx.fillRect(0, 0, this.w, this.h);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(dx, dy, dw, dh);
+    ctx.clip();
+
     ctx.drawImage(base, dx, dy, dw, dh);
 
+    const driftPx = dw * 0.028;
     for (let i = 0; i < 3; i++) {
       const cloud = this.clouds[i];
       if (!cloud) continue;
-      const shift = -((t * this.speeds[i]) % dw);
+      const shift = this.drift(t, this.periods[i]!, driftPx * (0.75 + i * 0.2));
       ctx.drawImage(cloud, dx + shift, dy, dw, dh);
-      ctx.drawImage(cloud, dx + shift + dw, dy, dw, dh);
     }
+
+    ctx.restore();
   }
 }
 

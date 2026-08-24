@@ -1,5 +1,5 @@
 /**
- * Upscale menu sky art and extract 3 horizontally tileable cloud layers.
+ * Upscale menu sky art and extract 3 cloud layers.
  * Run: node scripts/prepare-menu-sky.mjs
  */
 import sharp from 'sharp';
@@ -80,13 +80,6 @@ for (let y = 0; y < height; y++) {
   }
 }
 
-for (let i = 0; i < 3; i++) {
-  await sharp(clouds[i], { raw: { width, height, channels: 4 } })
-    .resize(width * SCALE, height * SCALE, { kernel: 'lanczos3' })
-    .png()
-    .toFile(`public/menu-sky-clouds-${i}.png`);
-}
-
 await sharp(srcPath)
   .resize(width * SCALE, height * SCALE, { kernel: 'nearest' })
   .png()
@@ -104,6 +97,4 @@ for (let i = 0; i < 3; i++) {
     .toFile(`public/menu-sky-clouds-${i}.png`);
 }
 
-const top = px((width / 2) | 0, 2);
-const bot = px((width / 2) | 0, height - 3);
-console.log('Prepared menu sky', { width, height, SCALE, top, bot });
+console.log('Prepared menu sky', { width, height, SCALE });
