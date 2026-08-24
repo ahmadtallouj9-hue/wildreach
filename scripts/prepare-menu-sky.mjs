@@ -1,8 +1,7 @@
 /**
- * Split menu sky artwork into a static gradient base + 3 tileable cloud layers.
+ * Split menu sky artwork into sky base + 3 cloud layers (same size as source).
  * Run: node scripts/prepare-menu-sky.mjs
  */
-import fs from 'fs';
 import sharp from 'sharp';
 
 const src = 'public/menu-sky-source.png';
@@ -62,46 +61,79 @@ function cloudness(r, g, b, y) {
   const dg = g - gcol[1];
   const db = b - gcol[2];
   const dist = Math.sqrt(dr * dr + dg * dg + db * db) / 255;
-  // Clouds are lighter or more saturated than the smooth gradient.
   const lum = (r + g + b) / (3 * 255);
   const glum = (gcol[0] + gcol[1] + gcol[2]) / (3 * 255);
-  const lift = Math.max(0, lum - glum - 0.02);
-  return Math.min(1, dist * 2.8 + lift * 1.6);
+  const lift = Math.max(0, lum - glum - 0.025);
+  return Math.min(1, dist * 2.4 + lift * 1.4);
 }
 
-function layerForY(y) {
+function layerWeight(y, layer) {
   const t = y / height;
-  if (t < 0.36) return 0;
-  if (t < 0.66) return 1;
-  return 2;
+  if (layer === 0) {
+    if (t >= 0.4) return 0;
+    return 1 - t / 0.4;
+  }
+  if (layer === 1) {
+    if (t < 0.2 || t > 0.75) return 0;
+    if (t < 0.35) return (t - 0.2) / 0.15;
+    if (t > 0.6) return (0.75 - t) / 0.15;
+    return 1;
+  }
+  if (t < 0.5) return 0;
+  return (t - 0.5) / 0.5;
+}
+
+const rowSky = Array.from({ length: height }, () => []);
+
+for (let y = 0; y < height; y++) {
+  for (let x = 0; x < width; x++) {
+    const [r, g, b] = px(x, y);
+    if (cloudness(r, g, b, y) <= 0.07) rowSky[y].push([r, g, b]);
+  }
+}
+
+function skyAt(x, y) {
+  const row = rowSky[y];
+  if (row.length) {
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    for (const c of row) {
+      sx += c[0];
+      sy += c[1];
+      sz += c[2];
+    }
+    return [sx / row.length, sy / row.length, sz / row.length];
+  }
+  return gradAt(y);
 }
 
 const base = Buffer.alloc(width * height * 4);
 const clouds = [Buffer.alloc(width * height * 4), Buffer.alloc(width * height * 4), Buffer.alloc(width * height * 4)];
 
 for (let y = 0; y < height; y++) {
-  const gcol = gradAt(y);
   for (let x = 0; x < width; x++) {
     const [r, g, b] = px(x, y);
     const c = cloudness(r, g, b, y);
-    const li = layerForY(y);
     const i = (y * width + x) * 4;
+    const sky = skyAt(x, y);
 
-    if (c <= 0.06) {
+    if (c <= 0.07) {
       base[i] = r;
       base[i + 1] = g;
       base[i + 2] = b;
     } else {
-      base[i] = Math.round(gcol[0]);
-      base[i + 1] = Math.round(gcol[1]);
-      base[i + 2] = Math.round(gcol[2]);
+      base[i] = Math.round(sky[0]);
+      base[i + 1] = Math.round(sky[1]);
+      base[i + 2] = Math.round(sky[2]);
     }
     base[i + 3] = 255;
 
     for (let L = 0; L < 3; L++) {
+      const w = layerWeight(y, L);
       const ci = (y * width + x) * 4;
-      if (L === li && c > 0.06) {
-        const a = Math.min(255, Math.round((c - 0.06) * 320));
+      if (w > 0.05 && c > 0.07) {
+        const a = Math.min(255, Math.round((c - 0.07) * 280 * w));
         clouds[L][ci] = r;
         clouds[L][ci + 1] = g;
         clouds[L][ci + 2] = b;
@@ -113,24 +145,10 @@ for (let y = 0; y < height; y++) {
   }
 }
 
-async function writeTileable(buf, path) {
-  const wide = Buffer.alloc(width * 2 * height * 4);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width * 2; x++) {
-      const sx = x % width;
-      const di = (y * width * 2 + x) * 4;
-      const si = (y * width + sx) * 4;
-      wide[di] = buf[si];
-      wide[di + 1] = buf[si + 1];
-      wide[di + 2] = buf[si + 2];
-      wide[di + 3] = buf[si + 3];
-    }
-  }
-  await sharp(wide, { raw: { width: width * 2, height, channels: 4 } }).png().toFile(path);
-}
-
 await sharp(base, { raw: { width, height, channels: 4 } }).png().toFile(outBase);
-for (let i = 0; i < 3; i++) await writeTileable(clouds[i], outClouds[i]);
+for (let i = 0; i < 3; i++) {
+  await sharp(clouds[i], { raw: { width, height, channels: 4 } }).png().toFile(outClouds[i]);
+}
 
 console.log('Prepared menu sky assets:', width, height);
 console.log('  base:', outBase);

@@ -2,14 +2,18 @@
 export type MainMenuSkySpeeds = readonly [number, number, number];
 
 export interface MainMenuSkyOptions {
-  /** Horizontal scroll speed per cloud layer (UV units / sec; 0.5 = one loop). */
+  /** Ping-pong drift speed per cloud layer (cycles / sec). */
   cloudSpeed?: MainMenuSkySpeeds;
+  /** Max horizontal drift in cover UV space (0–1). */
+  cloudDrift?: MainMenuSkySpeeds;
   /** Subtle vertical wobble amplitude in UV space. */
   verticalWobble?: number;
 }
 
-const DEFAULT_SPEED: MainMenuSkySpeeds = [0.006, 0.011, 0.018];
-const BASE_URL = '/menu-sky-base.png';
+const DEFAULT_SPEED: MainMenuSkySpeeds = [0.018, 0.028, 0.04];
+const DEFAULT_DRIFT: MainMenuSkySpeeds = [0.035, 0.055, 0.08];
+const SKY_URL = '/menu-sky-base.png';
+const FULL_URL = '/menu-sky-source.png';
 const CLOUD_URLS = ['/menu-sky-clouds-0.png', '/menu-sky-clouds-1.png', '/menu-sky-clouds-2.png'] as const;
 
 const VS = `#version 300 es
@@ -25,7 +29,8 @@ precision highp float;
 in vec2 vUv;
 out vec4 outColor;
 
-uniform sampler2D uBase;
+uniform sampler2D uSky;
+uniform sampler2D uFull;
 uniform sampler2D uCloud0;
 uniform sampler2D uCloud1;
 uniform sampler2D uCloud2;
@@ -33,6 +38,7 @@ uniform vec2 uViewport;
 uniform vec2 uTexSize;
 uniform float uTime;
 uniform vec3 uSpeed;
+uniform vec3 uDrift;
 uniform float uWobble;
 
 vec2 coverUv(vec2 uv) {
@@ -48,24 +54,29 @@ vec2 coverUv(vec2 uv) {
   return clamp(uv, 0.0, 1.0);
 }
 
-vec4 sampleCloud(sampler2D tex, vec2 uv, float scroll, float wobblePhase) {
+float pingPong(float t, float speed) {
+  float p = mod(t * speed, 2.0);
+  return p < 1.0 ? p : 2.0 - p;
+}
+
+vec4 sampleCloudLayer(sampler2D maskTex, vec2 uv, float drift, float speed, float wobblePhase) {
+  float shift = (pingPong(uTime, speed) * 2.0 - 1.0) * drift;
+  vec4 mask = texture(maskTex, uv);
+  if (mask.a < 0.01) return vec4(0.0);
   vec2 cuv = uv;
-  cuv.y += sin(uTime * 0.35 + wobblePhase) * uWobble;
-  cuv.x = fract(uv.x * 0.5 + scroll);
-  return texture(tex, cuv);
+  cuv.x = clamp(uv.x + shift, 0.0, 1.0);
+  cuv.y = clamp(uv.y + sin(uTime * 0.35 + wobblePhase) * uWobble, 0.0, 1.0);
+  vec3 shifted = texture(uFull, cuv).rgb;
+  return vec4(shifted, mask.a);
 }
 
 void main() {
   vec2 uv = coverUv(vUv);
-  vec3 color = texture(uBase, uv).rgb;
+  vec3 color = texture(uSky, uv).rgb;
 
-  float s0 = mod(uTime * uSpeed.x, 0.5);
-  float s1 = mod(uTime * uSpeed.y, 0.5);
-  float s2 = mod(uTime * uSpeed.z, 0.5);
-
-  vec4 c0 = sampleCloud(uCloud0, uv, s0, 0.0);
-  vec4 c1 = sampleCloud(uCloud1, uv, s1, 2.1);
-  vec4 c2 = sampleCloud(uCloud2, uv, s2, 4.2);
+  vec4 c0 = sampleCloudLayer(uCloud0, uv, uDrift.x, uSpeed.x, 0.0);
+  vec4 c1 = sampleCloudLayer(uCloud1, uv, uDrift.y, uSpeed.y, 2.1);
+  vec4 c2 = sampleCloudLayer(uCloud2, uv, uDrift.z, uSpeed.z, 4.2);
 
   color = mix(color, c0.rgb, c0.a);
   color = mix(color, c1.rgb, c1.a);
@@ -115,18 +126,22 @@ export class MainMenuSky {
   readonly canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext | null = null;
   private prog: WebGLProgram | null = null;
-  private texBase: WebGLTexture | null = null;
+  private texSky: WebGLTexture | null = null;
+  private texFull: WebGLTexture | null = null;
   private texClouds: WebGLTexture[] = [];
   private uViewport: WebGLUniformLocation | null = null;
   private uTexSize: WebGLUniformLocation | null = null;
   private uTime: WebGLUniformLocation | null = null;
   private uSpeed: WebGLUniformLocation | null = null;
+  private uDrift: WebGLUniformLocation | null = null;
   private uCloud: WebGLUniformLocation[] = [];
-  private uBase: WebGLUniformLocation | null = null;
+  private uSky: WebGLUniformLocation | null = null;
+  private uFull: WebGLUniformLocation | null = null;
   private uWobble: WebGLUniformLocation | null = null;
   private texW = 1;
   private texH = 1;
   private speeds: MainMenuSkySpeeds;
+  private drift: MainMenuSkySpeeds;
   private wobble: number;
   private raf = 0;
   private running = false;
@@ -139,15 +154,21 @@ export class MainMenuSky {
 
   constructor(opts: MainMenuSkyOptions = {}) {
     this.speeds = opts.cloudSpeed ?? DEFAULT_SPEED;
-    this.wobble = opts.verticalWobble ?? 0.004;
+    this.drift = opts.cloudDrift ?? DEFAULT_DRIFT;
+    this.wobble = opts.verticalWobble ?? 0.003;
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'menu-sky-canvas';
     this.canvas.setAttribute('aria-hidden', 'true');
   }
 
-  /** Adjust cloud drift speed (UV units per second; 0.5 = one full loop). */
+  /** Adjust cloud drift speed (ping-pong cycles per second). */
   setCloudSpeed(speed: MainMenuSkySpeeds): void {
     this.speeds = speed;
+  }
+
+  /** Adjust max horizontal drift per layer (cover UV units). */
+  setCloudDrift(drift: MainMenuSkySpeeds): void {
+    this.drift = drift;
   }
 
   mount(host: HTMLElement): void {
@@ -186,7 +207,8 @@ export class MainMenuSky {
     window.removeEventListener('resize', this.onResize);
     const gl = this.gl;
     if (gl) {
-      if (this.texBase) gl.deleteTexture(this.texBase);
+      if (this.texSky) gl.deleteTexture(this.texSky);
+      if (this.texFull) gl.deleteTexture(this.texFull);
       for (const t of this.texClouds) gl.deleteTexture(t);
       if (this.prog) gl.deleteProgram(this.prog);
     }
@@ -225,17 +247,21 @@ export class MainMenuSky {
     this.uTexSize = gl.getUniformLocation(this.prog, 'uTexSize');
     this.uTime = gl.getUniformLocation(this.prog, 'uTime');
     this.uSpeed = gl.getUniformLocation(this.prog, 'uSpeed');
+    this.uDrift = gl.getUniformLocation(this.prog, 'uDrift');
     this.uWobble = gl.getUniformLocation(this.prog, 'uWobble');
-    this.uBase = gl.getUniformLocation(this.prog, 'uBase');
+    this.uSky = gl.getUniformLocation(this.prog, 'uSky');
+    this.uFull = gl.getUniformLocation(this.prog, 'uFull');
     for (let i = 0; i < 3; i++) {
       this.uCloud[i] = gl.getUniformLocation(this.prog, `uCloud${i}`)!;
     }
 
     try {
-      const baseImg = await loadImage(BASE_URL);
-      this.texW = baseImg.naturalWidth;
-      this.texH = baseImg.naturalHeight;
-      this.texBase = this.uploadTex(gl, baseImg, gl.NEAREST);
+      const skyImg = await loadImage(SKY_URL);
+      this.texW = skyImg.naturalWidth;
+      this.texH = skyImg.naturalHeight;
+      this.texSky = this.uploadTex(gl, skyImg, gl.NEAREST);
+      const fullImg = await loadImage(FULL_URL);
+      this.texFull = this.uploadTex(gl, fullImg, gl.NEAREST);
       this.texClouds = [];
       for (const url of CLOUD_URLS) {
         const img = await loadImage(url);
@@ -257,7 +283,7 @@ export class MainMenuSky {
     const tex = gl.createTexture();
     if (!tex) throw new Error('texture alloc failed');
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
@@ -288,23 +314,27 @@ export class MainMenuSky {
   private draw(t: number): void {
     const gl = this.gl;
     const prog = this.prog;
-    if (!gl || !prog || !this.ready || !this.texBase || this.texClouds.length < 3) return;
+    if (!gl || !prog || !this.ready || !this.texSky || !this.texFull || this.texClouds.length < 3) return;
 
     gl.useProgram(prog);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.texBase);
-    gl.uniform1i(this.uBase, 0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texSky);
+    gl.uniform1i(this.uSky, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.texFull);
+    gl.uniform1i(this.uFull, 1);
 
     for (let i = 0; i < 3; i++) {
-      gl.activeTexture(gl.TEXTURE1 + i);
+      gl.activeTexture(gl.TEXTURE2 + i);
       gl.bindTexture(gl.TEXTURE_2D, this.texClouds[i]!);
-      gl.uniform1i(this.uCloud[i]!, 1 + i);
+      gl.uniform1i(this.uCloud[i]!, 2 + i);
     }
 
     gl.uniform2f(this.uViewport, this.w, this.h);
     gl.uniform2f(this.uTexSize, this.texW, this.texH);
     gl.uniform1f(this.uTime, t);
     gl.uniform3f(this.uSpeed, this.speeds[0], this.speeds[1], this.speeds[2]);
+    gl.uniform3f(this.uDrift, this.drift[0], this.drift[1], this.drift[2]);
     gl.uniform1f(this.uWobble, this.wobble);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
