@@ -1,9 +1,12 @@
 import './style.css';
+import './ui/tokens.css';
 import './ui/vythera-ui.css';
+import './ui/game-ui.css';
 import './ui/modelEditor.css';
 import './vythera_ai/ui/vythera-ai-studio.css';
 import { Game } from './game/Game';
 import { MainMenu } from './ui/MainMenu';
+import { LoadingScreen } from './ui/LoadingScreen';
 import { isTouchDevice } from './util/isTouchDevice';
 import { applyShareParams, parseShareFromUrl } from './ui/shareUrl';
 import { saveLastWorld } from './ui/worldNames';
@@ -28,16 +31,28 @@ social.connect(loadProfile());
 const menu = new MainMenu(social);
 app.appendChild(menu.root);
 
+const loading = new LoadingScreen();
+app.appendChild(loading.root);
+
 let game: Game | null = null;
 
 function startWorld(seed: string): void {
   menu.hide();
+  loading.show('Preparing world…');
   requestAnimationFrame(() => {
+    loading.setPhase('Generating terrain…');
     requestAnimationFrame(() => {
+      loading.setPhase('Building biome…');
       const g = ensureGame(seed);
+      loading.setPhase('Initializing local systems…');
       // Prefs may have been emitted before Game existed (skin upload on title).
       menu.pushPrefs();
       g.setPaused(false);
+      loading.setPhase('Creating vegetation…');
+      requestAnimationFrame(() => {
+        loading.complete();
+        window.setTimeout(() => loading.hide(), 180);
+      });
     });
   });
 }
@@ -47,9 +62,11 @@ function ensureGame(seed: string): Game {
   if (game) game.dispose();
   game = new Game(app, seed);
   game.setSocial(social);
-  game.onMenuRequest = () => {
+  game.onMenuRequest = (panel) => {
     game?.returnToTitle();
     menu.show({ resumable: true });
+    if (panel === 'settings') menu.openPanel('settings');
+    else if (panel === 'multiplayer') menu.openPanel('multiplayer');
   };
   app.appendChild(menu.root);
   game.start();

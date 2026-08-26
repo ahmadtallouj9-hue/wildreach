@@ -4,22 +4,22 @@
 
 .mod-workshop.mod-workshop--studio,
 .mod-workshop.mod-workshop--forge {
-  --ms-bg: #181a1f;
-  --ms-panel: #1e2128;
-  --ms-panel2: #252932;
-  --ms-line: rgba(255, 255, 255, 0.08);
-  --ms-teal: #3ebba5;
-  --ms-teal-dim: rgba(62, 187, 165, 0.16);
-  --ms-teal-glow: rgba(62, 187, 165, 0.35);
-  --ms-text: #eceff4;
-  --ms-muted: #8b93a2;
-  --ms-danger: #e85d5d;
+  --ms-bg: var(--v-panel, #181a1f);
+  --ms-panel: var(--v-panel-2, #1e2128);
+  --ms-panel2: var(--v-panel-3, #252932);
+  --ms-line: var(--v-line, rgba(255, 255, 255, 0.08));
+  --ms-teal: var(--v-ai, #3ebba5);
+  --ms-teal-dim: var(--v-ai-dim, rgba(62, 187, 165, 0.16));
+  --ms-teal-glow: rgba(78, 184, 168, 0.35);
+  --ms-text: var(--v-ink, #eceff4);
+  --ms-muted: var(--v-muted, #8b93a2);
+  --ms-danger: var(--v-err, #e85d5d);
   --ms-left-w: 240px;
   --ms-right-w: 300px;
   --ms-timeline: 150px;
   background: var(--ms-bg);
   color: var(--ms-text);
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-body, 'Outfit', 'Segoe UI', system-ui, sans-serif);
   font-size: 12px;
   overflow: hidden;
   min-height: 0;

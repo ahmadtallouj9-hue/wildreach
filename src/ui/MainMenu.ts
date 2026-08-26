@@ -53,6 +53,7 @@ import {
 } from './worldSettings';
 import { replaceSeedInUrl, buildShareUrl, publicPlayUrl } from './shareUrl';
 import { SocialClient } from '../net/SocialClient';
+import { bindUiSounds, uiSound } from './uiSound';
 import { FriendsPanel } from './FriendsPanel';
 import { MainMenuSky } from './MainMenuSky';
 import { TerrainMaterials } from '../render/TerrainMaterials';
@@ -119,18 +120,13 @@ export class MainMenu {
         <div class="menu-home-inner menu-home-hero">
           <header class="menu-header menu-header--vythera">
             <div class="menu-brand-wrap">
-              <span class="menu-brand-spark" aria-hidden="true"></span>
-              <span class="menu-brand-spark menu-brand-spark--left" aria-hidden="true"></span>
-              <span class="menu-brand-spark menu-brand-spark--right" aria-hidden="true"></span>
               <h1 class="menu-brand menu-brand--vythera">VYTHERA</h1>
               <div class="menu-brand-ornament" aria-hidden="true">
                 <span class="menu-brand-line"></span>
                 <span class="menu-lotus" aria-hidden="true">
-                  <svg viewBox="0 0 36 30" width="36" height="30" fill="none">
-                    <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="#eef7ff"/>
-                    <path d="M18 26c-4-8-3-14 0-18 3 4 4 10 0 18z" fill="#cfe6ff"/>
-                    <path d="M18 26c-8-2-13-7-12-12 4 1 9 5 12 12z" fill="#d9ecff"/>
-                    <path d="M18 26c8-2 13-7 12-12-4 1-9 5-12 12z" fill="#d9ecff"/>
+                  <svg viewBox="0 0 36 30" width="28" height="22" fill="none">
+                    <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="currentColor"/>
+                    <path d="M18 26c-4-8-3-14 0-18 3 4 4 10 0 18z" fill="currentColor" opacity="0.7"/>
                   </svg>
                 </span>
                 <span class="menu-brand-line"></span>
@@ -138,47 +134,45 @@ export class MainMenu {
             </div>
           </header>
           <div class="menu-home-body">
-            <div class="menu-home-side menu-home-side--spacer" aria-hidden="true"></div>
             <nav class="menu-nav menu-nav--vythera" aria-label="Main menu">
-              <button type="button" class="menu-hero-btn menu-hero-btn--play" data-action="play">
-                <span class="menu-hero-btn__spark" aria-hidden="true"></span>
-                <span class="menu-hero-btn__label">PLAY</span>
-                <span class="menu-hero-btn__spark" aria-hidden="true"></span>
+              <button type="button" class="menu-hero-btn menu-hero-btn--play" data-action="new-game">
+                <span class="menu-hero-btn__label">NEW GAME</span>
               </button>
-              <button type="button" class="menu-hero-btn" data-action="settings">
-                <span class="menu-hero-btn__icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="2.2" fill="currentColor"/><path d="M8 1.5l1.1 2.2 2.4-.2-.2 2.4 2.2 1.1-2.2 1.1.2 2.4-2.4-.2L8 14.5l-1.1-2.2-2.4.2.2-2.4L2.5 9.1l2.2-1.1-.2-2.4 2.4.2z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
-                </span>
-                <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-                <span class="menu-hero-btn__label">SETTINGS</span>
+              <button type="button" class="menu-hero-btn" data-action="continue-world">
+                <span class="menu-hero-btn__label">CONTINUE</span>
               </button>
-              <button type="button" class="menu-hero-btn" data-action="mod">
-                <span class="menu-hero-btn__icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="16" height="16"><path d="M2 2h5v5H2V2zm7 0h5v5H9V2zM2 9h5v5H2V9zm7 2h5v3H9v-3z" fill="currentColor"/></svg>
-                </span>
-                <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-                <span class="menu-hero-btn__label">MOD</span>
+              <button type="button" class="menu-hero-btn" data-action="worlds">
+                <span class="menu-hero-btn__label">WORLDS</span>
               </button>
               <button type="button" class="menu-hero-btn" data-action="multiplayer">
-                <span class="menu-hero-btn__icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="16" height="16"><path d="M5.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm5 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM1.5 14c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5M8.5 14c.3-1.5 1.2-2.6 2.5-3.1 1.1-.4 2.3-.3 3.5.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-                </span>
-                <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-                <span class="menu-hero-btn__label">FRIENDS</span>
+                <span class="menu-hero-btn__label">MULTIPLAYER</span>
+              </button>
+              <button type="button" class="menu-hero-btn" data-action="customize">
+                <span class="menu-hero-btn__label">CHARACTER</span>
+              </button>
+              <button type="button" class="menu-hero-btn" data-action="mod">
+                <span class="menu-hero-btn__label">VYTHERA AI</span>
+              </button>
+              <button type="button" class="menu-hero-btn" data-action="settings">
+                <span class="menu-hero-btn__label">SETTINGS</span>
               </button>
             </nav>
             <aside class="menu-home-player menu-home-side">
               <span class="menu-home-player-name">Wanderer</span>
               <div class="menu-home-player-viewport" aria-hidden="true"></div>
               <button type="button" class="menu-hero-btn menu-home-skins-btn" data-action="customize">
-                <span class="menu-hero-btn__icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 1.5l1.6 4.2H14l-3.4 2.8 1.2 4.5L8 10.6 4.2 13l1.2-4.5L2 5.7h4.4z" fill="currentColor"/></svg>
-                </span>
-                <span class="menu-hero-btn__plus" aria-hidden="true">+</span>
-                <span class="menu-hero-btn__label">SKINS</span>
+                <span class="menu-hero-btn__label">PROFILE</span>
               </button>
             </aside>
           </div>
+          <footer class="menu-home-footer">
+            <span class="menu-home-version">Local session</span>
+            <span class="v-status" title="Local AI">
+              <span class="v-dot" data-ai-dot data-state="off"></span>
+              Local AI
+            </span>
+            <span class="menu-home-profile-hint">Profile</span>
+          </footer>
         </div>
       </div>
 
@@ -189,14 +183,19 @@ export class MainMenu {
           <span class="menu-brand-line"></span>
           <span class="menu-lotus">
             <svg viewBox="0 0 36 30" width="28" height="24" fill="none">
-              <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="#eef7ff"/>
-              <path d="M18 26c-4-8-3-14 0-18 3 4 4 10 0 18z" fill="#cfe6ff"/>
-              <path d="M18 26c-8-2-13-7-12-12 4 1 9 5 12 12z" fill="#d9ecff"/>
-              <path d="M18 26c8-2 13-7 12-12-4 1-9 5-12 12z" fill="#d9ecff"/>
+              <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="currentColor"/>
             </svg>
           </span>
           <span class="menu-brand-line"></span>
         </div>
+        <nav class="v-settings-nav" aria-label="Settings categories">
+          <button type="button" class="seg-btn active" data-settings-cat="general">General</button>
+          <button type="button" class="seg-btn" data-settings-cat="graphics">Graphics</button>
+          <button type="button" class="seg-btn" data-settings-cat="controls">Controls</button>
+          <button type="button" class="seg-btn" data-settings-cat="accessibility">Access</button>
+          <button type="button" class="seg-btn" data-settings-cat="privacy">Privacy</button>
+        </nav>
+        <div data-settings-pane="general">
         <label class="field">
           <span>Mouse sensitivity <em class="sens-val">1.0</em></span>
           <input type="range" class="sens-range" min="0.35" max="2.5" step="0.05" />
@@ -205,6 +204,16 @@ export class MainMenu {
           <span>Field of view <em class="fov-val">75</em></span>
           <input type="range" class="fov-range" min="55" max="100" step="1" />
         </label>
+        <div class="field">
+          <span>Person view</span>
+          <div class="seg" role="group" aria-label="Camera view">
+            <button type="button" class="seg-btn" data-view="first">First person</button>
+            <button type="button" class="seg-btn" data-view="third">Third person</button>
+            <button type="button" class="seg-btn" data-view="front">Front</button>
+          </div>
+        </div>
+        </div>
+        <div data-settings-pane="graphics" hidden>
         <label class="field">
           <span>Render distance <em class="dist-val">7</em></span>
           <input type="range" class="dist-range" min="3" max="8" step="1" />
@@ -217,30 +226,39 @@ export class MainMenu {
           <span>Clouds <em class="cloud-val">70%</em></span>
           <input type="range" class="cloud-range" min="0" max="1" step="0.05" />
         </label>
-        <div class="field">
-          <span>Person view</span>
-          <div class="seg" role="group" aria-label="Camera view">
-            <button type="button" class="seg-btn" data-view="first">First person</button>
-            <button type="button" class="seg-btn" data-view="third">Third person</button>
-            <button type="button" class="seg-btn" data-view="front">Front</button>
-          </div>
-        </div>
-        <label class="field field-check">
-          <input type="checkbox" class="invert-y-check" />
-          <span>Invert Y look</span>
-        </label>
-        <label class="field field-check">
-          <input type="checkbox" class="show-fps-check" />
-          <span>Show FPS</span>
-        </label>
         <label class="field field-check">
           <input type="checkbox" class="uw-fx-check" checked />
           <span>Underwater effects</span>
+        </label>
+        <label class="field field-check">
+          <input type="checkbox" class="show-fps-check" />
+          <span>Show FPS (developer)</span>
+        </label>
+        </div>
+        <div data-settings-pane="controls" hidden>
+        <label class="field field-check">
+          <input type="checkbox" class="invert-y-check" />
+          <span>Invert Y look</span>
         </label>
         <div class="field">
           <span>Touch &amp; HUD layout</span>
           <button type="button" class="menu-btn" data-action="edit-hud">Move HUD</button>
           <p class="field-hint edit-hud-hint">Drag hotbar and controls while in a world. Open a world first if this is disabled.</p>
+        </div>
+        </div>
+        <div data-settings-pane="accessibility" hidden>
+        <p class="field-hint">UI follows system reduced-motion. High-contrast status uses color plus labels. Keyboard: Esc closes panels · E inventory · J journal · M map.</p>
+        </div>
+        <div data-settings-pane="privacy" hidden>
+        <dl class="v-privacy-grid">
+          <dt>Local AI</dt><dd>ON</dd>
+          <dt>Cloud AI</dt><dd data-off>OFF</dd>
+          <dt>Telemetry</dt><dd data-off>OFF</dd>
+          <dt>Local vision</dt><dd>AVAILABLE</dd>
+          <dt>Local training</dt><dd>AVAILABLE</dd>
+          <dt>Network exposure</dt><dd>LOCAL ONLY</dd>
+        </dl>
+        <p class="field-hint">Privacy details never show IP addresses, paths, tokens, or account credentials.</p>
         </div>
         <button type="button" class="menu-btn primary" data-action="save-settings">SAVE</button>
       </div>
@@ -530,7 +548,7 @@ export class MainMenu {
                   <button type="button" class="mc-btn mc-btn--small" data-action="random-world" title="New seed">↻</button>
                 </div>
               </label>
-              <p class="world-seed-note">Your seed defines the terrain. Friends can request to join when you are in this world.</p>
+              <p class="world-seed-note">Your seed shapes the land. Friends can request to join while you are exploring.</p>
 
               <div class="world-share-row">
                 <span class="world-option-label">Share link</span>
@@ -540,15 +558,20 @@ export class MainMenu {
               </div>
 
               <div class="world-settings-card block-card">
-                <p class="mc-section-title">World options</p>
+                <p class="mc-section-title">World creation</p>
+                <div class="world-gen-modes seg-wrap" role="group" aria-label="Complexity">
+                  <button type="button" class="seg-btn active" data-gen-mode="default">Default</button>
+                  <button type="button" class="seg-btn" data-gen-mode="advanced">Advanced</button>
+                  <button type="button" class="seg-btn" data-gen-mode="expert">Expert</button>
+                </div>
 
-                <span class="world-option-label">Terrain type</span>
+                <span class="world-option-label">World type</span>
                 <div class="seg-wrap world-terrain-seg">
-                  <button type="button" class="seg-btn active" data-terrain="balanced">Balanced</button>
-                  <button type="button" class="seg-btn" data-terrain="flat">Flat</button>
-                  <button type="button" class="seg-btn" data-terrain="mountains">Peaks</button>
-                  <button type="button" class="seg-btn" data-terrain="islands">Islands</button>
-                  <button type="button" class="seg-btn" data-terrain="wild">Wild</button>
+                  <button type="button" class="seg-btn active" data-terrain="balanced">Plains</button>
+                  <button type="button" class="seg-btn" data-terrain="wild">Forest</button>
+                  <button type="button" class="seg-btn" data-terrain="mountains">Mountains</button>
+                  <button type="button" class="seg-btn" data-terrain="flat">Desert</button>
+                  <button type="button" class="seg-btn" data-terrain="islands">Ocean</button>
                 </div>
 
                 <div class="world-option-row">
@@ -576,9 +599,21 @@ export class MainMenu {
                 </div>
 
                 <label class="field field-tight">
-                  <span>Render distance <em class="world-dist-val">7</em></span>
+                  <span>World size / render distance <em class="world-dist-val">7</em></span>
                   <input type="range" class="world-dist-range" min="3" max="8" step="1" value="7" />
                 </label>
+
+                <div class="world-advanced-block" data-advanced-gen hidden>
+                  <p class="mc-section-title">Procedural controls</p>
+                  <p class="field-hint">These map to the terrain profile already used by world generation. Expert mode unlocks denser structure options.</p>
+                  <div class="world-option-row">
+                    <span class="world-option-label">AI world assist</span>
+                    <div class="seg-wrap">
+                      <button type="button" class="seg-btn active" data-ai-world="local">Local only</button>
+                      <button type="button" class="seg-btn" data-ai-world="off" disabled title="Cloud generation disabled">Cloud off</button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div class="world-actions mc-action-bar">
@@ -601,7 +636,17 @@ export class MainMenu {
       this.friendsPanel = new FriendsPanel(this.root, this.social);
     }
 
-    this.root.querySelector('[data-action="play"]')!.addEventListener('click', () => this.openWorldPanel());
+    this.root.querySelector('[data-action="new-game"]')?.addEventListener('click', () => {
+      this.worldSeedInput.value = randomSeed();
+      this.syncWorldUi();
+      this.setWorldView('create');
+      this.showPanel('world');
+    });
+    this.root.querySelector('[data-action="continue-world"]')?.addEventListener('click', () => {
+      this.continueLastWorld();
+    });
+    this.root.querySelector('[data-action="worlds"]')?.addEventListener('click', () => this.openWorldPanel());
+    this.root.querySelector('[data-action="play"]')?.addEventListener('click', () => this.openWorldPanel());
     this.root.querySelector('[data-action="settings"]')!.addEventListener('click', () =>
       this.showPanel('settings'),
     );
@@ -693,6 +738,7 @@ export class MainMenu {
     this.renderWardrobe();
     this.syncSettingsUi();
     this.syncProfileUi();
+    bindUiSounds(this.root);
     this.ensureHomePreview();
     this.syncHomePreview();
   }
@@ -773,6 +819,20 @@ export class MainMenu {
     this.syncWorldUi();
     this.setWorldView('list');
     this.showPanel('world');
+  }
+
+  private continueLastWorld(): void {
+    if (this.hasSession) {
+      this.onAction?.({ type: 'resume' });
+      return;
+    }
+    const last = loadLastWorld();
+    if (last) {
+      this.selectedWorldSeed = last;
+      this.playSelectedWorld();
+      return;
+    }
+    this.openWorldPanel();
   }
 
   private setWorldView(view: 'list' | 'create'): void {
@@ -917,6 +977,17 @@ export class MainMenu {
       });
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>('[data-gen-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.genMode;
+        this.root.querySelectorAll<HTMLButtonElement>('[data-gen-mode]').forEach((b) => {
+          b.classList.toggle('active', b === btn);
+        });
+        const adv = this.root.querySelector<HTMLElement>('[data-advanced-gen]');
+        if (adv) adv.hidden = mode === 'default';
+      });
+    });
+
     this.root.querySelectorAll<HTMLButtonElement>('.world-caves-seg [data-caves]').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.worldSettings.caves = btn.dataset.caves === '1';
@@ -1026,9 +1097,17 @@ export class MainMenu {
     });
   }
 
+  /** Open a menu panel from outside (e.g. pause → settings). */
+  openPanel(panel: Panel): void {
+    if (panel === 'multiplayer') this.openMultiplayerPanel();
+    else this.showPanel(panel);
+  }
+
   private showPanel(panel: Panel): void {
     if (panel === 'home') this.menuSky.start();
     else this.menuSky.stop();
+
+    uiSound('menu_transition');
 
     this.root.querySelectorAll<HTMLElement>('.menu-stage').forEach((el) => {
       el.hidden = el.dataset.panel !== panel;
@@ -1455,6 +1534,18 @@ export class MainMenu {
       btn.addEventListener('click', () => {
         this.settings.viewMode = btn.dataset.view as ViewMode;
         this.syncViewSeg();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-settings-cat]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cat = btn.dataset.settingsCat;
+        if (!cat) return;
+        this.root.querySelectorAll<HTMLButtonElement>('[data-settings-cat]').forEach((b) => {
+          b.classList.toggle('active', b === btn);
+        });
+        this.root.querySelectorAll<HTMLElement>('[data-settings-pane]').forEach((pane) => {
+          pane.hidden = pane.dataset.settingsPane !== cat;
+        });
       });
     });
   }

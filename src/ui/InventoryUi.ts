@@ -86,7 +86,7 @@ export class InventoryUi {
         <div class="inv-panel-scroll">
           <header class="inv-header">
             <div class="inv-heading">
-              <p class="inv-kicker">VYTHERA</p>
+              <p class="inv-kicker">INVENTORY</p>
               <div class="inv-tabs">
                 <button type="button" class="inv-tab active" data-tab="pack">PACK</button>
                 <button type="button" class="inv-tab" data-tab="guide">GUIDE</button>
@@ -96,13 +96,13 @@ export class InventoryUi {
           </header>
           <div class="inv-body" data-view="pack">
             <section class="craft-bay">
-              <h3>CRAFT</h3>
+              <h3>CRAFTING</h3>
               <div class="craft-row">
                 <div class="craft-grid"></div>
-                <span class="craft-arrow" aria-hidden="true">→</span>
+                <span class="craft-arrow" aria-hidden="true">↓</span>
                 <div class="result-slot slot" data-kind="result" data-index="0"></div>
               </div>
-              <p class="craft-hint">Arrange materials, then click the result.</p>
+              <p class="craft-hint">Arrange materials, then take the result.</p>
             </section>
             <section class="pack-bay">
               <h3>SATCHEL</h3>

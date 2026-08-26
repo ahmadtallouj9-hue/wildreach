@@ -55,6 +55,7 @@ export class Hud {
         <span class="brand-title">VYTHERA</span>
         <span class="profile-chip" hidden><span class="profile-dot"></span><span class="profile-name"></span></span>
       </div>
+      <div class="hud-day-chip" data-day-chip aria-label="World time">Exploring</div>
       <div class="compass" aria-hidden="true">
         <div class="compass-ring">
           <span class="tick n">N</span>
@@ -86,12 +87,12 @@ export class Hud {
       </div>
       <aside class="journal" hidden>
         <header>
-          <h2>FIELD JOURNAL</h2>
+          <h2>DISCOVERY</h2>
           <button type="button" class="close-journal" aria-label="Close">✕</button>
         </header>
         <p class="journal-meta"><span class="distance">0</span> strides · seed <code class="seed"></code></p>
         <ul class="journal-list"></ul>
-        <p class="hint">LMB break · RMB / F place · 1–9 select · J journal · M map</p>
+        <p class="hint">LMB break · RMB / F place · 1–9 select · J discovery · M map</p>
       </aside>
       <aside class="map-panel" hidden>
         <header>
@@ -453,7 +454,7 @@ export class Hud {
     const w = this.mapCanvas.width;
     const h = this.mapCanvas.height;
     const scale = 1.35;
-    ctx.fillStyle = '#0a1418';
+    ctx.fillStyle = '#080b0e';
     ctx.fillRect(0, 0, w, h);
 
     ctx.strokeStyle = 'rgba(94, 196, 176, 0.08)';
@@ -479,7 +480,7 @@ export class Hud {
       const [sx, sz] = key.split(',').map(Number);
       const dx = (sx - cx) * CHUNK_SIZE * scale + w / 2;
       const dy = (sz - cz) * CHUNK_SIZE * scale + h / 2;
-      ctx.fillStyle = '#1a3840';
+      ctx.fillStyle = '#121820';
       ctx.fillRect(dx, dy, CHUNK_SIZE * scale - 1, CHUNK_SIZE * scale - 1);
     }
 
@@ -487,13 +488,13 @@ export class Hud {
       const dx = (lm.wx - px) * scale + w / 2;
       const dy = (lm.wz - pz) * scale + h / 2;
       const found = this.discovery.foundLandmarks.has(lm.id);
-      ctx.fillStyle = found ? '#5ec4b0' : '#3a5a60';
+      ctx.fillStyle = found ? '#c9a227' : '#3a4540';
       ctx.beginPath();
       ctx.arc(dx, dy, found ? 4.5 : 2.5, 0, Math.PI * 2);
       ctx.fill();
       if (found) {
-        ctx.fillStyle = 'rgba(232, 244, 240, 0.85)';
-        ctx.font = '600 9px sans-serif';
+        ctx.fillStyle = 'rgba(230, 235, 228, 0.85)';
+        ctx.font = '600 9px Outfit, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(lm.name, dx, dy - 8);
       }

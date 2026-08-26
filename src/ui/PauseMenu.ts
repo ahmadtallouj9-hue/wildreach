@@ -1,8 +1,8 @@
-export type PauseMenuAction = 'resume' | 'title';
+export type PauseMenuAction = 'resume' | 'title' | 'settings' | 'social';
 
 export type PauseJoinRequest = { id: string; name: string };
 
-/** In-game pause overlay. */
+/** In-game pause overlay — VYTHERA cinematic panel. */
 export class PauseMenu {
   readonly root: HTMLElement;
   private onAction: ((action: PauseMenuAction) => void) | null = null;
@@ -22,17 +22,16 @@ export class PauseMenu {
           <span class="menu-brand-line"></span>
           <span class="menu-lotus">
             <svg viewBox="0 0 36 30" width="28" height="24" fill="none">
-              <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="#eef7ff"/>
-              <path d="M18 26c-4-8-3-14 0-18 3 4 4 10 0 18z" fill="#cfe6ff"/>
-              <path d="M18 26c-8-2-13-7-12-12 4 1 9 5 12 12z" fill="#d9ecff"/>
-              <path d="M18 26c8-2 13-7 12-12-4 1-9 5-12 12z" fill="#d9ecff"/>
+              <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="currentColor"/>
             </svg>
           </span>
           <span class="menu-brand-line"></span>
         </div>
         <div class="pause-menu__social"></div>
         <div class="pause-menu__actions">
-          <button type="button" class="pause-menu__btn pause-menu__btn--play" data-action="resume">+ RESUME +</button>
+          <button type="button" class="pause-menu__btn pause-menu__btn--play" data-action="resume">RESUME</button>
+          <button type="button" class="pause-menu__btn" data-action="settings">SETTINGS</button>
+          <button type="button" class="pause-menu__btn" data-action="social">SOCIAL</button>
           <button type="button" class="pause-menu__btn" data-action="title">QUIT TO TITLE</button>
         </div>
       </div>
@@ -45,7 +44,7 @@ export class PauseMenu {
         e.preventDefault();
         e.stopPropagation();
         const action = btn.dataset.action as PauseMenuAction;
-        if (action === 'resume' || action === 'title') {
+        if (action === 'resume' || action === 'title' || action === 'settings' || action === 'social') {
           this.onAction?.(action);
         }
       });

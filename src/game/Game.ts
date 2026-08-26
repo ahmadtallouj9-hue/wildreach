@@ -61,7 +61,7 @@ export class Game {
   private onPointerLockChangeBound = () => this.onPointerLockChange();
   private onResizeBound = () => this.onResize();
   readonly seed: string;
-  onMenuRequest: (() => void) | null = null;
+  onMenuRequest: ((panel?: 'settings' | 'multiplayer') => void) | null = null;
 
   constructor(host: HTMLElement, seed: string) {
     this.seed = seed;
@@ -135,6 +135,14 @@ export class Game {
       if (action === 'resume') {
         this.setPaused(false);
         this.requestPointerLock();
+        return;
+      }
+      if (action === 'settings') {
+        this.onMenuRequest?.('settings');
+        return;
+      }
+      if (action === 'social') {
+        this.onMenuRequest?.('multiplayer');
         return;
       }
       this.onMenuRequest?.();

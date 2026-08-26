@@ -4,22 +4,22 @@
  */
 
 .vythera-ai-studio.vas-shell {
-  --vas-bg: #0b0d10;
-  --vas-panel: #11151a;
-  --vas-panel-2: #161b22;
+  --vas-bg: var(--v-bg, #0b0d10);
+  --vas-panel: var(--v-panel, #11151a);
+  --vas-panel-2: var(--v-panel-2, #161b22);
   --vas-line: #252b33;
   --vas-line-soft: #1c2229;
-  --vas-text: #d7dde5;
-  --vas-muted: #8b95a3;
-  --vas-dim: #5c6673;
-  --vas-accent: #3ebba5;
-  --vas-accent-dim: rgba(62, 187, 165, 0.14);
-  --vas-accent-glow: rgba(62, 187, 165, 0.28);
-  --vas-ok: #5ecf8a;
-  --vas-warn: #d4a24c;
-  --vas-err: #e07070;
-  --vas-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
-  --vas-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --vas-text: var(--v-ink, #d7dde5);
+  --vas-muted: var(--v-muted, #8b95a3);
+  --vas-dim: var(--v-dim, #5c6673);
+  --vas-accent: var(--v-ai, #3ebba5);
+  --vas-accent-dim: var(--v-ai-dim, rgba(62, 187, 165, 0.14));
+  --vas-accent-glow: rgba(78, 184, 168, 0.28);
+  --vas-ok: var(--v-ok, #5ecf8a);
+  --vas-warn: var(--v-warn, #d4a24c);
+  --vas-err: var(--v-err, #e07070);
+  --vas-mono: var(--font-mono, ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace);
+  --vas-sans: var(--font-body, 'Outfit', 'Segoe UI', system-ui, sans-serif);
   --vas-nav-w: 188px;
   --vas-insp-w: 260px;
   --vas-radius: 2px;
