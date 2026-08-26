@@ -157,10 +157,15 @@ export class VytheraVisionAI {
   }
 
   private preferBackendOrder(): VytheraVisionBackend[] {
-    const preferred = loadVytheraAISettings().activeVisionBackend || 'daemon-vlm';
-    const first = this.backends.find((b) => b.id === preferred);
-    const rest = this.backends.filter((b) => b.id !== preferred);
-    return first ? [first, ...rest] : [...this.backends];
+    // Keep an explicitly selected backend (e.g. mock in tests) first when already set
+    const preferredId = loadVytheraAISettings().activeVisionBackend || 'daemon-vlm';
+    const preferred = this.backends.find((b) => b.id === preferredId);
+    const rest = this.backends.filter((b) => b.id !== preferredId && b !== this.backend);
+    const ordered: VytheraVisionBackend[] = [];
+    if (this.backend) ordered.push(this.backend);
+    if (preferred && preferred !== this.backend) ordered.push(preferred);
+    ordered.push(...rest);
+    return ordered;
   }
 
   async refresh(): Promise<VytheraVisionStatus> {
@@ -217,6 +222,7 @@ export class VytheraVisionAI {
     fileName: string;
     palette: VytheraExtractedPalette;
     teachExampleId: string;
+    privacyMetadataStripped?: boolean;
   }> {
     const ingested = await ingestLocalImageFile(file);
     if (!ingested.ok) throw new Error(ingested.error);
@@ -247,6 +253,7 @@ export class VytheraVisionAI {
       fileName: ingested.fileName,
       palette,
       teachExampleId: teach.example.id,
+      privacyMetadataStripped: ingested.privacyMetadataStripped,
     };
   }
 

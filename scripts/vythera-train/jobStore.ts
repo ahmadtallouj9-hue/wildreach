@@ -8,6 +8,7 @@ import {
 import { join } from 'node:path';
 import { ensureTrainDirs, safePathUnder, VYTHERA_JOBS_DIR } from './paths.ts';
 import type { VytheraDiskTrainingJob, VytheraDiskJobStatus } from './types.ts';
+import { sanitizePersistedError, sanitizePersistedLogLine, sanitizeLogLines } from './sanitize-log.ts';
 
 function jobDir(id: string): string {
   if (!/^train_[\w-]+$/.test(id) && !/^job_[\w-]+$/.test(id)) {
@@ -20,12 +21,37 @@ export function jobManifestPath(id: string): string {
   return join(jobDir(id), 'job.json');
 }
 
+/** Sanitize log/error fields before disk write — keep operational paths intact. */
+function scrubJobForPersist(job: VytheraDiskTrainingJob): VytheraDiskTrainingJob {
+  return {
+    ...job,
+    log: sanitizeLogLines(job.log ?? []),
+    error: job.error != null ? sanitizePersistedError(job.error) : null,
+    progress: job.progress
+      ? {
+          ...job.progress,
+          message: job.progress.message
+            ? sanitizePersistedLogLine(job.progress.message)
+            : job.progress.message,
+          rawLine: job.progress.rawLine
+            ? sanitizePersistedLogLine(job.progress.rawLine)
+            : job.progress.rawLine,
+        }
+      : job.progress,
+  };
+}
+
 export function writeJob(job: VytheraDiskTrainingJob): void {
   ensureTrainDirs();
   const dir = jobDir(job.id);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   job.updatedAt = Date.now();
-  writeFileSync(jobManifestPath(job.id), JSON.stringify(job, null, 2), 'utf8');
+  const safe = scrubJobForPersist(job);
+  // Keep in-memory job log scrubbed so subsequent reads stay clean
+  job.log = safe.log;
+  job.error = safe.error;
+  if (safe.progress) job.progress = safe.progress;
+  writeFileSync(jobManifestPath(job.id), JSON.stringify(safe, null, 2), 'utf8');
 }
 
 export function readJob(id: string): VytheraDiskTrainingJob | null {
@@ -62,6 +88,8 @@ export function updateJobStatus(
     status,
     updatedAt: Date.now(),
   };
+  if (patch?.error != null) next.error = sanitizePersistedError(patch.error);
+  if (patch?.log) next.log = sanitizeLogLines(patch.log);
   if (status === 'RUNNING' && !next.startedAt) next.startedAt = Date.now();
   if (status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED') {
     next.finishedAt = Date.now();
@@ -73,7 +101,7 @@ export function updateJobStatus(
 export function appendJobLog(id: string, line: string): void {
   const job = readJob(id);
   if (!job) return;
-  job.log.push(line.slice(0, 1000));
+  job.log.push(sanitizePersistedLogLine(line));
   if (job.log.length > 500) job.log = job.log.slice(-500);
   writeJob(job);
 }

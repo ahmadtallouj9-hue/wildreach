@@ -1,6 +1,6 @@
 /**
  * Localhost-only VYTHERA training + vision inference daemon.
- * Bind: 127.0.0.1:8791 — never expose remotely.
+ * Bind: loopback only — never expose remotely.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
@@ -31,9 +31,31 @@ import {
 } from './paths.ts';
 import type { VisualRecordLike } from './export-dataset.ts';
 import type { TrainingModality } from './types.ts';
+import {
+  sanitizeCapabilityPayload,
+  sanitizeUserFacingError,
+} from '../../src/vythera_ai/security/VytheraPrivacySanitizer.ts';
 
+/** Loopback only — never default to 0.0.0.0 */
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.VYTHERA_TRAIN_PORT) || 8791;
+const MAX_BODY = 32 * 1024 * 1024;
+
+function isAllowedHostHeader(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return true;
+  const h = hostHeader.trim().toLowerCase().split(':')[0] ?? '';
+  return h === '127.0.0.1' || h === 'localhost' || h === '[::1]' || h === '::1';
+}
+
+function isLocalOrigin(origin: string | undefined): boolean {
+  if (!origin) return true;
+  try {
+    const u = new URL(origin);
+    return u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '::1';
+  } catch {
+    return false;
+  }
+}
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -41,7 +63,7 @@ function readBody(req: IncomingMessage): Promise<string> {
     let size = 0;
     req.on('data', (c: Buffer) => {
       size += c.length;
-      if (size > 32 * 1024 * 1024) {
+      if (size > MAX_BODY) {
         reject(new Error('Body too large'));
         req.destroy();
         return;
@@ -53,14 +75,19 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function send(res: ServerResponse, code: number, data: unknown): void {
+function send(res: ServerResponse, code: number, data: unknown, origin?: string): void {
   const body = JSON.stringify(data);
-  res.writeHead(code, {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-  });
+  };
+  if (origin && isLocalOrigin(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  } else if (!origin) {
+    headers['Access-Control-Allow-Origin'] = 'http://127.0.0.1:5173';
+  }
+  res.writeHead(code, headers);
   res.end(body);
 }
 
@@ -70,93 +97,107 @@ function py(): string {
 }
 
 async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (req.method === 'OPTIONS') {
-    send(res, 204, {});
+  const origin = req.headers.origin;
+
+  if (!isAllowedHostHeader(req.headers.host)) {
+    send(res, 403, { error: 'LOCAL SERVICE ONLY' }, origin);
     return;
   }
-  const url = new URL(req.url ?? '/', `http://${HOST}:${PORT}`);
+
+  if (req.method === 'OPTIONS') {
+    send(res, 204, {}, origin);
+    return;
+  }
+  const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`);
   const path = url.pathname;
 
   try {
     if (req.method === 'GET' && path === '/health') {
-      send(res, 200, { ok: true, service: 'vythera-train' });
+      send(res, 200, { ok: true, service: 'vythera-train', bind: 'loopback' }, origin);
       return;
     }
     if (req.method === 'GET' && path === '/capability') {
       const cap = detectCapability();
-      send(res, 200, {
+      const payload = sanitizeCapabilityPayload({
         ...cap,
         lines: formatCapabilityLines(cap),
         defaultVlmBase: DEFAULT_VLM_BASE,
         activeText: getActiveTextAdapter(),
         activeVision: getActiveVisionAdapter(),
-      });
+      } as Record<string, unknown>);
+      send(res, 200, payload, origin);
       return;
     }
     if (req.method === 'GET' && path === '/jobs') {
-      send(res, 200, { jobs: listJobs() });
+      send(res, 200, { jobs: listJobs() }, origin);
       return;
     }
     if (req.method === 'GET' && path.startsWith('/jobs/')) {
-      const id = path.slice('/jobs/'.length);
+      const id = path.slice('/jobs/'.length).split('/')[0]!;
       const job = readJob(id);
       if (!job) {
-        send(res, 404, { error: 'not found' });
+        send(res, 404, { error: 'not found' }, origin);
         return;
       }
-      send(res, 200, { job });
+      const safe = {
+        ...job,
+        error: job.error ? sanitizeUserFacingError(job.error) : job.error,
+        datasetDir: job.datasetDir ? 'LOCAL_DATASET' : job.datasetDir,
+        outputPath: job.outputPath?.split(/[/\\]/).pop() ?? job.outputPath,
+        log: (job.log ?? []).map((l) => sanitizeUserFacingError(l)),
+      };
+      send(res, 200, { job: safe }, origin);
       return;
     }
-    if (req.method === 'GET' && path === '/active') {
-      send(res, 200, {
-        active: getActiveAdapter('TEXT'),
-        activeText: getActiveTextAdapter(),
-        activeVision: getActiveVisionAdapter(),
-      });
-      return;
-    }
-    if (req.method === 'GET' && path === '/models/detect') {
-      const model = url.searchParams.get('model') || DEFAULT_VLM_BASE;
-      if (!isSafeModelId(model)) {
-        send(res, 400, { error: 'unsafe model id' });
+    if (req.method === 'POST' && path === '/models/detect') {
+      const raw = await readBody(req);
+      const body = JSON.parse(raw) as { model: string };
+      if (!isSafeModelId(body.model)) {
+        send(res, 400, { error: 'unsafe model id' }, origin);
         return;
       }
-      send(res, 200, detectModelCapabilities(model));
+      send(res, 200, detectModelCapabilities(body.model), origin);
       return;
     }
     if (req.method === 'POST' && path === '/preflight') {
       const raw = await readBody(req);
       const body = JSON.parse(raw) as {
         datasetDir: string;
+        outputPath: string;
         trainableBaseModel: string;
         modality: TrainingModality;
-        outputDir: string;
       };
-      send(res, 200, runPreflight(body));
+      const pre = runPreflight({
+        datasetDir: body.datasetDir,
+        outputPath: body.outputPath,
+        trainableBaseModel: body.trainableBaseModel,
+        modality: body.modality,
+      });
+      send(
+        res,
+        200,
+        {
+          ...pre,
+          lines: pre.lines.map((l) => sanitizeUserFacingError(l)),
+          blockedReason: pre.blockedReason
+            ? sanitizeUserFacingError(pre.blockedReason)
+            : pre.blockedReason,
+        },
+        origin,
+      );
       return;
     }
     if (req.method === 'POST' && path === '/vram-estimate') {
       const raw = await readBody(req);
-      const body = JSON.parse(raw) as { model: string; vramMb?: number; method?: 'LoRA' | 'QLoRA' };
-      const cap = detectCapability({ writeManifest: false });
-      const vram = body.vramMb ?? cap.gpu.vramMb ?? 8192;
-      const settings = defaultVlmTrainSettings(vram);
-      send(
-        res,
-        200,
-        estimateVramMb({
-          vramMb: vram,
-          paramBillions: estimateParamBillions(body.model || DEFAULT_VLM_BASE),
-          method: body.method ?? settings.method,
-          batchSize: settings.batchSize,
-          gradAccum: settings.gradAccum,
-          imageSide: settings.imageSide,
-          maxSeqLen: settings.maxSeqLen,
-          loraRank: settings.loraRank,
-          gradientCheckpointing: settings.gradientCheckpointing,
-          mixedPrecision: settings.mixedPrecision,
-        }),
-      );
+      const body = JSON.parse(raw) as { model: string; method?: 'LoRA' | 'QLoRA' };
+      const paramsB = estimateParamBillions(body.model);
+      const settings = defaultVlmTrainSettings();
+      const est = estimateVramMb({
+        paramBillions: paramsB,
+        method: body.method ?? 'LoRA',
+        ...settings,
+      });
+      send(res, 200, { ...est, lines: est.lines.map((l) => sanitizeUserFacingError(l)) }, origin);
       return;
     }
     if (req.method === 'POST' && path === '/vision/infer') {
@@ -169,18 +210,18 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
         maxNew?: number;
       };
       if (!body.imageBase64 || !body.prompt) {
-        send(res, 400, { error: 'imageBase64 and prompt required' });
+        send(res, 400, { error: 'imageBase64 and prompt required' }, origin);
         return;
       }
       const active = getActiveVisionAdapter();
       const base = body.baseModel || active?.baseModel || DEFAULT_VLM_BASE;
       const adapter = body.adapterPath || active?.path || '';
       if (!isSafeModelId(base)) {
-        send(res, 400, { error: 'unsafe base model' });
+        send(res, 400, { error: 'unsafe base model' }, origin);
         return;
       }
       if (!existsSync(PYTHON_VLM_INFER)) {
-        send(res, 503, { error: 'infer_vlm.py missing' });
+        send(res, 503, { error: 'LOCAL VISION INFER UNAVAILABLE' }, origin);
         return;
       }
       const args = [
@@ -194,9 +235,7 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
         '--max-new',
         String(body.maxNew ?? 128),
       ];
-      if (adapter) {
-        args.push('--adapter', adapter);
-      }
+      if (adapter) args.push('--adapter', adapter);
       const r = spawnSync(py(), args, {
         encoding: 'utf8',
         timeout: 180_000,
@@ -206,15 +245,16 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
       });
       const line = (r.stdout || '').trim().split('\n').pop() || '{}';
       try {
-        const parsed = JSON.parse(line);
-        send(res, parsed.ok ? 200 : 500, parsed);
+        const parsed = JSON.parse(line) as { ok?: boolean; error?: string; text?: string };
+        if (parsed.error) parsed.error = sanitizeUserFacingError(parsed.error);
+        send(res, parsed.ok ? 200 : 500, parsed, origin);
       } catch {
-        send(res, 500, { ok: false, error: (r.stderr || r.stdout || 'infer failed').slice(0, 500) });
+        send(res, 500, { ok: false, error: 'LOCAL VISION INFER FAILED' }, origin);
       }
       return;
     }
     if (req.method === 'POST' && path === '/recover') {
-      send(res, 200, { jobs: recoverJobs() });
+      send(res, 200, { jobs: recoverJobs() }, origin);
       return;
     }
     if (req.method === 'POST' && path === '/jobs') {
@@ -232,57 +272,70 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
         autoStart?: boolean;
       };
       if (!Array.isArray(body.records)) {
-        send(res, 400, { error: 'records required' });
+        send(res, 400, { error: 'records required' }, origin);
         return;
       }
       const { job, capability } = await exportAndCreateJob({
         records: body.records,
-        datasetVersion: body.datasetVersion || `vdv_${Date.now()}`,
-        baseModel: body.baseModel || 'local-base',
+        datasetVersion: body.datasetVersion,
+        baseModel: body.baseModel,
         trainableBaseModel: body.trainableBaseModel,
         images: body.images,
         modality: body.modality,
         textOnly: body.textOnly,
-        useMock: body.useMock === true,
+        useMock: body.useMock,
         epochs: body.epochs,
       });
-      if (body.autoStart && (capability.available || body.useMock)) {
-        void startJob(job.id).catch((e) => console.error(e));
+      if (body.autoStart && job.status === 'QUEUED') {
+        void startJob(job.id).catch(() => {
+          /* job store records failure */
+        });
       }
-      send(res, 200, { job: readJob(job.id), capability });
+      send(
+        res,
+        200,
+        {
+          job: readJob(job.id),
+          capability: sanitizeCapabilityPayload(capability as unknown as Record<string, unknown>),
+        },
+        origin,
+      );
       return;
     }
     if (req.method === 'POST' && path.startsWith('/jobs/') && path.endsWith('/start')) {
       const id = path.slice('/jobs/'.length, -'/start'.length);
-      void startJob(id).catch((e) => console.error(e));
-      send(res, 200, { job: readJob(id), started: true });
+      void startJob(id).catch(() => {
+        /* job store records failure */
+      });
+      send(res, 200, { job: readJob(id), started: true }, origin);
       return;
     }
     if (req.method === 'POST' && path.startsWith('/jobs/') && path.endsWith('/cancel')) {
       const id = path.slice('/jobs/'.length, -'/cancel'.length);
-      send(res, 200, { job: cancelJob(id) });
+      send(res, 200, { job: cancelJob(id) }, origin);
       return;
     }
     if (req.method === 'POST' && path.startsWith('/jobs/') && path.endsWith('/evaluate')) {
       const id = path.slice('/jobs/'.length, -'/evaluate'.length);
       const result = await evaluateJob(id);
-      send(res, result.ok ? 200 : 400, result);
+      send(res, result.ok ? 200 : 400, result, origin);
       return;
     }
     if (req.method === 'POST' && path.startsWith('/jobs/') && path.endsWith('/promote')) {
       const id = path.slice('/jobs/'.length, -'/promote'.length);
-      send(res, 200, promoteFromJob(id));
+      send(res, 200, promoteFromJob(id), origin);
       return;
     }
     if (req.method === 'POST' && path === '/rollback') {
       const raw = await readBody(req);
       const body = JSON.parse(raw) as { to: string; modality?: TrainingModality };
-      send(res, 200, rollbackTo(body.to, body.modality ?? 'TEXT'));
+      send(res, 200, rollbackTo(body.to, body.modality ?? 'TEXT'), origin);
       return;
     }
-    send(res, 404, { error: 'not found' });
+    void getActiveAdapter;
+    send(res, 404, { error: 'not found' }, origin);
   } catch (e) {
-    send(res, 500, { error: e instanceof Error ? e.message : 'error' });
+    send(res, 500, { error: sanitizeUserFacingError(e) }, origin);
   }
 }
 
@@ -291,6 +344,6 @@ const server = createServer((req, res) => {
   void handler(req, res);
 });
 server.listen(PORT, HOST, () => {
-  console.log(`VYTHERA training daemon on http://${HOST}:${PORT}`);
+  console.log('VYTHERA training daemon · LOCAL SERVICE · loopback only');
   console.log(formatCapabilityLines(detectCapability()).join('\n'));
 });

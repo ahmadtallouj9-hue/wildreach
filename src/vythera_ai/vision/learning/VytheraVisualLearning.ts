@@ -25,6 +25,12 @@ import {
 import { vytheraVisualDataset } from './VytheraVisualDataset';
 import { listVisualConcepts, upsertConceptFromRecord } from './VytheraVisualConcepts';
 import {
+  generateTasksFromTeachExample,
+  vytheraVisualLearningTasks,
+} from './VytheraVisualLearningTasks';
+import type { VytheraVisualTaskType } from './VytheraVisualTaskTypes';
+import type { VytheraVisualLearningTask } from './VytheraVisualTaskGenerator';
+import {
   detectTrainingCapability,
   probeTrainingCapability,
   trainDaemonCreateJob,
@@ -471,6 +477,74 @@ export class VytheraVisualLearning {
     const res = rollbackToAdapter(adapterId);
     if (!res.ok) return { ok: false, message: res.error };
     return { ok: true, message: `Rolled back to ${res.adapter.name}` };
+  }
+
+  /**
+   * One image → many structured learning tasks (local analysis only).
+   * Does not train. Requires prior ANALYZE with local vision.
+   */
+  generateLearningTasks(
+    exampleId: string,
+    opts?: { enabledTypes?: VytheraVisualTaskType[] },
+  ): {
+    ok: boolean;
+    message: string;
+    stageLabel: string;
+    tasks: VytheraVisualLearningTask[];
+  } {
+    const ex = updateTeachExample(exampleId, {});
+    if (!ex) {
+      return { ok: false, message: 'Teach session not found', stageLabel: 'REFERENCE SAVED', tasks: [] };
+    }
+    if (!ex.analysis && !ex.correctedAnalysis) {
+      return {
+        ok: false,
+        message: 'IMAGE ANALYZED required first — LOCAL VISION MODEL NOT INSTALLED if analyze failed',
+        stageLabel: 'REFERENCE SAVED',
+        tasks: [],
+      };
+    }
+    const r = generateTasksFromTeachExample(ex, opts);
+    if (!r.ok) {
+      return { ok: false, message: r.error || 'Task generation failed', stageLabel: r.stageLabel, tasks: [] };
+    }
+    return {
+      ok: true,
+      message: `TASK GENERATED · ${r.tasks.length} learning tasks from one image (review before dataset)`,
+      stageLabel: r.stageLabel,
+      tasks: r.tasks,
+    };
+  }
+
+  addApprovedLearningTasks(exampleId: string): TeachSessionResult | null {
+    const ex = updateTeachExample(exampleId, {});
+    if (!ex) return null;
+    const analysis = ex.correctedAnalysis ?? ex.analysis;
+    if (!analysis) {
+      return {
+        example: ex,
+        stage: 'REFERENCE_SAVED',
+        stageLabel: LEARNING_STAGE_LABELS.REFERENCE_SAVED,
+        message: 'Analyze and approve tasks first',
+      };
+    }
+    const r = vytheraVisualLearningTasks.addApprovedToDataset(ex.imageHash, ex, analysis);
+    if (!r.ok) {
+      return {
+        example: ex,
+        stage: 'REFERENCE_SAVED',
+        stageLabel: LEARNING_STAGE_LABELS.REFERENCE_SAVED,
+        message: r.message,
+      };
+    }
+    const updated = updateTeachExample(exampleId, { lifecycle: 'DATASET' });
+    return {
+      example: updated ?? ex,
+      stage: 'ADDED_TO_LEARNING_DATASET',
+      stageLabel: LEARNING_STAGE_LABELS.ADDED_TO_LEARNING_DATASET,
+      message: r.message,
+      datasetRecordId: r.added[0]?.id,
+    };
   }
 
   dashboard(): {

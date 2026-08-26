@@ -48,6 +48,13 @@ export interface VisualRecordLike {
   target?: unknown;
   metadata?: unknown;
   timestamp?: number;
+  /** When set, export emits a single VLM row for this learn task (no fan-out). */
+  learnTaskType?: string;
+  taskId?: string;
+  sourceTeachSessionId?: string;
+  analysisModel?: string;
+  analysisVersion?: string;
+  approvalTimestamp?: number;
 }
 
 function findImageFile(imagesDir: string, hash: string): string | null {

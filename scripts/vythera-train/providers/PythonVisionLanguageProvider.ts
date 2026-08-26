@@ -18,6 +18,7 @@ import type {
   VytheraTrainingResult,
   VytheraCompletionManifest,
 } from '../types.ts';
+import { sanitizePersistedError } from '../sanitize-log.ts';
 
 function resolvePython(): string {
   const venv = venvPythonPath();
@@ -130,7 +131,7 @@ export class PythonVisionLanguageProvider implements VytheraTrainingProvider {
           resolve({
             ok: false,
             job,
-            error: err.slice(Math.max(0, err.length - 1200)),
+            error: sanitizePersistedError(err.slice(Math.max(0, err.length - 1200))),
           });
           return;
         }

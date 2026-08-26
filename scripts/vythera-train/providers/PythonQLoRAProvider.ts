@@ -10,6 +10,7 @@ import type {
   VytheraTrainingResult,
   VytheraCompletionManifest,
 } from '../types.ts';
+import { sanitizePersistedError } from '../sanitize-log.ts';
 
 function resolvePython(): string {
   const venv = venvPythonPath();
@@ -125,9 +126,9 @@ export class PythonQLoRAProvider implements VytheraTrainingProvider {
           resolve({
             ok: false,
             job,
-            error:
-              `Trainer exited ${code}. Adapter files missing or incomplete. `
-              + stderr.slice(-500),
+            error: sanitizePersistedError(
+              `Trainer exited ${code}. Adapter files missing or incomplete. ` + stderr.slice(-500),
+            ),
           });
           return;
         }

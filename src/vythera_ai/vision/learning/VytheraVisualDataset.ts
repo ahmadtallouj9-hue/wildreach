@@ -32,6 +32,7 @@ export interface VytheraVisualTrainingRecord {
     palette: VytheraExtractedPalette | null;
     voxelPlan: VytheraVoxelPlan | null;
     vytheraConcept: string;
+    structuredTarget?: unknown;
   };
   labels: string[];
   objects: string[];
@@ -47,6 +48,15 @@ export interface VytheraVisualTrainingRecord {
   modelVersion: string;
   datasetVersion: string;
   teachExampleId: string | null;
+  /** Multi-task learn type when record came from GENERATE LEARNING TASKS */
+  learnTaskType?: string;
+  taskId?: string;
+  sourceTeachSessionId?: string;
+  analysisModel?: string;
+  analysisVersion?: string;
+  approvalTimestamp?: number;
+  correctionVersion?: number;
+  learnTargets?: import('./VytheraTeachExample').VytheraLearnTargets;
 }
 
 export interface VytheraVisualDatasetVersion {
@@ -230,6 +240,98 @@ export class VytheraVisualDatasetManager {
     return { ok: true, record, stage: 'ADDED_TO_LEARNING_DATASET' };
   }
 
+  /**
+   * Add a training record from an approved multi-task learning task.
+   * Same imageHash may appear many times with distinct learnTaskType.
+   */
+  addFromLearningTask(opts: {
+    teach: import('./VytheraTeachExample').VytheraTeachExample;
+    analysis: import('../VytheraImageAnalysis').VytheraImageAnalysis;
+    learningTask: { id: string; type: string; confidence?: number };
+    structuredTarget: unknown;
+    datasetTask: VytheraVisualTask;
+    instruction: string;
+    datasetVersion: string;
+    learnTaskType: string;
+  }):
+    | { ok: true; record: VytheraVisualTrainingRecord; stage: VytheraLearningStage }
+    | { ok: false; error: string; stage: VytheraLearningStage } {
+    const { teach, analysis, learningTask, structuredTarget, datasetTask, instruction, datasetVersion, learnTaskType } =
+      opts;
+    const conf = learningTask.confidence ?? analysis.confidence;
+    if (conf < MIN_CONFIDENCE) {
+      return {
+        ok: false,
+        error: `Confidence ${conf} below threshold ${MIN_CONFIDENCE}`,
+        stage: 'REFERENCE_SAVED',
+      };
+    }
+    const dedupKey = `${teach.imageHash}::${learnTaskType}`;
+    const existing = loadRecords().find(
+      (r) =>
+        r.approvalState === 'approved' &&
+        `${r.imageHash}::${r.learnTaskType || r.task}` === dedupKey,
+    );
+    if (existing) {
+      return {
+        ok: false,
+        error: `Duplicate learning task sample (${existing.id})`,
+        stage: 'ADDED_TO_LEARNING_DATASET',
+      };
+    }
+
+    const expected = applyCorrectionsToAnalysis(analysis, teach.corrections);
+    const record: VytheraVisualTrainingRecord = {
+      type: 'vythera_visual_training_record',
+      id: `vds_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      imageHash: teach.imageHash,
+      source: 'teach',
+      task: datasetTask,
+      instruction,
+      input: {
+        analysis: teach.analysis,
+        learnTargets: teach.learnTargets,
+      },
+      expectedOutput: {
+        analysis: expected,
+        palette: teach.palette,
+        voxelPlan: teach.voxelPlan,
+        vytheraConcept: buildVytheraConceptLabel(expected, teach),
+        structuredTarget,
+      },
+      labels: [learnTaskType, expected.subject.category].slice(0, 32),
+      objects: (expected.scene?.objects.map((o) => o.name) ?? expected.features).slice(0, 32),
+      style: { ...expected.style },
+      palette: teach.palette,
+      scene: expected.scene ?? null,
+      voxelPlan: teach.voxelPlan,
+      corrections: teach.corrections,
+      confidence: conf,
+      approvalState: 'approved',
+      split: assignSplit(loadRecords().length),
+      timestamp: Date.now(),
+      modelVersion: teach.visionModel || 'base',
+      datasetVersion,
+      teachExampleId: teach.id,
+      learnTaskType,
+      taskId: learningTask.id,
+      sourceTeachSessionId: teach.id,
+      analysisModel: teach.visionModel,
+      analysisVersion: String(
+        (learningTask as { analysisVersion?: string }).analysisVersion || learningTask.id,
+      ),
+      correctionVersion: teach.corrections ? 1 : 0,
+      approvalTimestamp: Date.now(),
+      learnTargets: teach.learnTargets,
+    };
+
+    const list = loadRecords();
+    list.unshift(record);
+    saveRecords(list);
+    attachToVersion(datasetVersion, record.id);
+    return { ok: true, record, stage: 'ADDED_TO_LEARNING_DATASET' };
+  }
+
   rejectHash(imageHash: string, reason: string): void {
     const rej = loadRejected();
     rej.unshift({ imageHash, reason: reason.slice(0, 200), at: Date.now() });
@@ -244,8 +346,14 @@ export class VytheraVisualDatasetManager {
     return true;
   }
 
-  createVersion(label: string, notes = ''): VytheraVisualDatasetVersion {
-    const records = loadRecords().filter((r) => r.approvalState === 'approved');
+  createVersion(
+    label: string,
+    notes = '',
+    opts?: { empty?: boolean },
+  ): VytheraVisualDatasetVersion {
+    const records = opts?.empty
+      ? []
+      : loadRecords().filter((r) => r.approvalState === 'approved');
     const ver: VytheraVisualDatasetVersion = {
       id: `vdv_${Date.now()}`,
       label: label.slice(0, 64),

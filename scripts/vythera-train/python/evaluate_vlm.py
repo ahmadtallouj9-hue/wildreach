@@ -142,6 +142,7 @@ def main() -> None:
     device = next(base_model.parameters()).device
 
     base_scores = []
+    cand_by_task: dict[str, list[float]] = {}
     samples = []
     for row in rows:
         image = Image.open(resolve_image(data_dir, row)).convert("RGB")
@@ -157,6 +158,8 @@ def main() -> None:
                 "id": row.get("id"),
                 "phase": "base",
                 "score": sc,
+                "task": (row.get("metadata") or {}).get("task")
+                or (row.get("metadata") or {}).get("taskType"),
                 "instruction": instruction[:200],
                 "predictionPreview": text[:300],
             }
@@ -174,11 +177,15 @@ def main() -> None:
         pred = extract_json(text)
         sc = field_score(pred, target, text)
         cand_scores.append(sc)
+        meta = row.get("metadata") or {}
+        task_key = meta.get("taskType") or meta.get("task") or meta.get("learnTaskType") or "OVERALL"
+        cand_by_task.setdefault(str(task_key), []).append(sc)
         samples.append(
             {
                 "id": row.get("id"),
                 "phase": "candidate",
                 "score": sc,
+                "task": task_key,
                 "instruction": instruction[:200],
                 "predictionPreview": text[:300],
             }
@@ -186,6 +193,7 @@ def main() -> None:
 
     base_score = sum(base_scores) / len(base_scores)
     candidate_score = sum(cand_scores) / len(cand_scores)
+    by_task = {k: (sum(v) / len(v)) for k, v in cand_by_task.items() if v}
     report = {
         "modality": "VISION_LANGUAGE",
         "model": args.base,
@@ -197,7 +205,9 @@ def main() -> None:
             "candidateScore": candidate_score,
             "improved": candidate_score > base_score,
             "samples": len(rows),
+            "byTask": by_task,
         },
+        "byTask": by_task,
         "samples": samples,
         "configuration": {"max_new_tokens": 64, "image_side": 384},
         "timestamp": __import__("time").time() * 1000,

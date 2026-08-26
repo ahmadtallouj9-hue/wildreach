@@ -1,5 +1,6 @@
 import { lsGet, lsSet } from '../util/safeStorage';
 import type { VytheraVisionImage } from './VytheraVisionBackend';
+import { stripImagePrivacyMetadata } from '../security/VytheraImagePrivacy';
 
 const META_KEY = 'vythera.ai.image.refs';
 const DB_NAME = 'vythera-ai-images';
@@ -17,10 +18,18 @@ export interface VytheraImageRef {
   analysisId: string | null;
   createdAt: number;
   byteLength: number;
+  /** True when EXIF/device metadata was stripped from the stored training copy. */
+  privacyMetadataStripped?: boolean;
 }
 
 export type VytheraImageIngest =
-  | { ok: true; image: VytheraVisionImage; hash: string; fileName: string }
+  | {
+      ok: true;
+      image: VytheraVisionImage;
+      hash: string;
+      fileName: string;
+      privacyMetadataStripped?: boolean;
+    }
   | { ok: false; error: string };
 
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -49,25 +58,35 @@ export async function ingestLocalImageFile(file: File): Promise<VytheraImageInge
   if (file.size > 12 * 1024 * 1024) {
     return { ok: false, error: 'Image too large (max 12MB)' };
   }
-  const buf = await file.arrayBuffer();
-  const hash = await hashBytes(buf);
+  const raw = await file.arrayBuffer();
   let mime: VytheraVisionImage['mimeType'] = 'image/png';
   if (file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name)) mime = 'image/jpeg';
   else if (file.type === 'image/webp' || /\.webp$/i.test(file.name)) mime = 'image/webp';
 
+  // Sanitized training copy in memory — does not rewrite the user's original file on disk
+  const sanitized = await stripImagePrivacyMetadata(raw, mime);
+  const buf = sanitized.buffer;
+  mime = sanitized.mimeType;
+  const hash = await hashBytes(buf);
+  const baseName = file.name.replace(/^.*[/\\]/, '').slice(0, 128) || 'image.png';
+
   return {
     ok: true,
     hash,
-    fileName: file.name.slice(0, 128),
+    fileName: baseName,
+    privacyMetadataStripped: sanitized.stripped,
     image: {
       base64: toB64(buf),
       mimeType: mime,
-      fileName: file.name.slice(0, 128),
+      fileName: baseName,
     },
   };
 }
 
-/** Clipboard image when practical — local only. */
+/**
+ * Clipboard image when practical — local only.
+ * Processes image bytes only; never stores or logs clipboard text.
+ */
 export async function ingestLocalImageClipboard(
   items: DataTransferItemList | { length: number; [i: number]: DataTransferItem | ClipboardItem } | null | undefined,
 ): Promise<VytheraImageIngest> {
@@ -75,6 +94,7 @@ export async function ingestLocalImageClipboard(
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!;
     const type = 'type' in item ? String(item.type) : '';
+    // Ignore text/plain and other non-image clipboard payloads entirely
     if (!type.startsWith('image/')) continue;
     if ('getAsFile' in item && typeof item.getAsFile === 'function') {
       const file = item.getAsFile();

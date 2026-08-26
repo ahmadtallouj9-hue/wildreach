@@ -29,18 +29,28 @@ export type VlmLearnTask =
   | 'TERRAIN_UNDERSTANDING'
   | 'VOXEL_STRUCTURE'
   | 'ASSET_EXTRACTION'
-  | 'VYTHERA_STYLE_RECREATION';
+  | 'VYTHERA_STYLE_RECREATION'
+  | string;
 
-const TASK_PROMPTS: Record<VlmLearnTask, string> = {
+const TASK_PROMPTS: Record<string, string> = {
   STYLE_IDENTIFICATION: 'What visual style is this? Reply with structured VYTHERA JSON.',
   OBJECT_IDENTIFICATION: 'Identify the main objects. Reply with structured VYTHERA JSON.',
   MATERIAL_IDENTIFICATION: 'Identify materials present. Reply with structured VYTHERA JSON.',
   PALETTE_IDENTIFICATION: 'Extract the dominant VYTHERA palette. Reply with structured VYTHERA JSON.',
+  PALETTE_EXTRACTION: 'Extract the dominant VYTHERA palette. Reply with structured VYTHERA JSON.',
   SCENE_UNDERSTANDING: 'Describe the scene for VYTHERA. Reply with structured VYTHERA JSON.',
   TERRAIN_UNDERSTANDING: 'Describe terrain and ground materials. Reply with structured VYTHERA JSON.',
+  TERRAIN_ANALYSIS: 'Describe terrain and ground materials. Reply with structured VYTHERA JSON.',
   VOXEL_STRUCTURE: 'Describe this as a VYTHERA voxel structure. Reply with structured VYTHERA JSON.',
   ASSET_EXTRACTION: 'Extract a reusable VYTHERA asset description. Reply with structured JSON.',
   VYTHERA_STYLE_RECREATION: 'How should VYTHERA recreate this style? Reply with structured JSON.',
+  VYTHERA_STYLE:
+    'What makes this suitable for the VYTHERA visual language? Structured JSON only — generalized style rules.',
+  LIGHTING_ANALYSIS: 'Describe lighting and contrast for VYTHERA. Reply with structured JSON only.',
+  GAME_ASSET_PLAN:
+    'Convert this into a VYTHERA game asset plan. Structured JSON only — no Three.js code.',
+  IGNORE_BACKGROUND:
+    'Focus on the main subject only; list background elements to ignore. Structured JSON only.',
 };
 
 export interface VlmExportManifest {
@@ -63,6 +73,13 @@ function buildStructuredTarget(r: VisualRecordLike): Record<string, unknown> {
     r.expectedOutput && typeof r.expectedOutput === 'object'
       ? (r.expectedOutput as Record<string, unknown>)
       : {};
+  const structured =
+    expected.structuredTarget && typeof expected.structuredTarget === 'object'
+      ? (expected.structuredTarget as Record<string, unknown>)
+      : null;
+  if (structured) {
+    return { ...structured, confidence: r.confidence ?? structured.confidence ?? null };
+  }
   const corrections =
     r.corrections && typeof r.corrections === 'object'
       ? (r.corrections as Record<string, unknown>)
@@ -94,9 +111,18 @@ function buildStructuredTarget(r: VisualRecordLike): Record<string, unknown> {
   };
 }
 
-function tasksForRecord(r: VisualRecordLike): VlmLearnTask[] {
-  const out: VlmLearnTask[] = [];
-  // Always include a few core tasks from approved teach data
+/** Multi-task records already encode one learn type — do not fan out again. */
+function tasksForRecord(r: VisualRecordLike): string[] {
+  const meta =
+    r.metadata && typeof r.metadata === 'object'
+      ? (r.metadata as Record<string, unknown>)
+      : {};
+  const single =
+    r.learnTaskType ||
+    (typeof meta.learnTaskType === 'string' ? meta.learnTaskType : null);
+  if (single) return [single];
+
+  const out: string[] = [];
   out.push('STYLE_IDENTIFICATION', 'OBJECT_IDENTIFICATION', 'PALETTE_IDENTIFICATION');
   if (/terrain|ground|landscape/i.test(r.task + r.instruction)) {
     out.push('TERRAIN_UNDERSTANDING');
@@ -194,14 +220,26 @@ export function exportVlmDataset(
       const tasks = tasksForRecord(r);
       for (const task of tasks) {
         taskTypes.add(task);
+        const prompt =
+          TASK_PROMPTS[task] ||
+          r.instruction ||
+          'Describe this image for VYTHERA. Structured JSON only.';
         const row = {
           id: `${r.id}_${task}`,
           image: `images/${fileName}`,
-          instruction: TASK_PROMPTS[task],
+          instruction: prompt,
           input: r.instruction || '',
           target,
           metadata: {
             sourceHash: r.imageHash,
+            sourceImageHash: r.imageHash,
+            teachSessionId: r.sourceTeachSessionId ?? null,
+            taskId: r.taskId ?? null,
+            taskType: task,
+            learnTaskType: r.learnTaskType ?? task,
+            analysisModel: r.analysisModel ?? r.modelVersion ?? null,
+            analysisVersion: r.analysisVersion ?? null,
+            approvalTimestamp: r.approvalTimestamp ?? null,
             datasetVersion: version,
             learnTargets: tasks,
             task,

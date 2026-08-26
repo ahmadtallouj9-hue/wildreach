@@ -1,5 +1,12 @@
-/** Structured capability from local training daemon (127.0.0.1). */
+/** Structured capability from local training daemon (loopback service). */
 import type { VytheraLearningStage } from './VytheraLearningStates';
+import {
+  sanitizeCapabilityLines,
+  sanitizeCapabilityPayload,
+  sanitizeForDisplay,
+  sanitizeUserFacingError,
+} from '../../security/VytheraPrivacySanitizer';
+import { loadVytheraAISettings } from '../../inference/VytheraAISettings';
 
 export type TrainingModality =
   | 'TEXT'
@@ -68,6 +75,10 @@ function trainBaseUrl(): string {
   return 'http://127.0.0.1:8791';
 }
 
+function privacyOpts() {
+  return { privacyMode: loadVytheraAISettings().privacyMode !== false };
+}
+
 /** Legacy detect — browser cannot train weights itself. */
 export function detectTrainingCapability(opts?: {
   trainerScriptExists?: boolean;
@@ -81,8 +92,7 @@ export function detectTrainingCapability(opts?: {
     ollamaPresent: opts?.ollamaAvailable ?? false,
     available: false,
     stage: 'LOCAL_TRAINING_BACKEND_NOT_AVAILABLE',
-    message:
-      'Start the local training daemon: npm run vythera:train:daemon',
+    message: 'Start the local training daemon: npm run vythera:train:daemon',
     recommendedCommand: 'npm run vythera:train:daemon',
   };
 }
@@ -105,45 +115,55 @@ export async function probeTrainingCapability(
   try {
     const res = await fetch(`${trainBaseUrl()}/capability`, { signal });
     if (!res.ok) throw new Error('daemon error');
-    const local = (await res.json()) as VytheraLocalTrainingCapability;
-    local.daemonOnline = true;
-    const available = !!local.available;
+    const raw = (await res.json()) as VytheraLocalTrainingCapability;
+    const sanitized = sanitizeCapabilityPayload(
+      raw as unknown as Record<string, unknown>,
+    ) as unknown as VytheraLocalTrainingCapability;
+    sanitized.daemonOnline = true;
+    if (sanitized.lines) sanitized.lines = sanitizeCapabilityLines(sanitized.lines);
+    if (sanitized.reason) {
+      sanitized.reason = sanitizeForDisplay(sanitized.reason, privacyOpts());
+    }
+    const available = !!sanitized.available;
     return {
       browserCanTrain: false,
-      trainerScriptPresent: !!local.trainer?.available,
-      pythonPeftHint: !!local.packages?.peft,
+      trainerScriptPresent: !!sanitized.trainer?.available,
+      pythonPeftHint: !!sanitized.packages?.peft,
       ollamaPresent: ollamaAvailable,
       available,
       stage: available ? 'LOCAL_TRAINING_READY' : 'LOCAL_TRAINING_BACKEND_NOT_AVAILABLE',
-      message:
-        local.reason ??
-        (available
-          ? 'LOCAL TRAINING READY'
-          : 'LOCAL TRAINING BACKEND NOT AVAILABLE'),
+      message: sanitizeForDisplay(
+        sanitized.reason ??
+          (available ? 'LOCAL TRAINING READY' : 'LOCAL TRAINING BACKEND NOT AVAILABLE'),
+        privacyOpts(),
+      ),
       recommendedCommand: available
         ? 'Use START TRAINING in Studio (daemon online)'
         : 'npm run vythera:train:setup && npm run vythera:train:daemon',
-      local,
+      local: sanitized,
     };
-  } catch {
+  } catch (e) {
     return {
       ...detectTrainingCapability({
         ollamaAvailable,
         trainerScriptExists: true,
         pythonPeftDetected: false,
       }),
-      message:
-        'LOCAL TRAINING BACKEND NOT AVAILABLE — training daemon offline (npm run vythera:train:daemon)',
+      message: sanitizeUserFacingError(
+        e,
+        'LOCAL TRAINING SERVICE OFFLINE — run npm run vythera:train:daemon',
+      ),
       local: {
         available: false,
         platform: 'unknown',
         python: { available: false },
         gpu: { available: false, detected: false },
         trainer: { available: false },
-        reason: 'Daemon not reachable on 127.0.0.1:8791',
+        reason: 'LOCAL TRAINING SERVICE OFFLINE',
         stage: 'LOCAL_TRAINING_BACKEND_NOT_AVAILABLE',
         daemonOnline: false,
         lines: [
+          'LOCAL TRAINING SERVICE: OFFLINE',
           'Python: unknown (daemon offline)',
           'GPU: unknown (daemon offline)',
           'CUDA: unknown (daemon offline)',
@@ -174,7 +194,7 @@ export async function trainDaemonCreateJob(body: {
   });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(t.slice(0, 200) || 'Failed to create training job');
+    throw new Error(sanitizeUserFacingError(t.slice(0, 200) || 'Failed to create training job'));
   }
   return res.json() as Promise<{
     job: { id: string; status: string };
@@ -190,13 +210,17 @@ export async function trainDaemonJobAction(
     method: 'POST',
   });
   const data = await res.json();
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Job action failed');
+  if (!res.ok) {
+    throw new Error(
+      sanitizeUserFacingError((data as { error?: string }).error ?? 'Job action failed'),
+    );
+  }
   return data;
 }
 
 export async function trainDaemonListJobs(): Promise<{ jobs: unknown[] }> {
   const res = await fetch(`${trainBaseUrl()}/jobs`);
-  if (!res.ok) throw new Error('Cannot list jobs — is the daemon running?');
+  if (!res.ok) throw new Error('LOCAL TRAINING SERVICE UNAVAILABLE');
   return res.json() as Promise<{ jobs: unknown[] }>;
 }
 

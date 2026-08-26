@@ -18,6 +18,10 @@ export interface VytheraAISettings {
   maxRetries: number;
   temperature: number;
   debug: boolean;
+  /** ON by default — redact UI paths/IPs; core secret redaction always on. */
+  privacyMode: boolean;
+  /** Explicit opt-in for verbose diagnostics (never default). */
+  developerDiagnostics: boolean;
 }
 
 export const VYTHERA_AI_DEFAULTS: VytheraAISettings = {
@@ -32,6 +36,8 @@ export const VYTHERA_AI_DEFAULTS: VytheraAISettings = {
   maxRetries: 2,
   temperature: 0.4,
   debug: false,
+  privacyMode: true,
+  developerDiagnostics: false,
 };
 
 const LOCAL = new Set(['127.0.0.1', 'localhost', '::1']);

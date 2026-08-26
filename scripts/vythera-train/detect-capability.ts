@@ -371,7 +371,7 @@ export function formatCapabilityLines(c: VytheraTrainingCapability): string[] {
     `CUDA RUNTIME AVAILABLE: ${c.cuda.runtimeAvailable ? yn(true, c.cuda.runtimeVersion) : 'MISSING'}`,
     `CUDA TOOLKIT AVAILABLE: ${c.cuda.toolkitAvailable ? yn(true, c.cuda.toolkitVersion) : 'MISSING'}`,
     `PYTORCH CUDA AVAILABLE: ${c.cuda.pytorchCudaAvailable ? yn(true, c.cuda.pytorchCudaVersion) : 'MISSING'}`,
-    `Python: ${c.python.available ? yn(true, `${c.python.version ?? ''} (${c.python.executable ?? ''})`) : 'MISSING'}`,
+    `Python: ${c.python.available ? yn(true, c.python.version ?? '') : 'MISSING'}`,
     `pip: ${c.python.pipAvailable ? yn(true, c.python.pipVersion) : 'MISSING'}`,
     `torch: ${c.packages.torch ? yn(true, c.packages.torchVersion) : 'MISSING'}`,
     `transformers: ${c.packages.transformers ? 'OK' : 'MISSING'}`,
