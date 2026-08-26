@@ -1,0 +1,296 @@
+/* MOD Studio — VYTHERA design system chrome (not legacy modelEditor chrome) */
+.ms-app {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: min(78vh, 820px);
+  height: min(78vh, 820px);
+  background: rgba(7, 10, 14, 0.58);
+  border: 1px solid var(--vy-line);
+  border-radius: var(--vy-radius);
+  overflow: hidden;
+  color: var(--vy-ink);
+  font-family: var(--vy-font-ui);
+}
+.ms-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--vy-line);
+  background: linear-gradient(180deg, var(--vy-surface-2), var(--vy-bg));
+}
+.ms-nav__brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 8px 14px;
+}
+.ms-nav__mark {
+  color: var(--vy-gold);
+  font-size: 1.2rem;
+}
+.ms-nav__title {
+  margin: 0;
+  font-family: var(--vy-font-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+.ms-nav__sub,
+.ms-nav__hint,
+.ms-muted,
+.ms-kicker {
+  margin: 0;
+  color: var(--vy-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+.ms-nav__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.ms-nav__btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--vy-ink-dim);
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--vy-radius);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ms-nav__btn:hover {
+  color: var(--vy-ink);
+  background: var(--vy-surface-3);
+}
+.ms-nav__btn.is-active {
+  color: var(--vy-gold);
+  border-color: rgba(201, 162, 39, 0.35);
+  background: var(--vy-gold-dim);
+}
+.ms-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.ms-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vy-line);
+}
+.ms-top__title {
+  margin: 0;
+  font-family: var(--vy-font-display);
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+}
+.ms-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+.ms-hero {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.ms-hero h3 {
+  margin: 6px 0 8px;
+  font-family: var(--vy-font-display);
+  font-weight: 500;
+}
+.ms-statgrid,
+.ms-statgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.ms-stat {
+  padding: 12px;
+  border: 1px solid var(--vy-line);
+  border-radius: var(--vy-radius);
+  background: var(--vy-surface-2);
+}
+.ms-stat span {
+  display: block;
+  font-family: var(--vy-font-mono);
+  font-size: 1.2rem;
+  color: var(--vy-gold);
+}
+.ms-stat em {
+  font-style: normal;
+  color: var(--vy-muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.ms-banner {
+  padding: 10px 12px;
+  border: 1px dashed rgba(201, 162, 39, 0.35);
+  background: var(--vy-gold-dim);
+  color: var(--vy-ink-dim);
+  font-size: 0.72rem;
+  margin: 0 0 16px;
+}
+.ms-section-title {
+  margin: 18px 0 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vy-muted);
+}
+.ms-cardgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.ms-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--vy-line);
+  border-radius: var(--vy-radius);
+  background: var(--vy-surface-2);
+  cursor: pointer;
+  transition: border-color var(--vy-fast) var(--vy-ease);
+}
+.ms-card:hover {
+  border-color: rgba(201, 162, 39, 0.4);
+}
+.ms-card__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--vy-radius);
+  background: var(--vy-surface-3) center/cover no-repeat;
+  flex-shrink: 0;
+}
+.ms-card__body h5 {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+}
+.ms-card__body p {
+  margin: 0 0 6px;
+  color: var(--vy-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ms-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.62rem;
+  color: var(--vy-muted);
+  font-family: var(--vy-font-mono);
+}
+.ms-pill {
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--vy-line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.ms-pill--published {
+  color: var(--vy-moss);
+  border-color: rgba(95, 158, 120, 0.4);
+}
+.ms-pill--draft {
+  color: var(--vy-warn);
+}
+.ms-form {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+}
+.ms-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vy-muted);
+}
+.vy-input {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--vy-line);
+  background: var(--vy-bg);
+  color: var(--vy-ink);
+  border-radius: var(--vy-radius);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.ms-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ms-panel {
+  max-width: 720px;
+}
+.ms-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--vy-ink-dim);
+  font-size: 0.82rem;
+}
+.ms-steps {
+  color: var(--vy-ink-dim);
+  font-size: 0.82rem;
+}
+.ms-ok {
+  color: var(--vy-ok);
+}
+.ms-err {
+  color: var(--vy-err);
+}
+.ms-editor-shell,
+.ms-editor-host {
+  height: 100%;
+  min-height: 560px;
+}
+.ms-editor-host {
+  border: 1px solid var(--vy-line);
+  border-radius: var(--vy-radius);
+  overflow: hidden;
+  background: #070a0e;
+}
+.ms-body[hidden],
+.ms-editor-shell[hidden] {
+  display: none !important;
+}
+@media (max-width: 900px) {
+  .ms-app {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 70vh;
+  }
+  .ms-nav {
+    border-right: none;
+    border-bottom: 1px solid var(--vy-line);
+  }
+  .ms-nav__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .ms-hero {
+    grid-template-columns: 1fr;
+  }
+}

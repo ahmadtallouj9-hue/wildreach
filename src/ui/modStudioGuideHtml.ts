@@ -14,18 +14,15 @@ export const MOD_STUDIO_GUIDE_HTML = `
             <li><strong>Modeling</strong> — place and erase voxels. Build swords, dragons, animals, characters, cities.</li>
             <li><strong>Texturing</strong> — paint the 16×16 tile for each color, or click faces on the 3D model (UV).</li>
             <li><strong>Animation</strong> — split into parts, pose with gizmos, add timeline keyframes.</li>
-            <li><strong>Character</strong> — skin preview, stamp your skin character, Studio AI, workshop tests.</li>
+            <li><strong>Character</strong> — skin preview, stamp your skin character, workshop tests. Use <strong>AI Studio</strong> from the main menu for chat and training.</li>
           </ul>
         </section>
         <section>
-          <h3>Studio AI (cloud)</h3>
+          <h3>AI Studio (separate)</h3>
           <ul>
-            <li><strong>Character → Studio AI</strong> — talk naturally, no local install.</li>
-            <li><strong>Walk cycle / bow / idle</strong> → real keyframe animation in the timeline.</li>
-            <li><strong>Generate a voxel dragon</strong> → AI builds into the viewport live.</li>
-            <li><strong>Texture: …</strong> → 16×16 pixel art on a block color.</li>
-            <li><strong>Cities &amp; stories</strong> → multi-step project plans.</li>
-            <li>Powered by Wildreach Studio AI (trained on voxel/animation/modding knowledge). Optional BYOK in ⚙.</li>
+            <li><strong>Main menu → AI Studio</strong> — full local AI workspace (chat, vision, datasets, training).</li>
+            <li>Open <strong>MOD Studio</strong> too if you want AI tools to apply into the live voxel project.</li>
+            <li>Cloud AI stays off. Optional BYOK only where settings allow.</li>
           </ul>
         </section>
         <section>

@@ -57,9 +57,21 @@ import { replaceSeedInUrl, buildShareUrl, publicPlayUrl } from './shareUrl';
 import { SocialClient } from '../net/SocialClient';
 import { bindUiSounds, uiSound } from './uiSound';
 import { FriendsPanel } from './FriendsPanel';
-import { MainMenuSky } from './MainMenuSky';
+import { MainMenuSky, type VytheraBgContext } from './MainMenuSky';
+import { loadBgPrefs, saveBgPrefs, type BgAnimationLevel, type BgQuality, type VytheraBgMode } from './background/backgroundPrefs';
+import './background/vythera-world-bg.css';
 import { TerrainMaterials } from '../render/TerrainMaterials';
-import { VoxelEditorUi } from './VoxelEditorUi';
+import { ModStudioApp } from './modstudio/ModStudioApp';
+import { ModHubApp } from './modhub/ModHubApp';
+import { VytheraAIStudio } from '../vythera_ai/ui/VytheraAIStudio';
+import {
+  loadOnlineSettings,
+  saveOnlineSettings,
+  type VytheraAIMode,
+  type VytheraDataSharing,
+  type VytheraModHubMode,
+} from '../online/settings/onlineSettings';
+import { resolveServiceUiStatus } from '../online/status/serviceStatus';
 
 export type MenuAction =
   | { type: 'play'; seed: string }
@@ -67,7 +79,20 @@ export type MenuAction =
   | { type: 'edit-hud' }
   | { type: 'prefs'; profile: Profile; settings: Settings; skinPixels?: Uint8ClampedArray };
 
-type Panel = 'home' | 'settings' | 'customize' | 'multiplayer' | 'world' | 'mod';
+type Panel = 'home' | 'settings' | 'customize' | 'multiplayer' | 'world' | 'mod' | 'hub' | 'ai'
+
+function panelToBgContext(panel: Panel): VytheraBgContext {
+  switch (panel) {
+    case 'world': return 'world';
+    case 'hub': return 'hub';
+    case 'mod': return 'studio';
+    case 'settings': return 'settings';
+    case 'ai': return 'ai';
+    case 'customize': return 'customize';
+    case 'multiplayer': return 'multiplayer';
+    default: return 'home';
+  }
+}
 
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -127,7 +152,9 @@ export class MainMenu {
   private worldView: 'list' | 'create' = 'list';
   private menuSky = new MainMenuSky();
   private modMaterials: TerrainMaterials | null = null;
-  private modWorkshop: VoxelEditorUi | null = null;
+  private modStudio: ModStudioApp | null = null;
+  private modHub: ModHubApp | null = null;
+  private aiStudio: VytheraAIStudio | null = null;
 
   constructor(private social?: SocialClient) {
     this.root = document.createElement('div');
@@ -174,7 +201,9 @@ export class MainMenu {
             <button type="button" class="vy-btn" data-action="worlds">Worlds</button>
             <button type="button" class="vy-btn" data-action="multiplayer">Multiplayer</button>
             <button type="button" class="vy-btn" data-action="customize">Character</button>
-            <button type="button" class="vy-btn" data-action="mod">Vythera AI</button>
+            <button type="button" class="vy-btn" data-action="mod">MOD Studio</button>
+            <button type="button" class="vy-btn" data-action="hub">MOD Hub</button>
+            <button type="button" class="vy-btn" data-action="ai">AI Studio</button>
             <button type="button" class="vy-btn" data-action="settings">Settings</button>
           </nav>
           <aside class="vy-home__player">
@@ -221,6 +250,36 @@ export class MainMenu {
             ${fieldRange('Render distance', 'dist-range', 'dist-val', 3, 8, 1)}
             ${fieldRange('Brightness', 'bright-range', 'bright-val', 0.6, 1.4, 0.05)}
             ${fieldRange('Clouds', 'cloud-range', 'cloud-val', 0, 1, 0.05)}
+            <div class="vy-field"><span>Background</span>
+              ${seg('bg-mode', [
+                ['dynamic', 'Dynamic World'],
+                ['static', 'Static'],
+                ['performance', 'Performance'],
+              ])}
+            </div>
+            <div class="vy-field"><span>Background animation</span>
+              ${seg('bg-animation', [
+                ['off', 'Off'],
+                ['low', 'Low'],
+                ['normal', 'Normal'],
+                ['high', 'High'],
+              ])}
+            </div>
+            <div class="vy-field"><span>Background quality</span>
+              ${seg('bg-quality', [
+                ['low', 'Low'],
+                ['medium', 'Medium'],
+                ['high', 'High'],
+                ['ultra', 'Ultra'],
+              ])}
+            </div>
+            <label class="vy-field"><span><input type="checkbox" class="bg-cloud-check" checked /> Cloud motion</span></label>
+            <label class="vy-field"><span><input type="checkbox" class="bg-veg-check" checked /> Vegetation motion</span></label>
+            <label class="vy-field"><span><input type="checkbox" class="bg-water-check" checked /> Water motion</span></label>
+            <label class="vy-field"><span><input type="checkbox" class="bg-atmo-enable-check" checked /> Atmosphere</span></label>
+            <label class="vy-field"><span><input type="checkbox" class="bg-motion-check" /> Camera drift</span></label>
+            <label class="vy-field"><span><input type="checkbox" class="bg-particles-check" checked /> Ambient life</span></label>
+${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
             <label class="vy-field"><span><input type="checkbox" class="uw-fx-check" checked /> Underwater effects</span></label>
             <label class="vy-field"><span><input type="checkbox" class="show-fps-check" /> Show FPS</span></label>
           </div>
@@ -232,18 +291,47 @@ export class MainMenu {
             </div>
           </div>
           <div data-settings-pane="accessibility" hidden>
-            <p style="font-size:0.75rem;color:var(--vy-muted);line-height:1.5">UI follows system reduced-motion. Esc closes panels · E inventory · J journal · M map.</p>
+            <p style="font-size:0.75rem;color:var(--vy-muted);line-height:1.5">UI follows system reduced-motion (background motion, particles, and camera drift reduce automatically). Esc closes panels · E inventory · J journal · M map.</p>
           </div>
           <div data-settings-pane="privacy" hidden>
+            <p class="online-service-label" style="margin:0 0 10px;font-size:0.75rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--vy-muted)">VYTHERA LOCAL ONLY</p>
+            <div class="vy-field"><span>AI mode</span>
+              <div class="vy-seg" role="group" aria-label="AI mode">
+                <button type="button" class="vy-seg__btn is-active" data-ai-mode="LOCAL">Local</button>
+                <button type="button" class="vy-seg__btn" data-ai-mode="ONLINE">Online</button>
+                <button type="button" class="vy-seg__btn" data-ai-mode="AUTO">Auto</button>
+              </div>
+            </div>
+            <div class="vy-field"><span>Mod Hub</span>
+              <div class="vy-seg" role="group" aria-label="Mod Hub mode">
+                <button type="button" class="vy-seg__btn is-active" data-modhub-mode="OFFLINE">Offline</button>
+                <button type="button" class="vy-seg__btn" data-modhub-mode="ONLINE">Online</button>
+              </div>
+            </div>
+            <div class="vy-field"><span>Data sharing</span>
+              <div class="vy-seg" role="group" aria-label="Data sharing">
+                <button type="button" class="vy-seg__btn is-active" data-data-sharing="PRIVATE">Private</button>
+                <button type="button" class="vy-seg__btn" data-data-sharing="PUBLISHABLE">Publishable</button>
+                <button type="button" class="vy-seg__btn" data-data-sharing="PUBLIC">Public</button>
+              </div>
+            </div>
+            <label class="vy-field"><span><input type="checkbox" class="cloud-ai-check" /> Cloud / Online AI</span></label>
+            <label class="vy-field"><span>Online API base URL</span>
+              <input type="url" class="online-api-url" placeholder="https://api.example.com" autocomplete="off" spellcheck="false" />
+            </label>
             <dl class="vy-privacy-grid">
               <dt>Local AI</dt><dd>ON</dd>
-              <dt>Cloud AI</dt><dd data-off>OFF</dd>
+              <dt>Cloud AI</dt><dd class="cloud-ai-status" data-off>OFF</dd>
               <dt>Telemetry</dt><dd data-off>OFF</dd>
               <dt>Local vision</dt><dd>AVAILABLE</dd>
               <dt>Local training</dt><dd>AVAILABLE</dd>
               <dt>Network exposure</dt><dd>LOCAL ONLY</dd>
             </dl>
-            <p style="margin-top:10px;font-size:0.7rem;color:var(--vy-faint)">No IPs, paths, tokens, or credentials are shown.</p>
+            <p style="margin-top:10px;font-size:0.7rem;color:var(--vy-faint);line-height:1.45">
+              LOCAL keeps data on this computer. ONLINE sends only data allowed by privacy rules.
+              AUTO tries local first; private data never auto-uploads if local AI is offline.
+              Training datasets and unpublished adapters stay on this PC unless you explicitly publish.
+            </p>
           </div>
         </div>
       </div>
@@ -389,25 +477,39 @@ export class MainMenu {
 
       <div class="vy-menu__stage" data-panel="mod" hidden>
         <div class="vy-sheet" style="width:min(1200px,98vw);max-height:96vh">
-          <header class="vy-sheet__head mod-panel-header">
+          <header class="vy-sheet__head">
             <button type="button" class="vy-btn vy-btn--ghost" data-action="home">Back</button>
-            <h2 class="vy-sheet__title">Vythera AI</h2>
-            <div class="vy-actions">
-              <span class="vy-chip">Shape maker</span>
-              <button type="button" class="vy-btn" data-action="reset-view" title="Reset camera">↺</button>
-              <button type="button" class="vy-btn" data-action="clear" title="Clear model">Clear</button>
-            </div>
+            <h2 class="vy-sheet__title">MOD Studio</h2>
+            <span class="vy-chip">Creator</span>
           </header>
-          <p style="margin:0 0 8px;font-size:0.7rem;color:var(--vy-muted);letter-spacing:0.08em;text-transform:uppercase">Share play link</p>
-          <div class="vy-actions" style="margin-bottom:12px;align-items:center">
-            <a class="menu-play-link" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;font-family:var(--vy-font-mono);font-size:0.75rem;color:var(--vy-ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></a>
-            <button type="button" class="vy-btn" data-action="copy-play-link">Copy</button>
-          </div>
-          <p class="menu-play-link-toast" hidden style="font-size:0.7rem;color:var(--vy-moss)">Link copied</p>
-          <div class="mod-workshop-mount vy-tool-host"></div>
+          <div class="mod-studio-mount vy-tool-host"></div>
         </div>
       </div>
 
+      <div class="vy-menu__stage" data-panel="hub" hidden>
+        <div class="vy-sheet" style="width:min(1200px,98vw);max-height:96vh">
+          <header class="vy-sheet__head">
+            <button type="button" class="vy-btn vy-btn--ghost" data-action="home">Back</button>
+            <h2 class="vy-sheet__title">MOD Hub</h2>
+            <span class="vy-chip">Discover</span>
+          </header>
+          <div class="mod-hub-mount vy-tool-host"></div>
+        </div>
+      </div>
+
+      <div class="vy-menu__stage" data-panel="ai" hidden>
+        <div class="vy-sheet" style="width:min(1200px,98vw);max-height:96vh">
+          <header class="vy-sheet__head">
+            <button type="button" class="vy-btn vy-btn--ghost" data-action="home">Back</button>
+            <h2 class="vy-sheet__title">AI Studio</h2>
+            <span class="vy-chip">Local only</span>
+          </header>
+          <p style="margin:0 0 10px;font-size:0.72rem;color:var(--vy-muted);line-height:1.45">
+            Chat, image learning, datasets, training, and tools. Apply-to-model tools use an open MOD Studio project when available.
+          </p>
+          <div class="ai-studio-mount vy-ai-studio-host"></div>
+        </div>
+      </div>
       <div class="vy-menu__stage" data-panel="multiplayer" hidden>
         <div class="vy-sheet">
           <header class="vy-sheet__head">
@@ -548,6 +650,8 @@ export class MainMenu {
     go('settings', () => this.showPanel('settings'));
     go('customize', () => this.showPanel('customize'));
     go('mod', () => this.showPanel('mod'));
+    go('hub', () => this.showPanel('hub'));
+    go('ai', () => this.showPanel('ai'));
     go('multiplayer', () => this.openMultiplayerPanel());
     go('home', () => this.showPanel('home'));
     go('world-back', () => {
@@ -570,7 +674,9 @@ export class MainMenu {
     });
     go('save-settings', () => {
       this.collectSettingsFromUi();
+      this.collectBgPrefsFromUi();
       saveSettings(this.settings);
+      this.menuSky.reloadPrefs();
       this.emitPrefs();
       this.showPanel('home');
     });
@@ -620,14 +726,27 @@ export class MainMenu {
     this.heroPreview?.stop();
     this.homePreview?.stop();
     this.skinEditor?.setActive(false);
-    this.modWorkshop?.stop();
+    this.modStudio?.stop();
     this.menuSky.stop();
+    this.root.classList.remove('vy-menu--world-entry');
     this.root.hidden = true;
+  }
+
+  /** Keep cinematic world bg visible under the translucent loading overlay. */
+  beginWorldEntry(): void {
+    this.root.hidden = false;
+    this.root.classList.add('vy-menu--world-entry');
+    this.root.querySelectorAll<HTMLElement>('.vy-menu__stage').forEach((el) => {
+      el.hidden = true;
+    });
+    this.menuSky.setContext('loading');
+    this.menuSky.start();
   }
 
   show(opts?: { resumable?: boolean }): void {
     this.hasSession = opts?.resumable ?? this.hasSession;
     this.root.hidden = false;
+    this.root.classList.remove('vy-menu--world-entry');
     this.showPanel('home');
     requestAnimationFrame(() => this.menuSky.start());
   }
@@ -639,14 +758,6 @@ export class MainMenu {
   openPanel(panel: Panel): void {
     if (panel === 'multiplayer') this.openMultiplayerPanel();
     else this.showPanel(panel);
-  }
-
-  private syncPlayLink(): void {
-    const url = publicPlayUrl();
-    const link = this.root.querySelector<HTMLAnchorElement>('.menu-play-link');
-    if (!link) return;
-    link.href = url;
-    link.textContent = url;
   }
 
   private async copyPlayLink(): Promise<void> {
@@ -934,8 +1045,8 @@ export class MainMenu {
   }
 
   private showPanel(panel: Panel): void {
-    if (panel === 'home') this.menuSky.start();
-    else this.menuSky.stop();
+    this.menuSky.setContext(panelToBgContext(panel));
+    this.menuSky.start();
 
     uiSound('menu_transition');
 
@@ -951,7 +1062,7 @@ export class MainMenu {
     if (panel === 'home') {
       this.heroPreview?.stop();
       this.skinEditor?.setActive(false);
-      this.modWorkshop?.stop();
+      this.modStudio?.stop();
       this.ensureHomePreview();
       this.syncHomePreview();
       requestAnimationFrame(() => {
@@ -973,12 +1084,25 @@ export class MainMenu {
       this.homePreview?.stop();
       this.heroPreview?.stop();
       this.skinEditor?.setActive(false);
-      this.syncPlayLink();
-      this.ensureModWorkshop();
+      this.ensureModStudio();
+      this.wireAiToMod();
       requestAnimationFrame(() => {
-        this.modWorkshop?.start();
-        this.modWorkshop?.layout();
+        this.modStudio?.start();
+        this.modStudio?.layout();
       });
+    } else if (panel === 'hub') {
+      this.homePreview?.stop();
+      this.heroPreview?.stop();
+      this.skinEditor?.setActive(false);
+      this.modStudio?.stop();
+      this.ensureModHub();
+    } else if (panel === 'ai') {
+      this.homePreview?.stop();
+      this.heroPreview?.stop();
+      this.skinEditor?.setActive(false);
+      this.modStudio?.stop();
+      this.ensureAiStudio();
+      this.wireAiToMod();
     } else if (panel === 'multiplayer') {
       this.friendsPanel?.refresh();
       this.homePreview?.stop();
@@ -988,27 +1112,62 @@ export class MainMenu {
       this.homePreview?.stop();
       this.heroPreview?.stop();
       this.skinEditor?.setActive(false);
-      this.modWorkshop?.stop();
+      this.modStudio?.stop();
     }
   }
 
-  private ensureModWorkshop(): void {
-    if (this.modWorkshop) return;
-    const mount = this.root.querySelector('.mod-workshop-mount');
+  private ensureModStudio(): void {
+    if (this.modStudio) return;
+    const mount = this.root.querySelector('.mod-studio-mount');
     if (!mount) return;
     try {
       this.modMaterials = new TerrainMaterials();
-      this.modWorkshop = new VoxelEditorUi(this.modMaterials);
-      this.modWorkshop.mount(mount as HTMLElement);
-      const header = this.root.querySelector('.mod-panel-header');
-      if (header) this.modWorkshop.bindHeaderActions(header as HTMLElement);
+      this.modStudio = new ModStudioApp(this.modMaterials);
+      mount.appendChild(this.modStudio.root);
     } catch (err) {
-      console.error('[mod-workshop]', err);
+      console.error('[mod-studio]', err);
       mount.textContent =
-        err instanceof Error ? `Mod editor failed to load: ${err.message}` : 'Mod editor failed to load';
+        err instanceof Error ? `MOD Studio failed to load: ${err.message}` : 'MOD Studio failed to load';
     }
   }
 
+  private ensureModHub(): void {
+    if (this.modHub) {
+      this.modHub.refresh();
+      return;
+    }
+    const mount = this.root.querySelector('.mod-hub-mount');
+    if (!mount) return;
+    try {
+      this.modHub = new ModHubApp();
+      mount.appendChild(this.modHub.root);
+    } catch (err) {
+      console.error('[mod-hub]', err);
+      mount.textContent =
+        err instanceof Error ? `MOD Hub failed to load: ${err.message}` : 'MOD Hub failed to load';
+    }
+  }
+
+  private ensureAiStudio(): void {
+    if (this.aiStudio) return;
+    const mount = this.root.querySelector('.ai-studio-mount');
+    if (!mount) return;
+    this.aiStudio = new VytheraAIStudio(
+      () => undefined,
+      (msg) => console.info('[ai-studio]', msg),
+    );
+    mount.appendChild(this.aiStudio.root);
+    this.wireAiToMod();
+  }
+
+  private wireAiToMod(): void {
+    if (!this.aiStudio || !this.modStudio) return;
+    this.aiStudio.setInferenceHost(() => {
+      const host = this.modStudio!.getEditorHost();
+      if (!host) throw new Error('MOD Studio editor host unavailable');
+      return host;
+    });
+  }
   private updateCharacterMeta(name?: string, tag?: string): void {
     const nameEl = this.root.querySelector('.profile-preview-name');
     const tagEl = this.root.querySelector('.profile-preview-tag');
@@ -1359,7 +1518,49 @@ export class MainMenu {
         this.root.querySelectorAll<HTMLElement>('[data-settings-pane]').forEach((pane) => {
           pane.hidden = pane.dataset.settingsPane !== cat;
         });
+        if (cat === 'privacy') void this.refreshOnlineServiceLabel();
       });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-ai-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.root.querySelectorAll<HTMLButtonElement>('[data-ai-mode]').forEach((b) => {
+          b.classList.toggle('is-active', b === btn);
+        });
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-modhub-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.root.querySelectorAll<HTMLButtonElement>('[data-modhub-mode]').forEach((b) => {
+          b.classList.toggle('is-active', b === btn);
+        });
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-data-sharing]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.root.querySelectorAll<HTMLButtonElement>('[data-data-sharing]').forEach((b) => {
+          b.classList.toggle('is-active', b === btn);
+        });
+      });
+    });
+    const bindBgSeg = (attr: string) => {
+      this.root
+        .querySelectorAll<HTMLButtonElement>(`[data-panel="settings"] [data-${attr}]`)
+        .forEach((btn) => {
+          btn.addEventListener('click', () => {
+            this.root
+              .querySelectorAll<HTMLButtonElement>(`[data-panel="settings"] [data-${attr}]`)
+              .forEach((b) => {
+                b.classList.toggle('is-active', b === btn);
+              });
+          });
+        });
+    };
+    bindBgSeg('bg-mode');
+    bindBgSeg('bg-animation');
+    bindBgSeg('bg-quality');
+    const atmo = this.root.querySelector<HTMLInputElement>('.bg-atmo-range');
+    atmo?.addEventListener('input', () => {
+      this.root.querySelector('.bg-atmo-val')!.textContent = Number(atmo.value).toFixed(2);
     });
   }
 
@@ -1385,7 +1586,9 @@ export class MainMenu {
     this.root.querySelector('.dist-val')!.textContent = String(this.settings.renderDistance);
     this.root.querySelector('.bright-val')!.textContent = this.settings.brightness.toFixed(2);
     this.root.querySelector('.cloud-val')!.textContent = `${Math.round(this.settings.clouds * 100)}%`;
+    this.syncBgPrefsUi();
     this.syncViewSeg();
+    this.syncOnlineSettingsUi();
     const editHud = this.root.querySelector<HTMLButtonElement>('[data-action="edit-hud"]');
     const hint = this.root.querySelector<HTMLElement>('.edit-hud-hint');
     if (editHud) {
@@ -1401,9 +1604,144 @@ export class MainMenu {
     }
   }
 
+  private syncOnlineSettingsUi(): void {
+    const online = loadOnlineSettings();
+    this.root.querySelectorAll<HTMLButtonElement>('[data-ai-mode]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.aiMode === online.aiMode);
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-modhub-mode]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.modhubMode === online.modHubMode);
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-data-sharing]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.dataSharing === online.dataSharing);
+    });
+    const cloud = this.root.querySelector<HTMLInputElement>('.cloud-ai-check');
+    if (cloud) cloud.checked = online.cloudAiEnabled;
+    const url = this.root.querySelector<HTMLInputElement>('.online-api-url');
+    if (url) url.value = online.apiBaseUrl;
+    const status = this.root.querySelector<HTMLElement>('.cloud-ai-status');
+    if (status) {
+      status.textContent = online.cloudAiEnabled ? 'ON' : 'OFF';
+      if (online.cloudAiEnabled) status.removeAttribute('data-off');
+      else status.setAttribute('data-off', '');
+    }
+    void this.refreshOnlineServiceLabel();
+  }
+
+  private async refreshOnlineServiceLabel(): Promise<void> {
+    const label = this.root.querySelector<HTMLElement>('.online-service-label');
+    if (!label) return;
+    try {
+      const status = await resolveServiceUiStatus();
+      label.textContent = status.label;
+    } catch {
+      label.textContent = 'VYTHERA LOCAL ONLY';
+    }
+  }
+
+  private collectOnlineSettingsFromUi(): void {
+    const aiBtn = this.root.querySelector<HTMLButtonElement>('[data-ai-mode].is-active');
+    const hubBtn = this.root.querySelector<HTMLButtonElement>('[data-modhub-mode].is-active');
+    const shareBtn = this.root.querySelector<HTMLButtonElement>('[data-data-sharing].is-active');
+    const cloud = this.root.querySelector<HTMLInputElement>('.cloud-ai-check');
+    const url = this.root.querySelector<HTMLInputElement>('.online-api-url');
+    const prev = loadOnlineSettings();
+    const aiMode = (aiBtn?.dataset.aiMode as VytheraAIMode | undefined) ?? 'LOCAL';
+    const modHubMode = (hubBtn?.dataset.modhubMode as VytheraModHubMode | undefined) ?? 'OFFLINE';
+    const dataSharing = (shareBtn?.dataset.dataSharing as VytheraDataSharing | undefined) ?? 'PRIVATE';
+    saveOnlineSettings({
+      ...prev,
+      apiBaseUrl: url?.value.trim() ?? '',
+      aiMode: aiMode === 'ONLINE' || aiMode === 'AUTO' || aiMode === 'LOCAL' ? aiMode : 'LOCAL',
+      modHubMode: modHubMode === 'ONLINE' ? 'ONLINE' : 'OFFLINE',
+      dataSharing:
+        dataSharing === 'PUBLISHABLE' || dataSharing === 'PUBLIC' || dataSharing === 'PRIVATE'
+          ? dataSharing
+          : 'PRIVATE',
+      cloudAiEnabled: cloud?.checked === true,
+    });
+  }
+
   private syncViewSeg(): void {
     this.root.querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-view]').forEach((btn) => {
       btn.classList.toggle('is-active', btn.dataset.view === this.settings.viewMode);
+    });
+  }
+
+  private syncBgPrefsUi(): void {
+    const prefs = loadBgPrefs();
+    this.root
+      .querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-bg-mode]')
+      .forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.bgMode === prefs.mode);
+      });
+    this.root
+      .querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-bg-animation]')
+      .forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.bgAnimation === prefs.animation);
+      });
+    this.root
+      .querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-bg-quality]')
+      .forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.bgQuality === prefs.quality);
+      });
+    const motion = this.root.querySelector<HTMLInputElement>('.bg-motion-check');
+    const particles = this.root.querySelector<HTMLInputElement>('.bg-particles-check');
+    const cloud = this.root.querySelector<HTMLInputElement>('.bg-cloud-check');
+    const veg = this.root.querySelector<HTMLInputElement>('.bg-veg-check');
+    const water = this.root.querySelector<HTMLInputElement>('.bg-water-check');
+    const atmoEnable = this.root.querySelector<HTMLInputElement>('.bg-atmo-enable-check');
+    const atmo = this.root.querySelector<HTMLInputElement>('.bg-atmo-range');
+    if (motion) motion.checked = prefs.motion;
+    if (particles) particles.checked = prefs.particles;
+    if (cloud) cloud.checked = prefs.cloudMotion;
+    if (veg) veg.checked = prefs.vegetationMotion;
+    if (water) water.checked = prefs.waterMotion;
+    if (atmoEnable) atmoEnable.checked = prefs.atmosphereEnabled;
+    if (atmo) {
+      atmo.value = String(prefs.atmosphere);
+      this.root.querySelector('.bg-atmo-val')!.textContent = prefs.atmosphere.toFixed(2);
+    }
+  }
+
+  private collectBgPrefsFromUi(): void {
+    const activeMode = this.root.querySelector<HTMLButtonElement>(
+      '[data-panel="settings"] [data-bg-mode].is-active',
+    );
+    const activeAnim = this.root.querySelector<HTMLButtonElement>(
+      '[data-panel="settings"] [data-bg-animation].is-active',
+    );
+    const activeQuality = this.root.querySelector<HTMLButtonElement>(
+      '[data-panel="settings"] [data-bg-quality].is-active',
+    );
+    const mode = (activeMode?.dataset.bgMode as VytheraBgMode | undefined) ?? 'dynamic';
+    const animation = (activeAnim?.dataset.bgAnimation as BgAnimationLevel | undefined) ?? 'normal';
+    const quality = (activeQuality?.dataset.bgQuality as BgQuality | undefined) ?? 'medium';
+    const motion = this.root.querySelector<HTMLInputElement>('.bg-motion-check');
+    const particles = this.root.querySelector<HTMLInputElement>('.bg-particles-check');
+    const cloud = this.root.querySelector<HTMLInputElement>('.bg-cloud-check');
+    const veg = this.root.querySelector<HTMLInputElement>('.bg-veg-check');
+    const water = this.root.querySelector<HTMLInputElement>('.bg-water-check');
+    const atmoEnable = this.root.querySelector<HTMLInputElement>('.bg-atmo-enable-check');
+    const atmo = this.root.querySelector<HTMLInputElement>('.bg-atmo-range');
+    saveBgPrefs({
+      mode: mode === 'static' || mode === 'performance' || mode === 'dynamic' ? mode : 'dynamic',
+      animation:
+        animation === 'off' || animation === 'low' || animation === 'normal' || animation === 'high'
+          ? animation
+          : 'normal',
+      quality:
+        quality === 'low' || quality === 'medium' || quality === 'high' || quality === 'ultra'
+          ? quality
+          : 'medium',
+      motion: motion ? motion.checked : false,
+      particles: particles ? particles.checked : true,
+      cloudMotion: cloud ? cloud.checked : true,
+      vegetationMotion: veg ? veg.checked : true,
+      waterMotion: water ? water.checked : true,
+      atmosphereEnabled: atmoEnable ? atmoEnable.checked : true,
+      atmosphere: atmo ? Number(atmo.value) : 0.72,
+      weather: 'clear',
     });
   }
 
@@ -1424,6 +1762,7 @@ export class MainMenu {
     this.settings.invertY = invert.checked;
     this.settings.showFps = fps.checked;
     this.settings.underwaterFx = uw.checked;
+    this.collectOnlineSettingsFromUi();
   }
 
   private bindProfileUi(): void {

@@ -376,25 +376,33 @@ export class PlayerController {
       this.lavaSubmersion = Math.max(0, this.lavaSubmersion - dt * 3.5);
     }
 
-    if (inWater) {
-      const surfaceY = this.chunks.getWaterSurfaceY(
+    // Water: only "swim" when submerged to the waist+. Shallow fords use normal
+    // gravity so you walk the riverbed instead of floating on the surface.
+    const waistY = this.position.y + this.playerHeight * 0.42;
+    const deepWater =
+      inWater &&
+      this.chunks.isWaterAt(
         Math.floor(this.position.x),
+        Math.floor(waistY),
         Math.floor(this.position.z),
       );
-      if (surfaceY !== null) {
-        const depth = surfaceY - (this.position.y + this.eyeHeight);
-        if (depth > 0.35) this.velocity.y += Math.min(18, depth * 8) * dt;
-      }
-      this.velocity.y -= 5.5 * dt;
-      this.velocity.y += 6.5 * dt;
-      this.velocity.y *= 1 - 3.2 * dt;
-      this.velocity.x *= 1 - 2.4 * dt;
-      this.velocity.z *= 1 - 2.4 * dt;
+
+    if (deepWater) {
+      // Mild sink + hold Space to swim up. No auto surface-seek (that caused water-walking).
+      this.velocity.y -= 9.5 * dt;
+      this.velocity.y *= 1 - 2.6 * dt;
+      this.velocity.x *= 1 - 2.2 * dt;
+      this.velocity.z *= 1 - 2.2 * dt;
       if (!this.sitting && (this.keys.has('Space') || this.touchJump)) {
-        this.velocity.y += 18 * dt;
+        this.velocity.y += 16 * dt;
       }
-      if (sneak) this.velocity.y -= 12 * dt;
+      if (sneak) this.velocity.y -= 14 * dt;
       this.onGround = false;
+    } else if (inWater) {
+      // Ankle/knee deep: normal gravity, slightly sticky.
+      this.velocity.y -= 28 * dt;
+      this.velocity.x *= 1 - 1.2 * dt;
+      this.velocity.z *= 1 - 1.2 * dt;
     } else if (!inLava) {
       this.velocity.y -= 28 * dt;
     }
@@ -402,7 +410,7 @@ export class PlayerController {
     if (
       this.onGround &&
       !this.sitting &&
-      !inWater &&
+      !deepWater &&
       !inLava &&
       (this.keys.has('Space') || this.touchJump)
     ) {

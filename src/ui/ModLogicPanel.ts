@@ -1,6 +1,4 @@
-import { VytheraAIStudio } from '../vythera_ai/ui/VytheraAIStudio';
 import type { ProjectAction } from '../modding/ModProjectPlanner';
-import type { VytheraEditorHost } from '../vythera_ai/host/VytheraEditorHost';
 import { interpretModScripts, TRIGGER_META } from '../modding/ModAiInterpreter';
 import { ModCommandBinder } from '../modding/ModCommandBinder';
 import type { ModTrigger } from '../modding/ModLogicParser';
@@ -9,12 +7,11 @@ import { ProfilePreview3D } from './ProfilePreview3D';
 import { loadProfile } from './prefs';
 import { decodeSkin } from '../player/SkinAtlas';
 
-/** Character skin + VYTHERA AI co-builder (scripts still loadable via AI / asset). */
+/** Character skin preview + workshop behavior tests (AI lives in AI Studio). */
 export class ModLogicPanel {
   readonly root: HTMLElement;
   private readonly validationEl: HTMLElement;
   private readonly skinHost: HTMLElement;
-  private readonly projectAi: VytheraAIStudio;
   private skinPreview: ProfilePreview3D | null = null;
   private onChange: (scripts: string[]) => void;
   private onNotify: (msg: string) => void;
@@ -41,7 +38,7 @@ export class ModLogicPanel {
           <span class="mod-ai-orb" aria-hidden="true">✦</span>
           <div>
             <p class="voxel-editor-label mod-ai-title">Character</p>
-            <p class="mod-ai-subtitle">Skin preview + Studio AI</p>
+            <p class="mod-ai-subtitle">Skin preview + behavior tests</p>
           </div>
         </div>
       </header>
@@ -49,11 +46,10 @@ export class ModLogicPanel {
         <div class="mod-char-skin-preview" aria-label="Player skin preview"></div>
         <div class="mod-char-skin-meta">
           <p class="mod-char-skin-name">Wanderer</p>
-          <p class="mod-char-skin-hint">Same skin as the SKIN menu. Press Add my skin character on the left to place it in the 32³ grid.</p>
+          <p class="mod-char-skin-hint">Same skin as the SKIN menu. Press Add my skin character on the left to place it in the grid. Open AI Studio from the main menu for chat, vision, and training.</p>
           <button type="button" class="voxel-editor-btn mod-char-skin-refresh">Refresh skin</button>
         </div>
       </section>
-      <div class="mod-project-ai-slot"></div>
       <div class="mod-ai-chat" aria-live="polite" hidden></div>
       <p class="mod-logic-validation" aria-live="polite"></p>
       <p class="voxel-editor-label mod-ai-section-label">Test in workshop</p>
@@ -63,11 +59,6 @@ export class ModLogicPanel {
     this.validationEl = this.root.querySelector('.mod-logic-validation') as HTMLElement;
     this.skinHost = this.root.querySelector('.mod-char-skin-preview') as HTMLElement;
 
-    this.projectAi = new VytheraAIStudio(
-      (actions) => this.onStudioAi?.(actions as ProjectAction[]),
-      (msg) => this.onNotify(msg),
-    );
-    this.root.querySelector('.mod-project-ai-slot')!.appendChild(this.projectAi.root);
 
     this.buildTestButtons();
     this.commit(false);
@@ -120,10 +111,6 @@ export class ModLogicPanel {
     this.modName = name || 'Untitled';
   }
 
-  /** Wire VYTHERA AI → viewport apply host. */
-  setInferenceHost(getHost: () => VytheraEditorHost): void {
-    this.projectAi.setInferenceHost(getHost);
-  }
 
   setScripts(scripts: string[]): void {
     this.lines = scripts.length ? [...scripts] : [];

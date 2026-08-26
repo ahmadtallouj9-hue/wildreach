@@ -1,7 +1,10 @@
 import './style.css';
 import './ui/theme/tokens.css';
 import './ui/theme/screens.css';
+import './ui/background/vythera-world-bg.css';
 import './ui/modelEditor.css';
+import './ui/modstudio/mod-studio.css';
+import './ui/modhub/mod-hub.css';
 import './vythera_ai/ui/vythera-ai-studio.css';
 import { Game } from './game/Game';
 import { MainMenu } from './ui/MainMenu';
@@ -36,7 +39,7 @@ app.appendChild(loading.root);
 let game: Game | null = null;
 
 function startWorld(seed: string): void {
-  menu.hide();
+  menu.beginWorldEntry();
   loading.show('Preparing world…');
   requestAnimationFrame(() => {
     loading.setPhase('Generating terrain…');
@@ -50,7 +53,10 @@ function startWorld(seed: string): void {
       loading.setPhase('Creating vegetation…');
       requestAnimationFrame(() => {
         loading.complete();
-        window.setTimeout(() => loading.hide(), 180);
+        window.setTimeout(() => {
+          menu.hide();
+          loading.hide();
+        }, 180);
       });
     });
   });

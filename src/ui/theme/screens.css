@@ -364,9 +364,9 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background:
-    radial-gradient(ellipse at 50% 28%, rgba(201, 162, 39, 0.07), transparent 55%),
-    var(--vy-void);
+  background: rgba(3, 6, 10, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   transition: opacity var(--vy-med) var(--vy-ease);
 }
 .vy-loading.is-exit {
@@ -502,14 +502,24 @@
   position: absolute;
   bottom: calc(var(--vy-safe-b) + 86px);
   left: var(--vy-safe-l);
+  right: auto;
+  width: max-content;
+  max-width: min(280px, 46vw);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   font-family: var(--vy-font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
   color: var(--vy-ink-dim);
-  background: rgba(7, 10, 14, 0.65);
+  background: rgba(7, 10, 14, 0.78);
   border: 1px solid var(--vy-line);
   padding: 6px 10px;
   border-radius: var(--vy-radius);
+  white-space: nowrap;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 .vy-hud__look {
   position: absolute;
@@ -741,11 +751,7 @@
   align-items: center;
   gap: 8px;
 }
-.vy-hud__coords {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+/* coords sizing lived in primary .vy-hud__coords rule */
 .vy-hud__mp--online .vy-hud__mp-dot { background: var(--vy-moss); }
 .vy-hud__mp--wait .vy-hud__mp-dot { background: var(--vy-gold); }
 .vy-hud__mp--down .vy-hud__mp-dot { background: var(--vy-muted); }
@@ -770,11 +776,16 @@
   pointer-events: auto;
 }
 .vy-hotbar__name {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--vy-ink-dim);
-  min-height: 1em;
+  color: var(--vy-ink);
+  min-height: 1.1em;
+  padding: 0.2rem 0.55rem;
+  background: rgba(7, 10, 14, 0.72);
+  border: 1px solid var(--vy-line);
+  border-radius: var(--vy-radius);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
 }
 .vy-hotbar__row {
   display: flex;
@@ -916,7 +927,9 @@
 .vy-pause__dim {
   position: absolute;
   inset: 0;
-  background: rgba(3, 5, 7, 0.55);
+  background: rgba(3, 5, 7, 0.42);
+  backdrop-filter: blur(6px) saturate(0.9);
+  -webkit-backdrop-filter: blur(6px) saturate(0.9);
 }
 .vy-pause__panel {
   position: relative;
@@ -1002,4 +1015,22 @@
   .vy-toast {
     animation: none !important;
   }
+}
+
+/* ── AI Studio (standalone) ─────────────────────────────── */
+.vy-ai-studio-host {
+  min-height: min(78vh, 820px);
+  height: min(78vh, 820px);
+  border: 1px solid var(--vy-line);
+  border-radius: var(--vy-radius);
+  overflow: hidden;
+  background: rgba(7, 10, 14, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.vy-ai-studio-host .vythera-ai-studio,
+.vy-ai-studio-host .vas-shell {
+  height: 100%;
+  min-height: 100%;
+  border: none;
 }

@@ -36,6 +36,7 @@ import { ColorPickerPanel } from './ColorPickerPanel';
 import { ModAnimatePanel } from './ModAnimatePanel';
 import { ModLoadPicker } from './ModLoadPicker';
 import { ModLogicPanel } from './ModLogicPanel';
+import type { VytheraEditorHost } from './../vythera_ai/host/VytheraEditorHost';
 import { TextureMakerPanel } from './TextureMakerPanel';
 import { LEFT_RAIL_HTML, PAINT_PANEL_HTML } from './leftRailHtml';
 import { MID_RAIL_MATERIAL_HTML } from './midRailHtml';
@@ -106,49 +107,6 @@ export class VoxelEditorUi {
       (msg) => this.setStatus(msg),
       (actions) => this.applyProjectActions(actions),
     );
-    this.logicPanel.setInferenceHost(() => ({
-      grid: this.viewport.grid,
-      palette: this.viewport.materialsPalette,
-      parts: this.parts,
-      scripts: this.scripts,
-      projectName: this.modName || 'Untitled',
-      historyPush: () => this.history.push(this.viewport.grid),
-      rebuildMesh: () => this.viewport.rebuildMesh(),
-      refreshPalette: () => this.refreshSwatches(),
-      applyKeyframes: (keys, clipName) => {
-        this.keyframes = keys;
-        this.animatePanel.setState(this.parts, keys);
-        this.setMode('animate');
-        this.setStatus(`VYTHERA AI animation: ${clipName}`);
-      },
-      applyTexturePixels: (name, pixels, rgb) => {
-        const mat =
-          this.viewport.materialsPalette.list().find((m) => m.name === name) ??
-          this.viewport.materialsPalette.addMaterial(name, rgb, pixels, true, 'AI');
-        if (mat) {
-          this.viewport.materialsPalette.updateMaterial(mat.id, { pixels, color: rgb });
-          this.refreshSwatches();
-          this.selectBrush(mat.id);
-          this.texMaker.loadMaterial(mat.id);
-          this.viewport.rebuildMesh();
-          this.setMode('texture');
-          this.setStatus(`VYTHERA AI texture on “${name}”`);
-        }
-      },
-      appendBehaviors: (lines) => this.logicPanel.appendScripts(lines),
-      setScripts: (lines) => this.logicPanel.setScripts(lines),
-      notify: (msg) => this.setStatus(msg),
-      undo: () => {
-        const ok = this.history.undo(this.viewport.grid);
-        if (ok) this.viewport.rebuildMesh();
-        return ok;
-      },
-      redo: () => {
-        const ok = this.history.redo(this.viewport.grid);
-        if (ok) this.viewport.rebuildMesh();
-        return ok;
-      },
-    }));
     this.texMaker = new TextureMakerPanel(
       this.viewport.materialsPalette,
       (id, applyToShape) => {
@@ -523,6 +481,53 @@ export class VoxelEditorUi {
         this.brush,
       );
     }
+  }
+
+  /** Host bridge for standalone AI Studio → live MOD viewport. */
+  getEditorHost(): VytheraEditorHost {
+    return {
+      grid: this.viewport.grid,
+      palette: this.viewport.materialsPalette,
+      parts: this.parts,
+      scripts: this.scripts,
+      projectName: this.modName || 'Untitled',
+      historyPush: () => this.history.push(this.viewport.grid),
+      rebuildMesh: () => this.viewport.rebuildMesh(),
+      refreshPalette: () => this.refreshSwatches(),
+      applyKeyframes: (keys, clipName) => {
+        this.keyframes = keys;
+        this.animatePanel.setState(this.parts, keys);
+        this.setMode('animate');
+        this.setStatus(`VYTHERA AI animation: ${clipName}`);
+      },
+      applyTexturePixels: (name, pixels, rgb) => {
+        const mat =
+          this.viewport.materialsPalette.list().find((m) => m.name === name) ??
+          this.viewport.materialsPalette.addMaterial(name, rgb, pixels, true, 'AI');
+        if (mat) {
+          this.viewport.materialsPalette.updateMaterial(mat.id, { pixels, color: rgb });
+          this.refreshSwatches();
+          this.selectBrush(mat.id);
+          this.texMaker.loadMaterial(mat.id);
+          this.viewport.rebuildMesh();
+          this.setMode('texture');
+          this.setStatus(`VYTHERA AI texture on “${name}”`);
+        }
+      },
+      appendBehaviors: (lines) => this.logicPanel.appendScripts(lines),
+      setScripts: (lines) => this.logicPanel.setScripts(lines),
+      notify: (msg) => this.setStatus(msg),
+      undo: () => {
+        const ok = this.history.undo(this.viewport.grid);
+        if (ok) this.viewport.rebuildMesh();
+        return ok;
+      },
+      redo: () => {
+        const ok = this.history.redo(this.viewport.grid);
+        if (ok) this.viewport.rebuildMesh();
+        return ok;
+      },
+    };
   }
 
   private setMode(tab: WorkshopTab): void {
