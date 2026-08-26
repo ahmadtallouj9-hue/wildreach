@@ -34,7 +34,7 @@ export class ChunkManager {
     generateStructures = true,
   ) {
     this.generateStructures = generateStructures;
-    this.landmarkGen = new LandmarkGen();
+    this.landmarkGen = new LandmarkGen(world.seed);
   }
 
   setRenderDistance(r: number): void {

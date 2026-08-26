@@ -4,6 +4,7 @@ import { AnimationClock, wrapOffset } from './AnimationClock.js';
 import { PAL, phaseFromTime, skyColors, type TimePhase } from './pixelPalette.js';
 
 export type BgPanelContext = 'home' | 'loading' | 'hub' | 'studio' | 'settings';
+export type BgRenderMode = 'full' | 'sky-only' | 'terrain-only';
 
 type CloudDef = { pixels: [number, number][]; w: number; h: number };
 
@@ -90,8 +91,10 @@ export class PixelBackgroundEngine {
   private iw = 384;
   private ih = 216;
   private visible = true;
+  private renderMode: BgRenderMode = 'full';
 
-  constructor(prefs: VytheraBgPrefs) {
+  constructor(prefs: VytheraBgPrefs, renderMode: BgRenderMode = 'full') {
+    this.renderMode = renderMode;
     this.prefs = prefs;
     this.layers = resolveBgLayers(prefs, false);
     this.motion = resolveBgMotion(prefs, false);
@@ -105,7 +108,7 @@ export class PixelBackgroundEngine {
     canvas.setAttribute('aria-hidden', 'true');
     container.appendChild(canvas);
 
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d', { alpha: this.renderMode !== 'full' });
     if (!ctx) {
       this.staticFallback = true;
       container.classList.add('vy-pixel-bg--static-fallback');
@@ -248,16 +251,23 @@ export class PixelBackgroundEngine {
     }
   }
 
+  setRenderMode(mode: BgRenderMode): void {
+    this.renderMode = mode;
+    this.drawFrame(this.clock.time.value);
+  }
+
   private drawFrame(t: number): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const calm = contextCalm(this.context);
     const phase = phaseFromTime(t * calm);
     const colors = skyColors(phase);
+    const skyOnly = this.renderMode === 'sky-only';
+    const terrainOnly = this.renderMode === 'terrain-only';
 
-    this.drawSky(ctx, colors);
-    if (this.layers.sun) this.drawSun(ctx, t, phase, calm);
-    if (this.layers.clouds) {
+    if (!terrainOnly) this.drawSky(ctx, colors);
+    if (!terrainOnly && this.layers.sun) this.drawSun(ctx, t, phase, calm);
+    if (!terrainOnly && this.layers.clouds) {
       this.drawCloudLayer(ctx, t, 0.22 * calm, 0.35, CLOUD_SHAPES[0]!, colors);
       if (this.prefs.quality !== 'low') {
         this.drawCloudLayer(ctx, t, 0.45 * calm, 0.55, CLOUD_SHAPES[1]!, colors);
@@ -265,6 +275,19 @@ export class PixelBackgroundEngine {
       if (this.prefs.quality === 'high' || this.prefs.quality === 'ultra') {
         this.drawCloudLayer(ctx, t, 0.75 * calm, 0.85, CLOUD_SHAPES[2]!, colors);
       }
+    }
+    if (skyOnly) {
+      const horizon = Math.floor(this.ih * 0.54);
+      ctx.clearRect(0, horizon, this.iw, this.ih - horizon);
+      const fade = ctx.createLinearGradient(0, horizon - 8, 0, horizon + 6);
+      fade.addColorStop(0, 'rgba(0,0,0,0)');
+      fade.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, horizon - 8, this.iw, 14);
+      ctx.globalCompositeOperation = 'source-over';
+      if (this.layers.atmosphere) this.drawAtmosphere(ctx, phase);
+      return;
     }
     this.drawMountains(ctx, t, calm);
     if (this.layers.water) this.drawWater(ctx, t, calm);

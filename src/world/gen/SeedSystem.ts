@@ -54,6 +54,9 @@ export const SeedSalt = {
   warp: 0x0a,
   density: 0x0b,
   detail: 0x0c,
+  macro: 0x0d,
+  meso: 0x0e,
+  landmarks: 0x0f,
 } as const;
 
 export type SeedSaltName = keyof typeof SeedSalt;

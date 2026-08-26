@@ -13,6 +13,10 @@ export interface ClimateSample {
   wz: number;
   /** River proximity 0..1 (1 = river center). */
   river: number;
+  /** Valley depth factor 0..1 from inverted ridges. */
+  valleyFactor: number;
+  /** Ridgeline strength 0..1 for mountain chains. */
+  ridgeStrength: number;
   /** Mountain blend 0..1 from ridges + cold. */
   mountainFactor: number;
 }
@@ -54,11 +58,18 @@ export class ClimateSampler {
     const riverNoise = Math.abs(fbm2(this.river, wxw * 0.00078, wzw * 0.00078, 3));
     const river = continentalness > 0.42 ? smoothstep(0.14, 0.02, riverNoise) : 0;
 
+    // Inverted ridged noise → broad valleys between high ridges
+    const valleyRaw = 1 - ridged2(this.peaks, wxw * 0.00055 + 90, wzw * 0.00055, 4);
+    const valleyFactor =
+      continentalness > 0.44 ? valleyRaw * smoothstep(0.38, 0.62, erosion) : valleyRaw * 0.35;
+
+    const ridgeStrength = ridged2(this.peaks, wxw * 0.00068, wzw * 0.00068, 5);
+
     const mountainFactor =
-      smoothstep(0.48, 0.72, peaksValleys) *
+      smoothstep(0.42, 0.78, ridgeStrength) *
       smoothstep(0.55, 0.28, temperature) *
       smoothstep(0.35, 0.55, continentalness) *
-      (1 - erosion * 0.35);
+      (1 - erosion * 0.28);
 
     return {
       continentalness,
@@ -69,6 +80,8 @@ export class ClimateSampler {
       wx: wxw,
       wz: wzw,
       river,
+      valleyFactor,
+      ridgeStrength,
       mountainFactor,
     };
   }

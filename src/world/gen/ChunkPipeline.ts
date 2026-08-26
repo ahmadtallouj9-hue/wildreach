@@ -2,6 +2,7 @@ import { Block, CHUNK_SIZE, SEA_LEVEL } from '../blocks';
 import { BiomeId } from '../Biomes';
 import type { ColumnInfo } from '../ColumnInfo';
 import { BIOME_GEN, dirtDepth, selectBiome, subsoilFor, surfaceBlockFor } from './BiomeTable';
+import { blendedSurfaceBlock } from './BiomeBlend';
 import { CaveGenerator } from './CaveGenerator';
 import { ClimateSampler, type ClimateSample } from './Climate';
 import { OreGenerator } from './OreGenerator';
@@ -126,6 +127,17 @@ export class ChunkPipeline {
     }
 
     // --- Base terrain + surface + water ---
+    const sampleCol = (x: number, z: number) => {
+      const lx = x - ox;
+      const lz = z - oz;
+      if (lx >= 0 && lz >= 0 && lx < CHUNK_SIZE && lz < CHUNK_SIZE) {
+        const c = columns[lz * CHUNK_SIZE + lx]!;
+        return { biome: c.biome, height: c.height };
+      }
+      const c = this.sampleColumn(x, z);
+      return { biome: c.biome, height: c.height };
+    };
+
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         const wx = ox + lx;
@@ -163,7 +175,13 @@ export class ChunkPipeline {
                   ? Block.Lava
                   : Block.Air;
           } else if (y === height) {
-            block = surfaceBlockFor(biome, height, beach);
+            block =
+              biome !== BiomeId.Ocean &&
+              biome !== BiomeId.DeepOcean &&
+              biome !== BiomeId.River &&
+              biome !== BiomeId.Beach
+                ? blendedSurfaceBlock(wx, wz, height, biome, beach, sampleCol)
+                : surfaceBlockFor(biome, height, beach);
           } else if (y >= height - depth) {
             block = subsoilFor(biome, height, beach);
           } else if (y >= height - depth - 6) {
@@ -187,6 +205,7 @@ export class ChunkPipeline {
       columns,
       (x, z) => this.getHeight(x, z),
       (x, z) => this.getBiome(x, z),
+      (x, z) => this.sampleColumn(x, z).climate,
     );
 
     this.cache.clear();

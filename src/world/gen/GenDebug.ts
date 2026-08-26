@@ -8,6 +8,7 @@ export type GenDebugMode =
   | 'continentalness'
   | 'erosion'
   | 'height'
+  | 'water'
   | 'seed';
 
 /** Optional URL/query debug overlays for worldgen. Disabled in normal play. */
@@ -21,6 +22,7 @@ export function parseGenDebugMode(search = typeof location !== 'undefined' ? loc
     'continentalness',
     'erosion',
     'height',
+    'water',
     'seed',
   ];
   return (allowed.includes(q as GenDebugMode) ? q : 'off') as GenDebugMode;

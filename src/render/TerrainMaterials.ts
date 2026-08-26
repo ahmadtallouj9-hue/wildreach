@@ -104,8 +104,14 @@ function makeTerrainFrag(cutout: boolean): string {
     vec3 color = tex.rgb * lighting * max(vAo, 0.68);
     ${rustle}
 
-    float fog = clamp(1.0 - exp(-length(vWorldPos - cameraPosition) * fogDensity), 0.0, 0.72);
-    color = mix(color, fogColor, fog);
+    float dist = length(vWorldPos - cameraPosition);
+    float fog = clamp(1.0 - exp(-dist * fogDensity), 0.0, 0.72);
+    float atmo = smoothstep(48.0, 220.0, dist);
+    color = mix(color, fogColor, clamp(fog + atmo * 0.22, 0.0, 0.78));
+
+    // Ridge emphasis — slopes catch light differently
+    float slope = 1.0 - abs(N.y);
+    color *= 1.0 + slope * max(dot(N, L), 0.0) * 0.08 * mix(0.4, 1.0, vl);
     gl_FragColor = vec4(color, 1.0);
   }
 `;

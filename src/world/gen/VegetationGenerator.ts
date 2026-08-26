@@ -1,9 +1,11 @@
 import { Block, CHUNK_HEIGHT, CHUNK_SIZE, SEA_LEVEL } from '../blocks';
 import { BiomeId } from '../Biomes';
 import { BIOME_GEN } from './BiomeTable';
+import { treeChanceAt } from './BiomeBlend';
 import { blockToChunk, worldToLocalX, worldToLocalZ } from './WorldCoords';
 import type { WorldSeed } from './SeedSystem';
 import type { ColumnInfo } from '../ColumnInfo';
+import type { ClimateSample } from './Climate';
 
 const TREE_MARGIN = 2;
 
@@ -27,41 +29,49 @@ export class VegetationGenerator {
     columns: ColumnInfo[],
     heightAt: (wx: number, wz: number) => number,
     biomeAt: (wx: number, wz: number) => BiomeId,
+    climateAt?: (wx: number, wz: number) => ClimateSample,
   ): void {
     const ox = cx * CHUNK_SIZE;
     const oz = cz * CHUNK_SIZE;
 
-    for (let wz = oz - TREE_MARGIN; wz < oz + CHUNK_SIZE + TREE_MARGIN; wz += 2) {
-      for (let wx = ox - TREE_MARGIN; wx < ox + CHUNK_SIZE + TREE_MARGIN; wx += 2) {
-        const owner = blockToChunk(wx, wz);
-        // Only evaluate placement decision at the origin cell; any chunk may stamp geometry.
-        const r = hash(wx, wz, this.salt);
-        const biome = biomeAt(wx, wz);
+    for (let wz = oz - TREE_MARGIN; wz < oz + CHUNK_SIZE + TREE_MARGIN; wz += 3) {
+      for (let wx = ox - TREE_MARGIN; wx < ox + CHUNK_SIZE + TREE_MARGIN; wx += 3) {
+        const jx = wx + Math.floor(hash(wx, wz, this.salt + 3) * 2);
+        const jz = wz + Math.floor(hash(wx + 5, wz + 7, this.salt + 5) * 2);
+        const owner = blockToChunk(jx, jz);
+        const r = hash(jx, jz, this.salt);
+        const biome = biomeAt(jx, jz);
         const def = BIOME_GEN[biome];
+        const climate = climateAt?.(jx, jz);
         if (!def || def.treeKind === 'none') {
           if (owner.cx === cx && owner.cz === cz) {
-            this.tryGrass(wx, wz, voxels, cx, cz, columns, def?.grassChance ?? 0, r);
+            this.tryGrass(jx, jz, voxels, cx, cz, columns, def?.grassChance ?? 0, r);
           }
           continue;
         }
 
-        if (r >= def.treeChance) {
+        const h = heightAt(jx, jz);
+        const passTree =
+          climate != null
+            ? treeChanceAt(def.treeChance, climate, h, SEA_LEVEL, r)
+            : r < def.treeChance;
+
+        if (!passTree) {
           if (owner.cx === cx && owner.cz === cz) {
-            this.tryGrass(wx, wz, voxels, cx, cz, columns, def.grassChance, r);
+            this.tryGrass(jx, jz, voxels, cx, cz, columns, def.grassChance, r);
           }
           continue;
         }
 
-        const h = heightAt(wx, wz);
         if (h <= SEA_LEVEL) continue;
         if (biome === BiomeId.Ocean || biome === BiomeId.DeepOcean) continue;
 
-        const trunk = treeHeight(def.treeKind, wx, wz, this.salt);
-        placeTree(voxels, cx, cz, wx, h + 1, wz, def.treeKind, trunk);
+        const trunk = treeHeight(def.treeKind, jx, jz, this.salt);
+        placeTree(voxels, cx, cz, jx, h + 1, jz, def.treeKind, trunk);
 
         if (biome === BiomeId.Mountains || biome === BiomeId.SnowyMountains) {
           if (r < 0.04 && h > SEA_LEVEL + 16) {
-            placeBoulder(voxels, cx, cz, wx, h + 1, wz, hash(wx + 1, wz, this.salt));
+            placeBoulder(voxels, cx, cz, jx, h + 1, jz, hash(jx + 1, jz, this.salt));
           }
         }
       }

@@ -58,6 +58,7 @@ import { SocialClient } from '../net/SocialClient';
 import { bindUiSounds, uiSound } from './uiSound';
 import { FriendsPanel } from './FriendsPanel';
 import { MainMenuSky, type VytheraBgContext } from './MainMenuSky';
+import { WorldPreviewCanvas, terrainPreviewTag } from './background/WorldPreviewCanvas';
 import { loadBgPrefs, saveBgPrefs, type BgAnimationLevel, type BgQuality, type VytheraBgMode } from './background/backgroundPrefs';
 import './background/vythera-world-bg.css';
 import { TerrainMaterials } from '../render/TerrainMaterials';
@@ -151,6 +152,7 @@ export class MainMenu {
   private selectedWorldSeed: string | null = null;
   private worldView: 'list' | 'create' = 'list';
   private menuSky = new MainMenuSky();
+  private worldPreview: WorldPreviewCanvas | null = null;
   private modMaterials: TerrainMaterials | null = null;
   private modStudio: ModStudioApp | null = null;
   private modHub: ModHubApp | null = null;
@@ -165,6 +167,11 @@ export class MainMenu {
 
     const skyHost = this.root.querySelector('.vy-menu__sky');
     if (skyHost) this.menuSky.mount(skyHost as HTMLElement);
+    const previewHost = this.root.querySelector('.world-preview-canvas-host');
+    if (previewHost) {
+      this.worldPreview = new WorldPreviewCanvas();
+      previewHost.appendChild(this.worldPreview.element);
+    }
     if (this.social) this.friendsPanel = new FriendsPanel(this.root, this.social);
 
     this.bindActions();
@@ -565,7 +572,8 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
             <label class="vy-field"><span>World name</span>
               <input type="text" class="world-name-input vy-input" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Optional" /></label>
             <p class="world-preview-name" style="margin:0;font-family:var(--vy-font-display);letter-spacing:0.08em">Misty Reach</p>
-            <p class="world-preview-tag" style="margin:4px 0 12px;font-size:0.75rem;color:var(--vy-muted)">Rolling hills and open sky.</p>
+            <p class="world-preview-tag" style="margin:4px 0 8px;font-size:0.75rem;color:var(--vy-muted)">Rolling hills and open sky.</p>
+            <div class="world-preview-canvas-host" style="margin:0 0 12px;border-radius:6px;overflow:hidden;border:1px solid var(--vy-line);max-width:100%"></div>
             <label class="vy-field"><span>World seed</span>
               <div class="vy-actions">
                 <input type="text" class="world-seed-input vy-input" maxlength="24" spellcheck="false" autocomplete="off" style="flex:1" />
@@ -912,7 +920,8 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
     const nameEl = this.root.querySelector('.world-preview-name');
     const tagEl = this.root.querySelector('.world-preview-tag');
     if (nameEl) nameEl.textContent = displayName;
-    if (tagEl) tagEl.textContent = worldTagFromSeed(seed);
+    if (tagEl) tagEl.textContent = terrainPreviewTag(this.worldSettings.terrain);
+    this.worldPreview?.render(seed, this.worldSettings.terrain);
   }
 
   private bindWorldUi(): void {
