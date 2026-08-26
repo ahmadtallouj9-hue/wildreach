@@ -24,6 +24,8 @@ function wireToProfile(p: ProfileWire): Profile {
     facial: p.facial ?? 'none',
     sleeves: p.sleeves ?? 'bare',
     cape: p.cape ?? 'none',
+    backpack: p.backpack ?? 'none',
+    belt: p.belt ?? 'none',
     skinData: p.skinData,
   };
 }
@@ -255,7 +257,7 @@ export class FriendsPanel {
       this.listEl.innerHTML = `
         <div class="friends-empty-card mc-empty">
           <p class="friends-empty">No friends yet</p>
-          <p class="friends-empty-hint">Ask a friend for their 6-digit code, type it above, then tap Add. They must open Wildreach once so their code is online.</p>
+          <p class="friends-empty-hint">Ask a friend for their 6-digit code, type it above, then tap Add. They must open VYTHERA once so their code is online.</p>
         </div>
       `;
       return;

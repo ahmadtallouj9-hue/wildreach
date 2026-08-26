@@ -1,21 +1,12 @@
 export type PauseMenuAction = 'resume' | 'title';
 
 export type PauseJoinRequest = { id: string; name: string };
-export type PauseFriendRow = {
-  accountId: string;
-  name: string;
-  status: string;
-  online: boolean;
-  inGame: boolean;
-  canInvite: boolean;
-};
 
-/** Minecraft-style in-game pause overlay with friend invites. */
+/** In-game pause overlay. */
 export class PauseMenu {
   readonly root: HTMLElement;
   private onAction: ((action: PauseMenuAction) => void) | null = null;
   private onJoinRespond: ((requestId: string, accept: boolean) => void) | null = null;
-  private onInviteFriend: ((accountId: string) => void) | null = null;
   private socialEl: HTMLElement;
   private open = false;
 
@@ -26,11 +17,23 @@ export class PauseMenu {
     this.root.innerHTML = `
       <div class="pause-menu__dim" aria-hidden="true"></div>
       <div class="pause-menu__panel" role="dialog" aria-modal="true" aria-labelledby="pause-menu-title">
-        <h2 id="pause-menu-title" class="pause-menu__title">Game Menu</h2>
+        <h2 id="pause-menu-title" class="pause-menu__title">VYTHERA</h2>
+        <div class="menu-brand-ornament pause-menu__ornament" aria-hidden="true">
+          <span class="menu-brand-line"></span>
+          <span class="menu-lotus">
+            <svg viewBox="0 0 36 30" width="28" height="24" fill="none">
+              <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="#eef7ff"/>
+              <path d="M18 26c-4-8-3-14 0-18 3 4 4 10 0 18z" fill="#cfe6ff"/>
+              <path d="M18 26c-8-2-13-7-12-12 4 1 9 5 12 12z" fill="#d9ecff"/>
+              <path d="M18 26c8-2 13-7 12-12-4 1-9 5-12 12z" fill="#d9ecff"/>
+            </svg>
+          </span>
+          <span class="menu-brand-line"></span>
+        </div>
         <div class="pause-menu__social"></div>
         <div class="pause-menu__actions">
-          <button type="button" class="pause-menu__btn" data-action="resume">Back to Game</button>
-          <button type="button" class="pause-menu__btn" data-action="title">Quit to Title</button>
+          <button type="button" class="pause-menu__btn pause-menu__btn--play" data-action="resume">+ RESUME +</button>
+          <button type="button" class="pause-menu__btn" data-action="title">QUIT TO TITLE</button>
         </div>
       </div>
     `;
@@ -57,78 +60,38 @@ export class PauseMenu {
     this.onJoinRespond = handler;
   }
 
-  onFriendInvite(handler: (accountId: string) => void): void {
-    this.onInviteFriend = handler;
-  }
+  setSocial(opts: { requests: PauseJoinRequest[] }): void {
+    const { requests } = opts;
 
-  setSocial(opts: { requests: PauseJoinRequest[]; friends: PauseFriendRow[] }): void {
-    const { requests, friends } = opts;
-    const parts: string[] = [];
-
-    if (requests.length) {
-      parts.push(`
-        <section class="pause-menu__block">
-          <p class="pause-menu__section-title">Join requests</p>
-          ${requests
-            .map(
-              (r) => `
-            <div class="pause-menu__row pause-menu__row--stack">
-              <span class="pause-menu__row-text">${escapeHtml(r.name)} wants to join</span>
-              <div class="pause-menu__row-actions">
-                <button type="button" class="pause-menu__btn pause-menu__btn--small" data-accept="${r.id}">Accept</button>
-                <button type="button" class="pause-menu__btn pause-menu__btn--small pause-menu__btn--ghost" data-deny="${r.id}">Deny</button>
-              </div>
-            </div>
-          `,
-            )
-            .join('')}
-        </section>
-      `);
+    if (!requests.length) {
+      this.socialEl.innerHTML = '';
+      return;
     }
 
-    parts.push(`
+    this.socialEl.innerHTML = `
       <section class="pause-menu__block">
-        <p class="pause-menu__section-title">Friends</p>
-        ${
-          friends.length
-            ? friends
-                .map(
-                  (f) => `
-            <div class="pause-menu__row">
-              <span class="pause-menu__dot ${f.inGame ? 'in-game' : f.online ? 'online' : 'offline'}"></span>
-              <span class="pause-menu__row-text">
-                <strong>${escapeHtml(f.name)}</strong>
-                <span class="pause-menu__badge pause-menu__badge--${f.inGame ? 'in-game' : f.online ? 'online' : 'offline'}">${
-                  f.inGame ? 'IN WORLD' : f.online ? 'IN MENU' : 'OFFLINE'
-                }</span>
-                <em>${escapeHtml(f.status)}</em>
-              </span>
-              <div class="pause-menu__row-actions">
-                ${
-                  f.canInvite
-                    ? `<button type="button" class="pause-menu__btn pause-menu__btn--small pause-menu__btn--invite" data-invite="${f.accountId}">Invite</button>`
-                    : `<span class="pause-menu__row-muted">${f.online ? '—' : 'Offline'}</span>`
-                }
-              </div>
+        <p class="pause-menu__section-title">Join requests</p>
+        ${requests
+          .map(
+            (r) => `
+          <div class="pause-menu__row pause-menu__row--stack">
+            <span class="pause-menu__row-text">${escapeHtml(r.name)} wants to join</span>
+            <div class="pause-menu__row-actions">
+              <button type="button" class="pause-menu__btn pause-menu__btn--small" data-accept="${r.id}">Accept</button>
+              <button type="button" class="pause-menu__btn pause-menu__btn--small pause-menu__btn--ghost" data-deny="${r.id}">Deny</button>
             </div>
-          `,
-                )
-                .join('')
-            : `<p class="pause-menu__empty">Add friends from Title → Friends, then invite them here.</p>`
-        }
+          </div>
+        `,
+          )
+          .join('')}
       </section>
-    `);
-
-    this.socialEl.innerHTML = parts.join('');
+    `;
 
     this.socialEl.querySelectorAll<HTMLButtonElement>('[data-accept]').forEach((btn) => {
       btn.addEventListener('click', () => this.onJoinRespond?.(btn.dataset.accept!, true));
     });
     this.socialEl.querySelectorAll<HTMLButtonElement>('[data-deny]').forEach((btn) => {
       btn.addEventListener('click', () => this.onJoinRespond?.(btn.dataset.deny!, false));
-    });
-    this.socialEl.querySelectorAll<HTMLButtonElement>('[data-invite]').forEach((btn) => {
-      btn.addEventListener('click', () => this.onInviteFriend?.(btn.dataset.invite!));
     });
   }
 

@@ -1,5 +1,6 @@
 import type { TerrainType, WorldSettings, WorldTime } from './worldSettings';
 import { DEFAULT_WORLD_SETTINGS, loadWorldSettings, saveWorldSettings } from './worldSettings';
+import { publicGameOrigin, publicGamePath } from '../util/publicUrl';
 
 export type ShareParams = {
   seed: string;
@@ -46,6 +47,12 @@ export function replaceSeedInUrl(seed: string): void {
   window.history.replaceState({}, '', query ? `${window.location.pathname}?${query}` : window.location.pathname);
 }
 
+/** Public URL anyone can open to play (never localhost). */
+export function publicPlayUrl(): string {
+  const base = `${publicGameOrigin()}${publicGamePath()}`.replace(/\/$/, '') || publicGameOrigin();
+  return base;
+}
+
 /** @deprecated Link sharing removed — kept for bookmarks with world options only. */
 export function buildShareUrl(seed: string, settings?: WorldSettings): string {
   const params = new URLSearchParams();
@@ -61,6 +68,6 @@ export function buildShareUrl(seed: string, settings?: WorldSettings): string {
     params.set('rd', String(world.renderDistance));
   }
 
-  const base = `${window.location.origin}${window.location.pathname}`;
+  const base = `${publicGameOrigin()}${publicGamePath()}`.replace(/\/$/, '') || publicGameOrigin();
   return `${base}?${params.toString()}`;
 }

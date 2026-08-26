@@ -25,10 +25,10 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
 };
 
 export const WORLD_TIME_VALUES: Record<WorldTime, number> = {
-  day: 0.25,
-  noon: 0.5,
-  sunset: 0.75,
   night: 0.0,
+  day: 0.38,
+  noon: 0.5,
+  sunset: 0.72,
 };
 
 function readStore(): Record<string, WorldSettings> {
@@ -59,7 +59,7 @@ function normalize(settings: Partial<WorldSettings>): WorldSettings {
     caves: settings.caves !== false,
     structures: settings.structures !== false,
     time: TIMES.includes(settings.time as WorldTime) ? (settings.time as WorldTime) : 'day',
-    renderDistance: Math.min(8, Math.max(3, Math.round(Number(settings.renderDistance) || 6))),
+    renderDistance: Math.min(8, Math.max(3, Math.round(Number(settings.renderDistance) || 7))),
   };
 }
 

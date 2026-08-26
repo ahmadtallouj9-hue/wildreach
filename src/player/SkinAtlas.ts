@@ -1,5 +1,7 @@
 /** Minecraft-classic 64×64 skin layout + pixel helpers. */
 
+import { buildBlockCharacterSkin } from './BlockCharacterSkin';
+
 export const SKIN_SIZE = 64;
 
 export type SkinPart = 'head' | 'body' | 'armR' | 'armL' | 'legR' | 'legL' | 'hat';
@@ -13,8 +15,9 @@ export interface SkinRect {
   h: number;
 }
 
-/** BoxGeometry material order: +X -X +Y -Y +Z -Z (avatar faces -Z). */
-export const BOX_FACES: SkinFace[] = ['right', 'left', 'top', 'bottom', 'back', 'front'];
+/** BoxGeometry material order: +X -X +Y -Y +Z -Z.
+ * Avatar faces +Z (toward camera) → +X is character left, −X is character right. */
+export const BOX_FACES: SkinFace[] = ['left', 'right', 'top', 'bottom', 'front', 'back'];
 
 /** Flip options when copying atlas pixels onto a BoxGeometry face texture. */
 export const BOX_FACE_SYNC: Partial<
@@ -22,6 +25,9 @@ export const BOX_FACE_SYNC: Partial<
 > = {
   top: { flipY: true },
   bottom: { flipY: true },
+  back: { flipX: true },
+  // −X face (character right) needs a horizontal flip to match the skin atlas.
+  right: { flipX: true },
 };
 
 export const PART_UV: Record<SkinPart, Record<SkinFace, SkinRect>> = {
@@ -322,13 +328,16 @@ export interface SkinCosmetics {
   hair: string;
   eyes: string;
   shoes: string;
-  hairStyle: 'none' | 'short' | 'long' | 'spiky' | 'curly' | 'mohawk';
-  face?: 'neutral' | 'smile' | 'frown' | 'scar';
+  hairStyle: 'none' | 'short' | 'long' | 'spiky' | 'curly' | 'mohawk' | 'bun' | 'afro' | 'bangs';
+  face?: 'neutral' | 'smile' | 'frown' | 'scar' | 'wink' | 'cool' | 'blush' | 'freckles' | 'kawaii';
   facial?: 'none' | 'stubble' | 'beard' | 'mustache';
   sleeves?: 'bare' | 'short' | 'long';
   pants?: string;
   outfit?: string;
   skin?: string;
+  accent?: string;
+  /** Classic scout vs simple block voxel (default block). */
+  renderMode?: 'block' | 'classic';
 }
 
 function clearHatLayer(data: Uint8ClampedArray): void {
@@ -369,6 +378,42 @@ export function applyFaceFeatures(
     setPixel(data, face.x + 6, face.y + 2, 160, 80, 70, 255);
     setPixel(data, face.x + 6, face.y + 3, 160, 80, 70, 255);
     setPixel(data, face.x + 6, face.y + 4, 160, 80, 70, 255);
+  } else if (faceStyle === 'wink') {
+    setPixel(data, face.x + 2, face.y + 3, er, eg, eb, 255);
+    setPixel(data, face.x + 4, face.y + 3, 90, 55, 50, 255);
+    setPixel(data, face.x + 5, face.y + 3, 90, 55, 50, 255);
+    setPixel(data, face.x + 3, face.y + 5, 120, 70, 60, 255);
+    setPixel(data, face.x + 4, face.y + 5, 120, 70, 60, 255);
+  } else if (faceStyle === 'cool') {
+    setPixel(data, face.x + 1, face.y + 3, 20, 20, 20, 255);
+    setPixel(data, face.x + 2, face.y + 3, 20, 20, 20, 255);
+    setPixel(data, face.x + 5, face.y + 3, 20, 20, 20, 255);
+    setPixel(data, face.x + 6, face.y + 3, 20, 20, 20, 255);
+    setPixel(data, face.x + 3, face.y + 3, 40, 40, 40, 255);
+    setPixel(data, face.x + 4, face.y + 3, 40, 40, 40, 255);
+    setPixel(data, face.x + 3, face.y + 6, 120, 70, 60, 255);
+    setPixel(data, face.x + 4, face.y + 6, 120, 70, 60, 255);
+  } else if (faceStyle === 'blush') {
+    setPixel(data, face.x + 1, face.y + 4, 220, 130, 140, 255);
+    setPixel(data, face.x + 6, face.y + 4, 220, 130, 140, 255);
+    setPixel(data, face.x + 2, face.y + 5, 120, 70, 60, 255);
+    setPixel(data, face.x + 3, face.y + 6, 120, 70, 60, 255);
+    setPixel(data, face.x + 4, face.y + 6, 120, 70, 60, 255);
+    setPixel(data, face.x + 5, face.y + 5, 120, 70, 60, 255);
+  } else if (faceStyle === 'freckles') {
+    setPixel(data, face.x + 3, face.y + 5, 120, 70, 60, 255);
+    setPixel(data, face.x + 4, face.y + 5, 120, 70, 60, 255);
+    setPixel(data, face.x + 1, face.y + 4, 160, 100, 80, 255);
+    setPixel(data, face.x + 2, face.y + 5, 160, 100, 80, 255);
+    setPixel(data, face.x + 5, face.y + 4, 160, 100, 80, 255);
+    setPixel(data, face.x + 6, face.y + 5, 160, 100, 80, 255);
+  } else if (faceStyle === 'kawaii') {
+    setPixel(data, face.x + 2, face.y + 4, er, eg, eb, 255);
+    setPixel(data, face.x + 5, face.y + 4, er, eg, eb, 255);
+    setPixel(data, face.x + 1, face.y + 5, 240, 170, 180, 255);
+    setPixel(data, face.x + 2, face.y + 5, 240, 170, 180, 255);
+    setPixel(data, face.x + 5, face.y + 5, 240, 170, 180, 255);
+    setPixel(data, face.x + 6, face.y + 5, 240, 170, 180, 255);
   } else {
     setPixel(data, face.x + 3, face.y + 5, 120, 70, 60, 255);
     setPixel(data, face.x + 4, face.y + 5, 120, 70, 60, 255);
@@ -515,16 +560,332 @@ export function applyHairStyle(
     }
     fillRect(data, { x: PART_UV.hat.front.x + 3, y: PART_UV.hat.front.y, w: 2, h: 5 }, r, g, b, 255);
     fillRect(data, { x: PART_UV.hat.back.x + 3, y: PART_UV.hat.back.y, w: 2, h: 5 }, r, g, b, 255);
+  } else if (style === 'bun') {
+    fillRect(data, { x: PART_UV.hat.top.x + 2, y: PART_UV.hat.top.y + 1, w: 4, h: 4 }, r, g, b, 255);
+    fillRect(data, { x: PART_UV.hat.back.x + 2, y: PART_UV.hat.back.y, w: 4, h: 3 }, r, g, b, 255);
+    fillRect(data, { ...PART_UV.hat.front, h: 2 }, r, g, b, 255);
+  } else if (style === 'afro') {
+    for (const f of ['top', 'front', 'back', 'left', 'right'] as SkinFace[]) {
+      fillRect(data, PART_UV.hat[f], r, g, b, 255);
+    }
+    const top = PART_UV.hat.top;
+    for (let y = 0; y < top.h; y++) {
+      for (let x = 0; x < top.w; x++) {
+        if ((x + y) % 3 === 0) {
+          setPixel(
+            data,
+            top.x + x,
+            top.y + y,
+            Math.min(255, r + 18),
+            Math.min(255, g + 12),
+            Math.min(255, b + 8),
+            255,
+          );
+        }
+      }
+    }
+  } else if (style === 'bangs') {
+    for (const f of ['top', 'front', 'back', 'left', 'right'] as SkinFace[]) {
+      fillRect(data, PART_UV.hat[f], r, g, b, 255);
+    }
+    const headFront = PART_UV.head.front;
+    fillRect(data, { x: headFront.x + 1, y: headFront.y + 1, w: 6, h: 2 }, r, g, b, 255);
+    const [lr, lg, lb] = [Math.min(255, r + 14), Math.min(255, g + 10), Math.min(255, b + 12)];
+    setPixel(data, headFront.x + 2, headFront.y + 1, lr, lg, lb, 255);
+    setPixel(data, headFront.x + 5, headFront.y + 1, lr, lg, lb, 255);
+  }
+}
+
+/** Accent collar, cuff tips, and hem stripe on body/arms. */
+export function applyAccentTrim(data: Uint8ClampedArray, accentHex: string): void {
+  const [r, g, b] = parseHex(accentHex);
+  const body = PART_UV.body.front;
+  fillRect(data, { x: body.x, y: body.y, w: body.w, h: 1 }, r, g, b, 255);
+  fillRect(data, { x: body.x, y: body.y + body.h - 1, w: body.w, h: 1 }, r, g, b, 255);
+  const back = PART_UV.body.back;
+  fillRect(data, { x: back.x, y: back.y, w: back.w, h: 1 }, r, g, b, 255);
+  for (const arm of ['armR', 'armL'] as SkinPart[]) {
+    const front = PART_UV[arm].front;
+    fillRect(data, { x: front.x, y: front.y + front.h - 1, w: front.w, h: 1 }, r, g, b, 255);
   }
 }
 
 export function applyProfileCosmetics(data: Uint8ClampedArray, c: SkinCosmetics): void {
   if (c.pants) applyPantsColor(data, c.pants);
   if (c.sleeves && c.skin && c.outfit) applySleeves(data, c.sleeves, c.skin, c.outfit);
+  if (c.accent && c.renderMode !== 'block') applyAccentTrim(data, c.accent);
   applyFaceFeatures(data, c.eyes, c.face ?? 'neutral');
   applyFacialHair(data, c.facial ?? 'none', c.hair);
   applyShoeColor(data, c.shoes);
   applyHairStyle(data, c.hairStyle, c.hair);
+}
+
+function fillRectAt(
+  data: Uint8ClampedArray,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  hex: string,
+): void {
+  const [r, g, b] = parseHex(hex);
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      setPixel(data, x + dx, y + dy, r, g, b, 255);
+    }
+  }
+}
+
+function paintPixelsAt(
+  data: Uint8ClampedArray,
+  hex: string,
+  points: [number, number][],
+): void {
+  const [r, g, b] = parseHex(hex);
+  for (const [x, y] of points) setPixel(data, x, y, r, g, b, 255);
+}
+
+function heartTiny(data: Uint8ClampedArray, color: string, cx: number, cy: number): void {
+  paintPixelsAt(data, color, [
+    [cx - 1, cy],
+    [cx + 1, cy],
+    [cx - 1, cy + 1],
+    [cx, cy + 1],
+    [cx + 1, cy + 1],
+    [cx, cy + 2],
+  ]);
+}
+
+function paintArmRects(data: Uint8ClampedArray, color: string): void {
+  const rects: [number, number, number, number][] = [
+    [44, 16, 4, 4],
+    [48, 16, 4, 4],
+    [40, 20, 4, 12],
+    [44, 20, 4, 12],
+    [48, 20, 4, 12],
+    [52, 20, 4, 12],
+    [36, 48, 4, 4],
+    [40, 48, 4, 4],
+    [32, 52, 4, 12],
+    [36, 52, 4, 12],
+    [40, 52, 4, 12],
+    [44, 52, 4, 12],
+  ];
+  for (const [x, y, w, h] of rects) fillRectAt(data, x, y, w, h, color);
+}
+
+function paintLegRects(data: Uint8ClampedArray, color: string, keepShoeRows = 2): void {
+  const rects: [number, number, number, number][] = [
+    [0, 20, 4, 12],
+    [4, 20, 4, 12],
+    [8, 20, 4, 12],
+    [12, 20, 4, 12],
+    [16, 52, 4, 12],
+    [20, 52, 4, 12],
+    [24, 52, 4, 12],
+    [28, 52, 4, 12],
+  ];
+  for (const [x, y, w, h] of rects) fillRectAt(data, x, y, w, h - keepShoeRows, color);
+}
+
+function hoodieOutfit(data: Uint8ClampedArray, hoodie: string, shirt: string): void {
+  fillRectAt(data, 20, 20, 8, 12, hoodie);
+  fillRectAt(data, 32, 20, 8, 12, hoodie);
+  fillRectAt(data, 22, 22, 4, 2, shirt);
+  paintArmRects(data, hoodie);
+  fillRectAt(data, 40, 8, 8, 3, hoodie);
+  fillRectAt(data, 41, 7, 6, 1, hoodie);
+}
+
+function overallsOutfit(data: Uint8ClampedArray, shirt: string, overalls: string): void {
+  fillRectAt(data, 20, 20, 8, 12, shirt);
+  fillRectAt(data, 32, 20, 8, 12, shirt);
+  fillRectAt(data, 20, 24, 8, 8, overalls);
+  fillRectAt(data, 32, 24, 8, 8, overalls);
+  fillRectAt(data, 16, 20, 4, 8, overalls);
+  fillRectAt(data, 28, 20, 4, 8, overalls);
+  fillRectAt(data, 36, 52, 4, 8, overalls);
+  fillRectAt(data, 48, 52, 4, 8, overalls);
+  paintArmRects(data, shirt);
+  paintLegRects(data, overalls, 2);
+}
+
+function shadeHex(hex: string, delta: number): string {
+  const [r, g, b] = parseHex(hex);
+  return `#${[
+    Math.max(0, Math.min(255, r + delta)),
+    Math.max(0, Math.min(255, g + delta)),
+    Math.max(0, Math.min(255, b + delta)),
+  ]
+    .map((v) => v.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function softNoiseRect(
+  data: Uint8ClampedArray,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  base: string,
+  spread = 10,
+): void {
+  const [br, bg, bb] = parseHex(base);
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      const n = ((dx * 5 + dy * 7) % 3) - 1;
+      setPixel(data, x + dx, y + dy, br + n * spread, bg + n * spread, bb + n * spread, 255);
+    }
+  }
+}
+
+function collarBow(data: Uint8ClampedArray, accent: string): void {
+  fillRectAt(data, 22, 20, 4, 2, accent);
+  fillRectAt(data, 21, 21, 2, 2, accent);
+  fillRectAt(data, 25, 21, 2, 2, accent);
+  fillRectAt(data, 23, 22, 2, 1, accent);
+}
+
+function sideHairBows(data: Uint8ClampedArray, bow: string): void {
+  fillRectAt(data, 16, 9, 2, 2, bow);
+  fillRectAt(data, 15, 10, 1, 1, bow);
+  fillRectAt(data, 23, 9, 2, 2, bow);
+  fillRectAt(data, 25, 10, 1, 1, bow);
+}
+
+function puffyWhiteSleeves(data: Uint8ClampedArray, shirt: string, accent: string): void {
+  const shadow = shadeHex(shirt, -12);
+  paintArmRects(data, shirt);
+  const armFronts: [number, number][] = [
+    [44, 20],
+    [36, 52],
+  ];
+  for (const [x, y] of armFronts) {
+    softNoiseRect(data, x, y, 4, 12, shirt, 6);
+    fillRectAt(data, x, y + 8, 4, 2, shadow);
+    heartTiny(data, accent, x + 2, y + 9);
+  }
+}
+
+function teddyCrossbody(data: Uint8ClampedArray, bear: string, strap: string, accent: string): void {
+  fillRectAt(data, 22, 27, 4, 3, bear);
+  paintPixelsAt(data, shadeHex(bear, 20), [
+    [22, 27],
+    [25, 27],
+  ]);
+  setPixel(data, 23, 28, 70, 48, 34, 255);
+  setPixel(data, 24, 28, 70, 48, 34, 255);
+  fillRectAt(data, 21, 23, 1, 6, strap);
+  fillRectAt(data, 26, 25, 1, 3, strap);
+  heartTiny(data, accent, 24, 24);
+}
+
+function cozyPinafore(
+  data: Uint8ClampedArray,
+  shirt: string,
+  dress: string,
+  accent: string,
+): void {
+  const dressShadow = shadeHex(dress, -16);
+  fillRectAt(data, 20, 20, 8, 3, shirt);
+  fillRectAt(data, 32, 20, 8, 3, shirt);
+  collarBow(data, accent);
+  softNoiseRect(data, 20, 23, 8, 9, dress, 8);
+  softNoiseRect(data, 32, 23, 8, 9, dress, 8);
+  fillRectAt(data, 16, 20, 4, 8, dress);
+  fillRectAt(data, 28, 20, 4, 8, dress);
+  fillRectAt(data, 36, 52, 4, 8, dress);
+  fillRectAt(data, 48, 52, 4, 8, dress);
+  fillRectAt(data, 20, 30, 8, 1, dressShadow);
+  fillRectAt(data, 32, 30, 8, 1, dressShadow);
+}
+
+function cozyStockings(data: Uint8ClampedArray, sock: string, accent: string): void {
+  paintLegRects(data, sock);
+  const sockFronts: [number, number][] = [
+    [4, 20],
+    [20, 52],
+  ];
+  for (const [x, y] of sockFronts) {
+    softNoiseRect(data, x, y, 4, 10, sock, 4);
+    fillRectAt(data, x, y, 4, 2, accent);
+    heartTiny(data, accent, x + 2, y + 4);
+    heartTiny(data, accent, x + 1, y + 7);
+    paintPixelsAt(data, accent, [
+      [x + 1, y + 1],
+      [x + 2, y + 1],
+    ]);
+  }
+}
+
+function cozyHair(data: Uint8ClampedArray, hair: string, bow: string): void {
+  const highlight = shadeHex(hair, 18);
+  const shadow = shadeHex(hair, -14);
+  for (const rect of [
+    [40, 0, 8, 8],
+    [32, 8, 8, 8],
+    [40, 8, 8, 8],
+    [48, 8, 8, 8],
+    [56, 8, 8, 8],
+  ] as const) {
+    softNoiseRect(data, rect[0], rect[1], rect[2], rect[3], hair, 7);
+  }
+  fillRectAt(data, 9, 9, 6, 2, hair);
+  paintPixelsAt(data, highlight, [
+    [10, 9],
+    [13, 9],
+    [40, 1],
+    [45, 2],
+  ]);
+  paintPixelsAt(data, shadow, [
+    [12, 10],
+    [34, 12],
+    [54, 12],
+  ]);
+  sideHairBows(data, bow);
+}
+
+/** Reference cozy-girl skin — charcoal pinafore, puffy sleeves, teddy bag. */
+export function applyCozyReferenceStyle(
+  data: Uint8ClampedArray,
+  opts: {
+    skin: string;
+    outfit: string;
+    accent: string;
+    pants: string;
+    hair: string;
+    shoes: string;
+    variant?: 'girl' | 'boy';
+    boyStyle?: 'hoodie' | 'overalls';
+    legColor?: string;
+  },
+): void {
+  const shirt = opts.skin;
+  const dress = opts.outfit;
+  const accent = opts.accent;
+  const socks = opts.pants;
+  const variant = opts.variant ?? 'girl';
+
+  if (variant === 'boy') {
+    if (opts.boyStyle === 'overalls') {
+      overallsOutfit(data, shirt, dress);
+      paintLegRects(data, opts.legColor ?? socks);
+    } else {
+      hoodieOutfit(data, dress, shirt);
+      paintLegRects(data, socks);
+    }
+    puffyWhiteSleeves(data, shirt, accent);
+    cozyStockings(data, socks, accent);
+    teddyCrossbody(data, shadeHex(opts.hair, 30), shirt, accent);
+    return;
+  }
+
+  cozyHair(data, opts.hair, shirt);
+  cozyPinafore(data, shirt, dress, accent);
+  puffyWhiteSleeves(data, shirt, accent);
+  cozyStockings(data, socks, accent);
+  teddyCrossbody(data, shadeHex(opts.hair, 28), shirt, accent);
+  applyShoeColor(data, opts.shoes);
 }
 
 /** Recolor skin/outfit parts when profile swatches change (keeps custom pixels elsewhere). */
@@ -543,17 +904,28 @@ export function applyBaseColorToParts(
   if (parts.includes('head')) paintDefaultFaceFeatures(data);
 }
 
-/** Steve-like default from base colors + optional cosmetics. */
+/** Default block-voxel skin. */
 export function createDefaultSkin(
   skin: string,
   outfit: string,
   accent: string,
   cosmetics?: SkinCosmetics,
 ): Uint8ClampedArray {
+  const renderMode = cosmetics?.renderMode ?? 'block';
+  if (renderMode === 'block') {
+    return buildBlockCharacterSkin({
+      skin: cosmetics?.skin ?? skin,
+      outfit: cosmetics?.outfit ?? outfit,
+      accent: cosmetics?.accent ?? accent,
+      pants: cosmetics?.pants,
+      hair: cosmetics?.hair,
+      shoes: cosmetics?.shoes,
+    });
+  }
+
   const data = new Uint8ClampedArray(SKIN_SIZE * SKIN_SIZE * 4);
   const [sr, sg, sb] = parseHex(skin);
   const [or, og, ob] = parseHex(outfit);
-  void accent;
 
   for (let i = 3; i < data.length; i += 4) data[i] = 0;
 
@@ -581,7 +953,10 @@ export function createDefaultSkin(
     pants: cosmetics?.pants ?? outfit,
     outfit,
     skin,
+    accent,
+    renderMode: 'classic',
   });
+
   return data;
 }
 
@@ -597,21 +972,9 @@ export function encodeSkin(data: Uint8ClampedArray): string {
 }
 
 export function decodeSkin(dataUrl: string): Promise<Uint8ClampedArray> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = SKIN_SIZE;
-      canvas.height = SKIN_SIZE;
-      const ctx = canvas.getContext('2d')!;
-      ctx.clearRect(0, 0, SKIN_SIZE, SKIN_SIZE);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, 0, 0, SKIN_SIZE, SKIN_SIZE);
-      resolve(new Uint8ClampedArray(ctx.getImageData(0, 0, SKIN_SIZE, SKIN_SIZE).data));
-    };
-    img.onerror = () => reject(new Error('Failed to decode skin'));
-    img.src = dataUrl;
-  });
+  return import('./SkinPNGImporter').then(({ importSkinFromDataUrl }) =>
+    importSkinFromDataUrl(dataUrl).then((r) => r.pixels),
+  );
 }
 
 export function copyRectToCanvas(

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Block, BLOCK_COLORS, CHUNK_HEIGHT } from '../world/blocks';
+import { Block, BLOCK_COLORS, CHUNK_HEIGHT, isFluid } from '../world/blocks';
 import type { ChunkManager } from '../world/ChunkManager';
 import { voxelRaycast, type RayHit } from '../world/voxelRaycast';
 import type { Inventory } from './Inventory';
@@ -15,6 +15,12 @@ export const PLACEABLE: { id: number; name: string }[] = [
   { id: Block.Leaves, name: 'Leaves' },
   { id: Block.Moss, name: 'Moss' },
   { id: Block.Crystal, name: 'Crystal' },
+  { id: Block.Torch, name: 'Torch' },
+  { id: Block.Gravel, name: 'Gravel' },
+  { id: Block.Ice, name: 'Ice' },
+  { id: Block.Water, name: 'Water' },
+  { id: Block.DarkStone, name: 'Dark stone' },
+  { id: Block.Lava, name: 'Lava' },
 ];
 
 const REACH = 8;
@@ -23,6 +29,8 @@ export class BlockInteraction {
   private hit: RayHit | null = null;
   private place: { x: number; y: number; z: number } | null = null;
   private highlight: THREE.LineSegments;
+  /** Flat outline on fluid surface — avoids full-cube wire through neighbors. */
+  private fluidHighlight: THREE.LineLoop;
   private cooldown = 0;
   private enabled = true;
   private onBlockChange: ((x: number, y: number, z: number, block: number) => void) | null =
@@ -51,6 +59,24 @@ export class BlockInteraction {
     this.highlight.renderOrder = 10;
     this.scene.add(this.highlight);
 
+    this.fluidHighlight = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.501, 0, -0.501),
+        new THREE.Vector3(0.501, 0, -0.501),
+        new THREE.Vector3(0.501, 0, 0.501),
+        new THREE.Vector3(-0.501, 0, 0.501),
+      ]),
+      new THREE.LineBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.75,
+        depthTest: true,
+      }),
+    );
+    this.fluidHighlight.visible = false;
+    this.fluidHighlight.renderOrder = 11;
+    this.scene.add(this.fluidHighlight);
+
     this.bindInput();
     this.onBlockChange = onBlockChange ?? null;
   }
@@ -61,7 +87,10 @@ export class BlockInteraction {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    if (!enabled) this.highlight.visible = false;
+    if (!enabled) {
+      this.highlight.visible = false;
+      this.fluidHighlight.visible = false;
+    }
   }
 
   setOnBlockChange(fn: (x: number, y: number, z: number, block: number) => void): void {
@@ -104,8 +133,8 @@ export class BlockInteraction {
       if (e.button === 0) {
         e.preventDefault();
         this.refresh();
-        if (e.shiftKey) this.placeBlock();
-        else this.breakBlock();
+        // LMB always breaks — Shift is used for sprint, so Shift+LMB must not place.
+        this.breakBlock();
       }
     });
 
@@ -137,6 +166,14 @@ export class BlockInteraction {
     if (this.enabled) this.refresh();
   }
 
+  /** Block under the crosshair, if any. */
+  getLookAt(): { id: number; x: number; y: number; z: number } | null {
+    if (!this.hit) return null;
+    const id = this.chunks.getBlock(this.hit.x, this.hit.y, this.hit.z);
+    if (id === Block.Air) return null;
+    return { id, x: this.hit.x, y: this.hit.y, z: this.hit.z };
+  }
+
   private refresh(): void {
     // Aim from the player's eyes along look direction — not the camera boom
     // (third/front cameras sit away from the head).
@@ -148,10 +185,22 @@ export class BlockInteraction {
     this.place = this.hit ? this.resolvePlaceCell(this.hit) : null;
 
     if (this.hit) {
-      this.highlight.visible = true;
-      this.highlight.position.set(this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+      const id = this.chunks.getBlock(this.hit.x, this.hit.y, this.hit.z);
+      if (isFluid(id)) {
+        this.highlight.visible = false;
+        const lv = this.chunks.getFluidLevelAt(this.hit.x, this.hit.y, this.hit.z);
+        const h = Math.max(0.08, lv / 8);
+        this.fluidHighlight.visible = true;
+        this.fluidHighlight.position.set(this.hit.x + 0.5, this.hit.y + h + 0.002, this.hit.z + 0.5);
+      } else {
+        this.fluidHighlight.visible = false;
+        this.highlight.visible = true;
+        this.highlight.scale.set(1, 1, 1);
+        this.highlight.position.set(this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+      }
     } else {
       this.highlight.visible = false;
+      this.fluidHighlight.visible = false;
     }
   }
 

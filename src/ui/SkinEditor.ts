@@ -18,10 +18,11 @@
   type SkinFace,
   type SkinPart,
 } from '../player/SkinAtlas';
+import { importSkinFromFile, type SkinImportResult } from '../player/SkinPNGImporter';
 import type { Profile } from './prefs';
 import { SkinPaint3D } from './SkinPaint3D';
 
-export type SkinTool = 'pen' | 'eraser' | 'fill' | 'eyedrop';
+export type SkinTool = 'pen' | 'eraser' | 'fill' | 'eyedrop' | 'line' | 'replace';
 export type BaseColorField =
   | 'skin'
   | 'outfit'
@@ -67,6 +68,8 @@ export interface SkinEditorOpts {
   glasses: Profile['glasses'];
   style: Profile['style'];
   hat: Profile['hat'];
+  backpack?: Profile['backpack'];
+  belt?: Profile['belt'];
   skinData?: string;
   onChange: (pixels: Uint8ClampedArray, dataUrl: string) => void;
 }
@@ -83,6 +86,11 @@ export class SkinEditor {
   private brushSize = 1;
   private color = '#1a1a1a';
   private painting = false;
+  private mirrorX = false;
+  private lineStart: { x: number; y: number } | null = null;
+  private readonly undoStack: Uint8ClampedArray[] = [];
+  private readonly redoStack: Uint8ClampedArray[] = [];
+  private readonly recentColors: string[] = [];
   private scale = 18;
   private readonly paint: HTMLCanvasElement;
   private readonly atlas: HTMLCanvasElement;
@@ -138,6 +146,8 @@ export class SkinEditor {
       glasses: opts.glasses,
       style: opts.style,
       hat: opts.hat,
+      backpack: opts.backpack ?? 'none',
+      belt: opts.belt ?? 'none',
     };
     this.pixels = createDefaultSkin(opts.skin, opts.outfit, opts.accent, this.base);
 
@@ -160,6 +170,8 @@ export class SkinEditor {
           <button type="button" class="seg-btn" data-tool="pen">Pen</button>
           <button type="button" class="seg-btn" data-tool="eraser">Erase</button>
           <button type="button" class="seg-btn" data-tool="fill">Fill</button>
+          <button type="button" class="seg-btn" data-tool="line">Line</button>
+          <button type="button" class="seg-btn" data-tool="replace">Replace</button>
           <button type="button" class="seg-btn" data-tool="eyedrop">Pick</button>
         </div>
         <input type="color" class="skin-color" value="#1a1a1a" aria-label="Paint color" />
@@ -167,7 +179,17 @@ export class SkinEditor {
           <button type="button" class="seg-btn" data-brush="1">1×</button>
           <button type="button" class="seg-btn" data-brush="2">2×</button>
           <button type="button" class="seg-btn" data-brush="3">3×</button>
+          <button type="button" class="seg-btn" data-brush="4">4×</button>
+          <button type="button" class="seg-btn" data-brush="5">5×</button>
         </div>
+        <button type="button" class="seg-btn skin-mirror-btn" data-act="toggle-mirror" title="Mirror paint across X">Mirror</button>
+      </div>
+      <div class="skin-history-row">
+        <button type="button" class="menu-btn quiet" data-act="undo" title="Undo">Undo</button>
+        <button type="button" class="menu-btn quiet" data-act="redo" title="Redo">Redo</button>
+        <button type="button" class="menu-btn quiet" data-act="mirror-face" title="Flip current face horizontally">Flip face</button>
+        <button type="button" class="menu-btn quiet" data-act="copy-limbs" title="Copy right limbs to left">Mirror limbs</button>
+        <div class="skin-recent" role="group" aria-label="Recent colors"></div>
       </div>
       <div class="skin-palette" role="group" aria-label="Colors"></div>
       <div class="skin-paint-3d-mount" hidden></div>
@@ -181,8 +203,8 @@ export class SkinEditor {
           <div class="skin-actions">
             <button type="button" class="menu-btn quiet" data-act="reset">Reset</button>
             <button type="button" class="menu-btn quiet" data-act="clear">Clear face</button>
-            <label class="menu-btn quiet skin-import">Import<input type="file" accept="image/png,image/*" hidden /></label>
-            <button type="button" class="menu-btn quiet" data-act="export">Export</button>
+            <label class="menu-btn quiet skin-import skin-upload-btn">Upload skin<input type="file" accept="image/png" hidden /></label>
+            <button type="button" class="menu-btn quiet" data-act="export">Export PNG</button>
           </div>
         </div>
       </div>
@@ -252,7 +274,10 @@ export class SkinEditor {
         applyBaseColorToParts(this.pixels, OUTFIT_PARTS, prev.outfit, outfit);
         this.base.outfit = outfit;
       }
-      if (field === 'accent') this.base.accent = accent;
+      if (field === 'accent') {
+        this.base.accent = accent;
+        applyProfileCosmetics(this.pixels, this.base);
+      }
       if (field === 'hair') this.base.hair = extras?.hair ?? skin;
       if (field === 'eyes') this.base.eyes = extras?.eyes ?? skin;
       if (field === 'shoes') this.base.shoes = extras?.shoes ?? skin;
@@ -276,7 +301,17 @@ export class SkinEditor {
   applyCosmetics(
     profile: Pick<
       Profile,
-      'hair' | 'eyes' | 'shoes' | 'hairStyle' | 'pants' | 'face' | 'facial' | 'sleeves' | 'skin' | 'outfit'
+      | 'hair'
+      | 'eyes'
+      | 'shoes'
+      | 'hairStyle'
+      | 'pants'
+      | 'face'
+      | 'facial'
+      | 'sleeves'
+      | 'skin'
+      | 'outfit'
+      | 'accent'
     >,
   ): void {
     this.base.hair = profile.hair;
@@ -289,6 +324,7 @@ export class SkinEditor {
     this.base.sleeves = profile.sleeves;
     this.base.skin = profile.skin;
     this.base.outfit = profile.outfit;
+    this.base.accent = profile.accent;
     applyProfileCosmetics(this.pixels, this.base);
     this.redraw();
     this.emit();
@@ -414,16 +450,173 @@ export class SkinEditor {
     }
   }
 
+  private pushHistory(): void {
+    this.undoStack.push(cloneSkin(this.pixels));
+    if (this.undoStack.length > 40) this.undoStack.shift();
+    this.redoStack.length = 0;
+  }
+
+  private undo(): void {
+    const prev = this.undoStack.pop();
+    if (!prev) return;
+    this.redoStack.push(cloneSkin(this.pixels));
+    this.pixels = prev;
+    this.redraw();
+    this.emit();
+  }
+
+  private redo(): void {
+    const next = this.redoStack.pop();
+    if (!next) return;
+    this.undoStack.push(cloneSkin(this.pixels));
+    this.pixels = next;
+    this.redraw();
+    this.emit();
+  }
+
+  private rememberColor(hex: string): void {
+    const c = hex.slice(0, 7).toLowerCase();
+    const i = this.recentColors.indexOf(c);
+    if (i >= 0) this.recentColors.splice(i, 1);
+    this.recentColors.unshift(c);
+    if (this.recentColors.length > 8) this.recentColors.pop();
+    this.fillRecent();
+  }
+
+  private fillRecent(): void {
+    const el = this.root.querySelector('.skin-recent');
+    if (!el) return;
+    el.innerHTML = this.recentColors
+      .map(
+        (c) =>
+          `<button type="button" class="skin-swatch" data-c="${c}" style="background-color:${c}" title="${c}"></button>`,
+      )
+      .join('');
+    el.querySelectorAll<HTMLButtonElement>('.skin-swatch').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.color = btn.dataset.c!;
+        this.root.querySelector<HTMLInputElement>('.skin-color')!.value = this.color;
+        if (this.tool === 'eraser' || this.tool === 'eyedrop') this.tool = 'pen';
+        this.syncSeg();
+      });
+    });
+  }
+
+  private mirrorPoint(ax: number, ay: number): { x: number; y: number } | null {
+    const rect = PART_UV[this.part][this.face];
+    const lx = ax - rect.x;
+    const ly = ay - rect.y;
+    if (lx < 0 || ly < 0 || lx >= rect.w || ly >= rect.h) return null;
+    return { x: rect.x + (rect.w - 1 - lx), y: ay };
+  }
+
+  private applyBrushDot(ax: number, ay: number): void {
+    const half = Math.floor((this.brushSize - 1) / 2);
+    for (let dy = -half; dy < this.brushSize - half; dy++) {
+      for (let dx = -half; dx < this.brushSize - half; dx++) {
+        this.paintPixel(ax + dx, ay + dy, false);
+        if (this.mirrorX) {
+          const m = this.mirrorPoint(ax + dx, ay + dy);
+          if (m) this.paintPixel(m.x, m.y, false);
+        }
+      }
+    }
+  }
+
+  private drawLine(x0: number, y0: number, x1: number, y1: number): void {
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    let x = x0;
+    let y = y0;
+    for (;;) {
+      this.applyBrushDot(x, y);
+      if (x === x1 && y === y1) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y += sy;
+      }
+    }
+  }
+
+  private replaceColorOnFace(ax: number, ay: number): void {
+    const rect = PART_UV[this.part][this.face];
+    const [tr, tg, tb] = getPixel(this.pixels, ax, ay);
+    const [nr, ng, nb, na] = this.rgba();
+    for (let y = rect.y; y < rect.y + rect.h; y++) {
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        const [r, g, b, a] = getPixel(this.pixels, x, y);
+        if (a < 8) continue;
+        if (Math.abs(r - tr) + Math.abs(g - tg) + Math.abs(b - tb) <= 24) {
+          setPixel(this.pixels, x, y, nr, ng, nb, na);
+        }
+      }
+    }
+  }
+
+  private flipCurrentFace(): void {
+    this.pushHistory();
+    const rect = PART_UV[this.part][this.face];
+    const copy = cloneSkin(this.pixels);
+    for (let y = 0; y < rect.h; y++) {
+      for (let x = 0; x < rect.w; x++) {
+        const [r, g, b, a] = getPixel(copy, rect.x + x, rect.y + y);
+        setPixel(this.pixels, rect.x + (rect.w - 1 - x), rect.y + y, r, g, b, a);
+      }
+    }
+    this.redraw();
+    this.emit();
+  }
+
+  private copyRightLimbsToLeft(): void {
+    this.pushHistory();
+    const pairs: [SkinPart, SkinPart][] = [
+      ['armR', 'armL'],
+      ['legR', 'legL'],
+    ];
+    for (const [src, dst] of pairs) {
+      for (const face of FACES) {
+        const a = PART_UV[src][face];
+        const b = PART_UV[dst][face];
+        for (let y = 0; y < a.h && y < b.h; y++) {
+          for (let x = 0; x < a.w && x < b.w; x++) {
+            const [r, g, bl, al] = getPixel(this.pixels, a.x + x, a.y + y);
+            setPixel(this.pixels, b.x + (b.w - 1 - x), b.y + y, r, g, bl, al);
+          }
+        }
+      }
+    }
+    this.redraw();
+    this.emit();
+  }
+
   private applyStrokeAt(ax: number, ay: number): void {
-    if (this.tool === 'fill' || this.tool === 'eyedrop') {
+    if (this.tool === 'fill' || this.tool === 'eyedrop' || this.tool === 'replace') {
       this.paintPixel(ax, ay);
       return;
     }
-    for (let dy = 0; dy < this.brushSize; dy++) {
-      for (let dx = 0; dx < this.brushSize; dx++) {
-        this.paintPixel(ax + dx, ay + dy, false);
+    if (this.tool === 'line') {
+      if (!this.lineStart) {
+        this.lineStart = { x: ax, y: ay };
+        this.applyBrushDot(ax, ay);
+        this.redraw();
+        this.emit();
+        return;
       }
+      this.drawLine(this.lineStart.x, this.lineStart.y, ax, ay);
+      this.lineStart = null;
+      this.redraw();
+      this.emit();
+      return;
     }
+    this.applyBrushDot(ax, ay);
     this.redraw();
     this.emit();
   }
@@ -438,13 +631,20 @@ export class SkinEditor {
       else {
         this.color = `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
         this.root.querySelector<HTMLInputElement>('.skin-color')!.value = this.color;
+        this.rememberColor(this.color);
         this.tool = 'pen';
       }
       this.syncSeg();
       return;
     }
-    if (this.tool === 'fill') {
+    if (this.tool === 'replace') {
+      this.replaceColorOnFace(ax, ay);
+    } else if (this.tool === 'fill') {
       floodFill(this.pixels, rect, ax, ay, ...this.rgba());
+      if (this.mirrorX) {
+        const m = this.mirrorPoint(ax, ay);
+        if (m) floodFill(this.pixels, rect, m.x, m.y, ...this.rgba());
+      }
     } else if (this.tool === 'eraser') {
       if (this.part === 'hat') setPixel(this.pixels, ax, ay, 0, 0, 0, 0);
       else setPixel(this.pixels, ax, ay, ...this.baseRgb(this.part));
@@ -452,6 +652,7 @@ export class SkinEditor {
       setPixel(this.pixels, ax, ay, ...this.rgba());
     }
     if (finish) {
+      if (this.tool === 'pen') this.rememberColor(this.color);
       this.redraw();
       this.emit();
     }
@@ -549,11 +750,13 @@ export class SkinEditor {
       e.preventDefault();
       this.painting = true;
       this.paint.setPointerCapture(e.pointerId);
+      if (this.tool !== 'eyedrop') this.pushHistory();
       stroke(e);
     });
     this.paint.addEventListener('pointermove', (e) => {
       if (!this.painting) return;
-      if (this.tool === 'fill' || this.tool === 'eyedrop') return;
+      if (this.tool === 'fill' || this.tool === 'eyedrop' || this.tool === 'line' || this.tool === 'replace')
+        return;
       stroke(e);
     });
     const stop = () => {
@@ -564,10 +767,20 @@ export class SkinEditor {
   }
 
   private bindActions(): void {
+    this.root.querySelector('[data-act="undo"]')?.addEventListener('click', () => this.undo());
+    this.root.querySelector('[data-act="redo"]')?.addEventListener('click', () => this.redo());
+    this.root.querySelector('[data-act="mirror-face"]')?.addEventListener('click', () => this.flipCurrentFace());
+    this.root.querySelector('[data-act="copy-limbs"]')?.addEventListener('click', () => this.copyRightLimbsToLeft());
+    this.root.querySelector('[data-act="toggle-mirror"]')?.addEventListener('click', () => {
+      this.mirrorX = !this.mirrorX;
+      this.syncSeg();
+    });
     this.root.querySelector('[data-act="reset"]')!.addEventListener('click', () => {
+      this.pushHistory();
       this.setBaseColors(this.base.skin, this.base.outfit, this.base.accent, 'all', this.base);
     });
     this.root.querySelector('[data-act="clear"]')!.addEventListener('click', () => {
+      this.pushHistory();
       const rect = PART_UV[this.part][this.face];
       const clearHat = this.part === 'hat';
       for (let y = rect.y; y < rect.y + rect.h; y++) {
@@ -589,18 +802,24 @@ export class SkinEditor {
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        void decodeSkin(String(reader.result))
-          .then((p) => {
-            this.pixels = p;
-            this.redraw();
-            this.emit();
-          })
-          .catch(() => undefined);
-      };
-      reader.readAsDataURL(file);
+      void importSkinFromFile(file)
+        .then((result) => this.applyImportedSkin(result))
+        .catch(() => undefined);
       input.value = '';
+    });
+  }
+
+  /** Apply a Minecraft 64×64 / 128×128 PNG onto the editor + 3D preview. */
+  applyImportedSkin(result: SkinImportResult): void {
+    this.pushHistory();
+    this.pixels = cloneSkin(result.pixels);
+    this.redraw();
+    this.emit();
+  }
+
+  importSkinFile(file: File): Promise<void> {
+    return importSkinFromFile(file).then((result) => {
+      this.applyImportedSkin(result);
     });
   }
 
@@ -639,6 +858,7 @@ export class SkinEditor {
     this.root.querySelectorAll<HTMLButtonElement>('[data-brush]').forEach((btn) => {
       btn.classList.toggle('active', Number(btn.dataset.brush) === this.brushSize);
     });
+    this.root.querySelector('[data-act="toggle-mirror"]')?.classList.toggle('active', this.mirrorX);
     const pick = this.color.toLowerCase();
     this.root.querySelectorAll<HTMLButtonElement>('.skin-swatch').forEach((btn) => {
       const c = btn.dataset.c!;

@@ -23,3 +23,9 @@ dist-ssr
 *.sw?
 
 .vercel
+.env*
+
+# VYTHERA local training artifacts
+.vythera/
+adapters/
+models/vythera-jobs/

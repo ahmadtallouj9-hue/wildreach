@@ -4,16 +4,52 @@ import { SEA_LEVEL } from '../world/blocks';
 
 const terrainVert = /* glsl */ `
   attribute float ao;
+  attribute float light;
   varying vec2 vUv;
   varying float vAo;
+  varying float vLight;
   varying vec3 vWorldPos;
   varying vec3 vNormal;
+  varying float vWind;
 
   void main() {
     vUv = uv;
     vAo = ao;
-    vNormal = normalize(normalMatrix * normal);
+    vLight = light;
+    vWind = 0.0;
+    vNormal = normalize(mat3(modelMatrix) * normal);
     vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorldPos = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const cutoutVert = /* glsl */ `
+  attribute float ao;
+  attribute float light;
+  uniform float time;
+  varying vec2 vUv;
+  varying float vAo;
+  varying float vLight;
+  varying vec3 vWorldPos;
+  varying vec3 vNormal;
+  varying float vWind;
+
+  void main() {
+    vUv = uv;
+    vAo = ao;
+    vLight = light;
+    vWind = 0.0;
+    vNormal = normalize(mat3(modelMatrix) * normal);
+    vec3 pos = position;
+    // Light leaf sway — one sin only.
+    if (uv.y > 0.74 && uv.y < 0.88 && uv.x < 0.13) {
+      vWind = 1.0;
+      float gust = sin(time * 1.1 + pos.x * 0.4 + pos.z * 0.35);
+      pos.x += gust * 0.06;
+      pos.z += cos(time * 0.9 + pos.x * 0.3) * 0.04;
+    }
+    vec4 world = modelMatrix * vec4(pos, 1.0);
     vWorldPos = world.xyz;
     gl_Position = projectionMatrix * viewMatrix * world;
   }
@@ -21,6 +57,11 @@ const terrainVert = /* glsl */ `
 
 function makeTerrainFrag(cutout: boolean): string {
   const discardLine = cutout ? 'if (tex.a < 0.5) discard;' : '';
+  const rustle = cutout
+    ? `
+    float rustle = sin(time * 2.35 + vWorldPos.x * 1.6 + vWorldPos.z * 1.25) * 0.05 * vWind;
+    color *= 1.0 + rustle;`
+    : '';
   return /* glsl */ `
   uniform sampler2D map;
   uniform vec3 sunDir;
@@ -28,11 +69,14 @@ function makeTerrainFrag(cutout: boolean): string {
   uniform vec3 ambientColor;
   uniform vec3 fogColor;
   uniform float fogDensity;
+  uniform float time;
 
   varying vec2 vUv;
   varying float vAo;
+  varying float vLight;
   varying vec3 vWorldPos;
   varying vec3 vNormal;
+  varying float vWind;
 
   void main() {
     vec4 tex = texture2D(map, vUv);
@@ -42,12 +86,23 @@ function makeTerrainFrag(cutout: boolean): string {
     if (!gl_FrontFacing) N = -N;
 
     vec3 L = normalize(sunDir);
-    float wrap = max(dot(N, L), 0.0) * 0.55 + 0.45;
-    float day = clamp(sunDir.y * 1.25, 0.05, 1.0);
+    float day = smoothstep(-0.12, 0.38, sunDir.y);
+    float wrapSun = max(dot(N, L), 0.0) * 0.55 + 0.45;
+    float wrapMoon = max(dot(N, -L), 0.0) * 0.3 + 0.5;
+    float skyFill = N.y * 0.42 + 0.58;
+    float groundBounce = max(-N.y, 0.0) * 0.12;
 
-    vec3 lighting = ambientColor + sunColor * wrap * day;
-    lighting += vec3(0.14, 0.18, 0.22) * (N.y * 0.5 + 0.5);
-    vec3 color = tex.rgb * lighting * max(vAo, 0.35);
+    float vl = clamp(vLight, 0.0, 1.0);
+    float blockGlow = smoothstep(0.15, 0.55, vl);
+    // Keep a readable base fill so caves aren't pure black.
+    vec3 lighting = ambientColor * (0.42 + vl * 0.58);
+    lighting += sunColor * wrapSun * (0.08 + day * 0.88) * mix(0.28, 1.0, vl);
+    lighting += vec3(0.22, 0.26, 0.42) * wrapMoon * (1.0 - day) * mix(0.45, 1.0, vl);
+    lighting += vec3(0.16, 0.18, 0.16) * skyFill * mix(0.5, 1.0, vl);
+    lighting += vec3(0.1, 0.09, 0.07) * groundBounce * mix(0.55, 1.0, vl);
+    lighting += vec3(1.0, 0.74, 0.38) * blockGlow * 0.4;
+    vec3 color = tex.rgb * lighting * max(vAo, 0.68);
+    ${rustle}
 
     float fog = clamp(1.0 - exp(-length(vWorldPos - cameraPosition) * fogDensity), 0.0, 0.72);
     color = mix(color, fogColor, fog);
@@ -68,11 +123,12 @@ const waterVert = /* glsl */ `
     vUv = uv;
     vDepth = ao;
     vec3 pos = position;
-    float wave = sin(pos.x * 0.55 + time * 1.8) * 0.035
-               + cos(pos.z * 0.48 + time * 1.35) * 0.028
-               + sin((pos.x + pos.z) * 0.22 - time * 0.9) * 0.018;
-    pos.y += wave;
-    vNormal = normalize(normalMatrix * normal);
+    float topMask = step(0.85, normal.y);
+    float wave = sin(pos.x * 0.55 + time * 1.8) * 0.028
+               + cos(pos.z * 0.48 + time * 1.35) * 0.022
+               + sin((pos.x + pos.z) * 0.22 - time * 0.9) * 0.014;
+    pos.y += wave * topMask;
+    vNormal = normalize(mat3(modelMatrix) * normal);
     vec4 world = modelMatrix * vec4(pos, 1.0);
     vWorldPos = world.xyz;
     gl_Position = projectionMatrix * viewMatrix * world;
@@ -110,8 +166,8 @@ const waterFrag = /* glsl */ `
   }
 
   void main() {
-    vec2 flow = vec2(time * 0.04, time * 0.025);
-    vec2 uv = vUv * 1.4 + flow;
+    vec2 scroll = vec2(0.15, 0.1) * time * 0.03;
+    vec2 uv = vUv * 1.4 + scroll;
     vec4 tex = texture2D(map, uv);
 
     vec3 N = normalize(vNormal);
@@ -123,13 +179,12 @@ const waterFrag = /* glsl */ `
     vec3 V = normalize(cameraPosition - vWorldPos);
     vec3 L = normalize(sunDir);
     float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-    // Soft, narrow sun sparkle — keep it from blowing out to white.
     float specRaw = pow(max(dot(reflect(-L, N), V), 0.0), 160.0);
     float spec = specRaw * (0.4 + 0.35 * max(L.y, 0.0));
     spec = min(spec, 0.35);
 
-    float ripple = noise(vWorldPos.xz * 0.35 + flow * 3.0) * 0.5
-                 + noise(vWorldPos.xz * 0.75 - flow * 2.0) * 0.25;
+    float ripple = noise(vWorldPos.xz * 0.35 + scroll * 3.0) * 0.5
+                 + noise(vWorldPos.xz * 0.75 - scroll * 2.0) * 0.25;
     float caustic = noise(vWorldPos.xz * 0.9 + vec2(time * 0.45, -time * 0.32));
     caustic += noise(vWorldPos.xz * 1.6 - vec2(time * 0.28, time * 0.22)) * 0.55;
     caustic = smoothstep(0.35, 0.92, caustic);
@@ -141,7 +196,6 @@ const waterFrag = /* glsl */ `
     color += ripple * 0.07;
     color += vec3(0.05, 0.12, 0.1) * caustic * (1.0 - clamp(columnDepth / 18.0, 0.0, 1.0)) * 0.45;
 
-    // Muted specular — sky-tinted, not blown sun white.
     vec3 sparkle = mix(sunColor, vec3(0.45, 0.62, 0.78), 0.55);
     color += sparkle * spec * (0.08 + fresnel * 0.12);
     color += ambientColor * 0.22 * (1.0 - fresnel);
@@ -162,11 +216,59 @@ const waterFrag = /* glsl */ `
   }
 `;
 
+const lavaVert = /* glsl */ `
+  attribute float ao;
+  varying vec2 vUv;
+  varying float vAo;
+  varying vec3 vWorldPos;
+  varying vec3 vNormal;
+
+  void main() {
+    vUv = uv;
+    vAo = ao;
+    vNormal = normalize(mat3(modelMatrix) * normal);
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorldPos = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const lavaFrag = /* glsl */ `
+  uniform sampler2D map;
+  uniform vec3 fogColor;
+  uniform float fogDensity;
+  uniform float time;
+
+  varying vec2 vUv;
+  varying float vAo;
+  varying vec3 vWorldPos;
+  varying vec3 vNormal;
+
+  void main() {
+    vec2 uv = vUv + vec2(0.08, 0.05) * time * 0.02;
+    vec4 tex = texture2D(map, uv);
+    vec3 N = normalize(vNormal);
+    if (!gl_FrontFacing) N = -N;
+
+    float pulse = 0.9 + 0.1 * sin(time * 2.4 + vWorldPos.x * 0.55 + vWorldPos.z * 0.45);
+    vec3 hot = tex.rgb * 1.25 * pulse;
+    hot += vec3(1.0, 0.42, 0.06) * 0.35;
+    hot += vec3(1.0, 0.72, 0.12) * max(N.y, 0.0) * 0.15;
+
+    vec3 color = hot * max(vAo, 0.8);
+    float fog = clamp(1.0 - exp(-length(vWorldPos - cameraPosition) * fogDensity), 0.0, 0.65);
+    color = mix(color, fogColor, fog);
+    // Slight translucency so sloping seams don't draw hard walls.
+    gl_FragColor = vec4(color, 0.92);
+  }
+`;
+
 export class TerrainMaterials {
   readonly atlas: THREE.CanvasTexture;
   readonly solid: THREE.ShaderMaterial;
   readonly cutout: THREE.ShaderMaterial;
   readonly water: THREE.ShaderMaterial;
+  readonly lava: THREE.ShaderMaterial;
   readonly uniforms: {
     sunDir: THREE.IUniform<THREE.Vector3>;
     sunColor: THREE.IUniform<THREE.Color>;
@@ -200,6 +302,7 @@ export class TerrainMaterials {
       ambientColor: this.uniforms.ambientColor,
       fogColor: this.uniforms.fogColor,
       fogDensity: this.uniforms.fogDensity,
+      time: this.uniforms.time,
     };
 
     this.solid = new THREE.ShaderMaterial({
@@ -214,7 +317,7 @@ export class TerrainMaterials {
 
     this.cutout = new THREE.ShaderMaterial({
       uniforms: { ...shared },
-      vertexShader: terrainVert,
+      vertexShader: cutoutVert,
       fragmentShader: makeTerrainFrag(true),
       transparent: false,
       alphaTest: 0.5,
@@ -239,11 +342,24 @@ export class TerrainMaterials {
       transparent: true,
       depthWrite: false,
       depthTest: true,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       blending: THREE.NormalBlending,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+    });
+
+    this.lava = new THREE.ShaderMaterial({
+      uniforms: {
+        map: { value: this.atlas },
+        fogColor: this.uniforms.fogColor,
+        fogDensity: this.uniforms.fogDensity,
+        time: this.uniforms.time,
+      },
+      vertexShader: lavaVert,
+      fragmentShader: lavaFrag,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.FrontSide,
+      blending: THREE.NormalBlending,
     });
   }
 
@@ -268,13 +384,13 @@ export class TerrainMaterials {
       this.uniforms.fogColor.value.lerp(under, u * 0.55);
     }
 
-    const day = Math.max(0.08, sunDir.y);
-    this.uniforms.sunColor.value.setRGB(1, 0.94 + day * 0.04, 0.82 + day * 0.08);
-    const amb = 0.22 + day * 0.12;
+    const day = THREE.MathUtils.smoothstep(-0.1, 0.4, sunDir.y);
+    this.uniforms.sunColor.value.setRGB(1, 0.9 + day * 0.08, 0.78 + day * 0.14);
+    const amb = 0.52 + day * 0.18;
     this.uniforms.ambientColor.value.setRGB(
-      amb * (1 - u * 0.35),
-      (0.26 + day * 0.12) * (1 - u * 0.25),
-      (0.32 + day * 0.08) * (1 - u * 0.15),
+      amb * (1 - u * 0.3),
+      (0.54 + day * 0.14) * (1 - u * 0.22),
+      (0.6 + day * 0.1) * (1 - u * 0.12),
     );
   }
 }

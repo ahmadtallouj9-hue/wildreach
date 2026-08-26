@@ -1,5 +1,13 @@
 import * as THREE from 'three';
-import type { AvatarStyle, CapeStyle, GlassesStyle, HatStyle, Profile } from '../ui/prefs';
+import type {
+  AvatarStyle,
+  BackpackStyle,
+  BeltStyle,
+  CapeStyle,
+  GlassesStyle,
+  HatStyle,
+  Profile,
+} from '../ui/prefs';
 import {
   BOX_FACE_SYNC,
   BOX_FACES,
@@ -11,17 +19,25 @@ import {
   decodeSkin,
   type SkinPart,
 } from './SkinAtlas';
+import {
+  createAvatarOverlayMeshes,
+  makeOverlayPartMats,
+  syncOverlayTextures,
+  type OverlayMeshes,
+} from './AvatarOverlayLayer';
+import { OVERLAY_SHELL } from './SkinOverlayUV';
+import { BLOCK_PALETTE } from './BlockCharacterSkin';
 
 export type AvatarPose = 'stand' | 'sneak' | 'sit';
 
-const LEG_H = 0.72;
-const TORSO_H = 0.58;
-const HEAD = 0.36;
-const ARM_H = 0.56;
-const ARM_W = 0.15;
-const LEG_W = 0.18;
-const TORSO_W = 0.44;
-const TORSO_D = 0.26;
+const LEG_H = 0.8;
+const TORSO_H = 0.68;
+const HEAD = 0.42;
+const ARM_H = 0.64;
+const ARM_W = 0.18;
+const LEG_W = 0.22;
+const TORSO_W = 0.52;
+const TORSO_D = 0.3;
 
 type PartMats = THREE.MeshLambertMaterial[];
 
@@ -39,15 +55,29 @@ export class PlayerAvatar {
   private hatOverlay: THREE.Mesh;
   private capeMesh: THREE.Mesh;
   private glassesMesh: THREE.Mesh;
+  private backpackMesh: THREE.Mesh;
+  private beltMesh: THREE.Mesh;
 
-  private skinPixels = createDefaultSkin('#e8c4a8', '#5ec4b0', '#e8c56a', {
-    hair: '#4a3728',
-    eyes: '#2e6b9e',
-    shoes: '#2f3e46',
-    hairStyle: 'short',
-  });
+  private skinPixels = createDefaultSkin(
+    BLOCK_PALETTE.skin,
+    BLOCK_PALETTE.outfit,
+    BLOCK_PALETTE.pink,
+    {
+      hair: BLOCK_PALETTE.hair,
+      eyes: BLOCK_PALETTE.eye,
+      shoes: BLOCK_PALETTE.shoe,
+      hairStyle: 'short',
+      face: 'neutral',
+      sleeves: 'long',
+      pants: BLOCK_PALETTE.pants,
+      renderMode: 'block',
+    },
+  );
   private readonly partCanvases = new Map<string, HTMLCanvasElement>();
   private readonly partTextures = new Map<string, THREE.CanvasTexture>();
+  private readonly overlayCanvases = new Map<string, HTMLCanvasElement>();
+  private readonly overlayTextures = new Map<string, THREE.CanvasTexture>();
+  private readonly overlays: OverlayMeshes;
   private readonly headMats: PartMats;
   private readonly bodyMats: PartMats;
   private readonly armRMats: PartMats;
@@ -63,9 +93,13 @@ export class PlayerAvatar {
   private jumpT = 0;
   private tall = 1;
   private wide = 1;
+  private armThin = 1;
   private hatStyle: HatStyle = 'none';
   private capeStyle: CapeStyle = 'none';
+  private backpackStyle: BackpackStyle = 'none';
   private skinLoadGen = 0;
+  private previewPose: AvatarPose = 'stand';
+  private previewMove = 0;
 
   constructor() {
     this.headMats = this.makePartMats('head', false);
@@ -75,14 +109,21 @@ export class PlayerAvatar {
     this.legRMats = this.makePartMats('legR', false);
     this.legLMats = this.makePartMats('legL', false);
     this.hatMats = this.makePartMats('hat', true);
+    this.overlays = createAvatarOverlayMeshes(
+      (part) => makeOverlayPartMats(part, this.overlayCanvases, this.overlayTextures),
+    );
 
     this.accentMat = new THREE.MeshStandardMaterial({
       color: '#e8c56a',
-      roughness: 0.65,
-      metalness: 0.05,
+      roughness: 0.72,
+      metalness: 0.04,
+      emissive: 0x000000,
+      emissiveIntensity: 0,
     });
     this.capeMat = new THREE.MeshLambertMaterial({
       color: '#5ec4b0',
+      emissive: 0x1a3030,
+      emissiveIntensity: 0.3,
       side: THREE.DoubleSide,
     });
     this.glassesMat = new THREE.MeshLambertMaterial({
@@ -97,14 +138,21 @@ export class PlayerAvatar {
     this.armR = makeBox(ARM_W, ARM_H, ARM_W, this.armRMats, true);
     this.legL = makeBox(LEG_W, LEG_H, LEG_W, this.legLMats, true);
     this.legR = makeBox(LEG_W, LEG_H, LEG_W, this.legRMats, true);
-    this.hatOverlay = makeBox(HEAD * 1.08, HEAD * 1.08, HEAD * 1.08, this.hatMats);
+    this.hatOverlay = makeBox(HEAD, HEAD, HEAD, this.hatMats);
+    const hatShell = 1 + (2 * OVERLAY_SHELL) / HEAD;
+    this.hatOverlay.scale.setScalar(hatShell);
+    this.hatOverlay.renderOrder = 2;
     this.hatOverlay.visible = false;
     this.hatMesh = makeBox(HEAD * 1.12, 0.12, HEAD * 1.12, this.accentMat);
     this.hatMesh.visible = false;
-    this.capeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.06), this.capeMat);
+    this.capeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.82, 0.07), this.capeMat);
     this.capeMesh.visible = false;
-    this.glassesMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.08), this.glassesMat);
+    this.glassesMesh = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.09), this.glassesMat);
     this.glassesMesh.visible = false;
+    this.backpackMesh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.18), this.accentMat);
+    this.backpackMesh.visible = false;
+    this.beltMesh = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.34), this.accentMat);
+    this.beltMesh.visible = false;
 
     this.head.userData.skinPart = 'head';
     this.torso.userData.skinPart = 'body';
@@ -113,6 +161,12 @@ export class PlayerAvatar {
     this.legR.userData.skinPart = 'legR';
     this.legL.userData.skinPart = 'legL';
     this.hatOverlay.userData.skinPart = 'hat';
+
+    this.torso.add(this.overlays.bodyOL);
+    this.armR.add(this.overlays.armROL);
+    this.armL.add(this.overlays.armLOL);
+    this.legR.add(this.overlays.legROL);
+    this.legL.add(this.overlays.legLOL);
 
     this.body.add(
       this.head,
@@ -125,6 +179,8 @@ export class PlayerAvatar {
       this.hatMesh,
       this.capeMesh,
       this.glassesMesh,
+      this.backpackMesh,
+      this.beltMesh,
     );
     this.root.add(this.body);
     this.layout('classic');
@@ -139,6 +195,8 @@ export class PlayerAvatar {
     this.setHat(profile.hat);
     this.setCape(profile.cape);
     this.setGlasses(profile.glasses);
+    this.setBackpack(profile.backpack ?? 'none');
+    this.setBelt(profile.belt ?? 'none');
 
     const cosmetics = {
       hair: profile.hair,
@@ -151,6 +209,8 @@ export class PlayerAvatar {
       pants: profile.pants,
       outfit: profile.outfit,
       skin: profile.skin,
+      accent: profile.accent,
+      renderMode: 'block' as const,
     };
 
     if (profile.skinData) {
@@ -209,11 +269,15 @@ export class PlayerAvatar {
       tex.magFilter = THREE.NearestFilter;
       tex.minFilter = THREE.NearestFilter;
       tex.generateMipmaps = false;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.colorSpace = THREE.SRGBColorSpace;
       this.partTextures.set(key, tex);
       return new THREE.MeshLambertMaterial({
         map: tex,
         color: 0xffffff,
+        emissive: 0x000000,
+        emissiveIntensity: 0,
         transparent,
         alphaTest: transparent ? 0.15 : 0,
         side: transparent ? THREE.DoubleSide : THREE.FrontSide,
@@ -237,26 +301,45 @@ export class PlayerAvatar {
       const r = PART_UV.hat[face];
       for (let y = r.y; y < r.y + r.h; y++) {
         for (let x = r.x; x < r.x + r.w; x++) {
-          if (this.skinPixels[(y * SKIN_SIZE + x) * 4 + 3]! > 16) hatPixels++;
+          const i = (y * SKIN_SIZE + x) * 4;
+          const a = this.skinPixels[i + 3]!;
+          if (
+            a > 16 &&
+            this.skinPixels[i]! + this.skinPixels[i + 1]! + this.skinPixels[i + 2]! > 0
+          ) {
+            hatPixels++;
+          }
         }
       }
     }
     this.hatOverlay.visible = hatPixels > 4;
+    syncOverlayTextures(
+      this.skinPixels,
+      this.overlayCanvases,
+      this.overlayTextures,
+      (part, visible) => {
+        this.overlays[part].visible = visible;
+      },
+    );
   }
 
   private layout(style: AvatarStyle): void {
     if (style === 'tall') {
       this.tall = 1.14;
       this.wide = 0.9;
+      this.armThin = 0.92;
     } else if (style === 'stocky') {
       this.tall = 0.9;
       this.wide = 1.22;
+      this.armThin = 1.08;
     } else if (style === 'slim') {
-      this.tall = 1.06;
-      this.wide = 0.84;
+      this.tall = 1.08;
+      this.wide = 0.82;
+      this.armThin = 0.68;
     } else {
       this.tall = 1;
       this.wide = 1;
+      this.armThin = 1;
     }
     this.applyRestPose();
   }
@@ -318,6 +401,31 @@ export class PlayerAvatar {
     }
   }
 
+  private setBackpack(style: BackpackStyle): void {
+    this.backpackStyle = style;
+    this.backpackMesh.visible = style !== 'none';
+    if (style === 'satchel') this.backpackMesh.scale.set(0.85, 0.7, 0.9);
+    else if (style === 'pack') this.backpackMesh.scale.set(1, 1, 1);
+    else this.backpackMesh.scale.set(1, 1, 1);
+  }
+
+  private setBelt(style: BeltStyle): void {
+    this.beltMesh.visible = style !== 'none';
+    if (style === 'utility') this.beltMesh.scale.set(1.05, 1.25, 1.1);
+    else if (style === 'leather') this.beltMesh.scale.set(1, 1, 1);
+    else this.beltMesh.scale.set(1, 1, 1);
+  }
+
+  /** Menu preview: idle / walk / sneak / sit. */
+  setPreviewMotion(pose: AvatarPose, moveAmt = 0): void {
+    this.previewPose = pose;
+    this.previewMove = moveAmt;
+  }
+
+  getPreviewMotion(): { pose: AvatarPose; move: number } {
+    return { pose: this.previewPose, move: this.previewMove };
+  }
+
   private applyRestPose(): void {
     const t = this.tall;
     const w = this.wide;
@@ -330,14 +438,15 @@ export class PlayerAvatar {
     const shoulderY = hipY + torsoH - 0.04 * t;
     const headCenterY = hipY + torsoH + headH * 0.5;
     const hatY = hipY + torsoH + headH + 0.02 * t;
+    const hatShell = 1 + (2 * OVERLAY_SHELL) / HEAD;
 
     this.head.scale.set(w, t, w);
     this.torso.scale.set(w, t, 1);
-    this.armL.scale.set(1, t, 1);
-    this.armR.scale.set(1, t, 1);
+    this.armL.scale.set(this.armThin, t, this.armThin);
+    this.armR.scale.set(this.armThin, t, this.armThin);
     this.legL.scale.set(w, t, 1);
     this.legR.scale.set(w, t, 1);
-    this.hatOverlay.scale.set(w * 1.02, t * 1.02, w * 1.02);
+    this.hatOverlay.scale.set(w * hatShell, t * hatShell, w * hatShell);
 
     this.body.position.set(0, 0, 0);
     this.head.rotation.set(0, 0, 0);
@@ -347,11 +456,12 @@ export class PlayerAvatar {
     this.legL.rotation.set(0, 0, 0);
     this.legR.rotation.set(0, 0, 0);
 
-    this.legL.position.set(-0.11 * w, hipY, 0);
-    this.legR.position.set(0.11 * w, hipY, 0);
+    this.legR.position.set(-0.13 * w, hipY, 0);
+    this.legL.position.set(0.13 * w, hipY, 0);
     this.torso.position.set(0, torsoCenterY, 0);
-    this.armL.position.set(-(TORSO_W * 0.5 * w + ARM_W * 0.32), shoulderY, 0);
-    this.armR.position.set(TORSO_W * 0.5 * w + ARM_W * 0.32, shoulderY, 0);
+    // Face = +Z: character right = −X, character left = +X.
+    this.armR.position.set(-(TORSO_W * 0.5 * w + ARM_W * 0.32 * this.armThin), shoulderY, 0);
+    this.armL.position.set(TORSO_W * 0.5 * w + ARM_W * 0.32 * this.armThin, shoulderY, 0);
     this.head.position.set(0, headCenterY, 0);
     this.hatOverlay.position.set(0, headCenterY, 0);
     this.hatMesh.position.set(
@@ -363,9 +473,16 @@ export class PlayerAvatar {
           ? -0.03
           : 0,
     );
-    this.capeMesh.position.set(0, torsoCenterY + 0.05 * t, TORSO_D * 0.55 * w + 0.04);
-    this.capeMesh.rotation.x = this.capeStyle === 'long' ? 0.12 : 0.06;
+    // +Z is face-forward (glasses); cape hangs on the back (−Z).
+    this.capeMesh.position.set(0, torsoCenterY + 0.05 * t, -(TORSO_D * 0.55 * w + 0.04));
+    this.capeMesh.rotation.x = this.capeStyle === 'long' ? -0.12 : -0.06;
     this.glassesMesh.position.set(0, headCenterY + 0.02 * t, HEAD * 0.48 * w);
+    this.backpackMesh.position.set(
+      0,
+      torsoCenterY + (this.backpackStyle === 'satchel' ? -0.06 : 0.02) * t,
+      -(TORSO_D * 0.55 * w + 0.12),
+    );
+    this.beltMesh.position.set(0, hipY + 0.06 * t, 0);
   }
 
   update(
@@ -491,6 +608,6 @@ function makeBox(
   if (pivotTop) g.translate(0, -h * 0.5, 0);
   const m = new THREE.Mesh(g, mats);
   m.castShadow = true;
-  m.receiveShadow = true;
+  m.receiveShadow = false;
   return m;
 }

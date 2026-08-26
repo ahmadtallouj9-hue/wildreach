@@ -1,8 +1,10 @@
 import * as THREE from 'three';
-import { Block, CHUNK_HEIGHT, CHUNK_SIZE, RENDER_DISTANCE, chunkKey, isSolid } from './blocks';
+import { Block, CHUNK_HEIGHT, CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, chunkKey, isSolid } from './blocks';
 import { Chunk } from './Chunk';
 import { LandmarkGen, type Landmark } from './LandmarkGen';
 import { meshChunk } from './VoxelMesher';
+import { rebuildChunkLights, sampleLight } from './LightEngine';
+import { seedFluidLevels, tickFluidsNear } from './FluidSim';
 import type { WorldGen } from './WorldGen';
 import { BIOMES, type BiomeId } from './Biomes';
 import type { TerrainMaterials } from '../render/TerrainMaterials';
@@ -19,6 +21,11 @@ export class ChunkManager {
   renderDistance = RENDER_DISTANCE;
   private generateStructures: boolean;
   private edits = new Map<string, number>();
+  private fluidDirty = new Set<string>();
+  private fluidLightDirty = new Set<string>();
+  private fluidNeighborDirty = new Set<string>();
+  /** Player-placed or spread fluid cells that should simulate (not whole oceans). */
+  private activeFluids = new Set<string>();
 
   constructor(
     private scene: THREE.Scene,
@@ -27,7 +34,7 @@ export class ChunkManager {
     generateStructures = true,
   ) {
     this.generateStructures = generateStructures;
-    this.landmarkGen = new LandmarkGen(world);
+    this.landmarkGen = new LandmarkGen();
   }
 
   setRenderDistance(r: number): void {
@@ -45,7 +52,18 @@ export class ChunkManager {
   }
 
   getBiomeAt(wx: number, wz: number): BiomeId {
-    return this.world.getBiome(Math.floor(wx), Math.floor(wz));
+    wx = Math.floor(wx);
+    wz = Math.floor(wz);
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.chunks.get(chunkKey(cx, cz));
+    if (chunk?.columns) {
+      const lx = wx - cx * CHUNK_SIZE;
+      const lz = wz - cz * CHUNK_SIZE;
+      const col = chunk.columns[lz * CHUNK_SIZE + lx];
+      if (col) return col.biome;
+    }
+    return this.world.getBiome(wx, wz);
   }
 
   getBiomeName(wx: number, wz: number): string {
@@ -60,7 +78,8 @@ export class ChunkManager {
     const cx = Math.floor(wx / CHUNK_SIZE);
     const cz = Math.floor(wz / CHUNK_SIZE);
     const chunk = this.chunks.get(chunkKey(cx, cz));
-    if (!chunk || !chunk.ready) return Block.Stone;
+    // Unloaded / not-ready → air. Inventing stone here hid faces and caused holes.
+    if (!chunk?.ready) return Block.Air;
     const lx = wx - cx * CHUNK_SIZE;
     const lz = wz - cz * CHUNK_SIZE;
     return chunk.getLocal(lx, y, lz);
@@ -72,6 +91,28 @@ export class ChunkManager {
 
   isWaterAt(wx: number, y: number, wz: number): boolean {
     return this.getBlock(Math.floor(wx), Math.floor(y), Math.floor(wz)) === Block.Water;
+  }
+
+  isLavaAt(wx: number, y: number, wz: number): boolean {
+    return this.getBlock(Math.floor(wx), Math.floor(y), Math.floor(wz)) === Block.Lava;
+  }
+
+  /** True if the player body overlaps any lava block. */
+  isBodyInLava(px: number, py: number, pz: number, height: number): boolean {
+    const x0 = Math.floor(px - 0.25);
+    const x1 = Math.floor(px + 0.25);
+    const y0 = Math.floor(py);
+    const y1 = Math.floor(py + height);
+    const z0 = Math.floor(pz - 0.25);
+    const z1 = Math.floor(pz + 0.25);
+    for (let y = y0; y <= y1; y++) {
+      for (let z = z0; z <= z1; z++) {
+        for (let x = x0; x <= x1; x++) {
+          if (this.isLavaAt(x, y, z)) return true;
+        }
+      }
+    }
+    return false;
   }
 
   /** Y of the open water surface at this column, or null if dry. */
@@ -127,23 +168,27 @@ export class ChunkManager {
     return col?.height ?? this.world.getHeight(Math.floor(wx), Math.floor(wz));
   }
 
-  updateAround(px: number, pz: number, maxBuildsPerFrame = 2): void {
+  updateAround(px: number, pz: number, _maxBuildsPerFrame = 2): void {
     const cx = Math.floor(px / CHUNK_SIZE);
     const cz = Math.floor(pz / CHUNK_SIZE);
 
     if (cx !== this.lastCx || cz !== this.lastCz) {
       this.lastCx = cx;
       this.lastCz = cz;
-      this.syncRadius(cx, cz);
+      this.syncRadius(cx, cz, 0);
     }
 
+    // Time-sliced streaming — stay under budget so movement stays smooth.
     const backlog = this.genQueue.length + this.buildQueue.length;
-    const genBudget = backlog > 24 ? 3 : backlog > 10 ? 2 : 1;
-    const meshBudget =
-      backlog > 40 ? 8 : backlog > 24 ? 6 : backlog > 10 ? maxBuildsPerFrame + 2 : maxBuildsPerFrame;
-
-    this.processGenQueue(cx, cz, genBudget);
-    this.processBuildQueue(meshBudget);
+    const budgetMs = backlog > 40 ? 3.5 : backlog > 15 ? 4.5 : 6;
+    const t0 = performance.now();
+    if (this.genQueue.length > 1) this.genQueue.sort((a, b) => a.dist - b.dist);
+    this.processGenQueue(cx, cz, 1);
+    while (performance.now() - t0 < budgetMs && this.buildQueue.length > 0) {
+      const before = this.buildQueue.length;
+      this.processBuildQueue(1);
+      if (this.buildQueue.length === before) break;
+    }
   }
 
   /** Fast spawn: sync only the center chunk, queue everything else. */
@@ -157,7 +202,7 @@ export class ChunkManager {
     const center = this.chunks.get(chunkKey(cx, cz));
     if (center?.ready) {
       this.removeFromBuildQueue(center);
-      if (!center.mesh) this.buildMeshAndFixSeams(center);
+      if (!center.meshed) this.buildMeshAndFixSeams(center);
     }
   }
 
@@ -168,7 +213,6 @@ export class ChunkManager {
 
   private processGenQueue(cx: number, cz: number, budget: number): void {
     if (budget <= 0 || this.genQueue.length === 0) return;
-    this.genQueue.sort((a, b) => a.dist - b.dist);
     let n = 0;
     while (n < budget && this.genQueue.length > 0) {
       const next = this.genQueue.shift()!;
@@ -187,8 +231,8 @@ export class ChunkManager {
     while (built < budget && this.buildQueue.length > 0) {
       const chunk = this.buildQueue.shift()!;
       if (!this.chunks.has(chunkKey(chunk.cx, chunk.cz))) continue;
-      if (chunk.mesh) continue;
-      this.buildMesh(chunk);
+      if (chunk.meshed) continue;
+      this.buildMeshAndFixSeams(chunk);
       built++;
     }
   }
@@ -236,6 +280,7 @@ export class ChunkManager {
         if (chunk.mesh) this.scene.remove(chunk.mesh);
         if (chunk.cutoutMesh) this.scene.remove(chunk.cutoutMesh);
         if (chunk.waterMesh) this.scene.remove(chunk.waterMesh);
+        if (chunk.lavaMesh) this.scene.remove(chunk.lavaMesh);
         chunk.dispose();
         this.chunks.delete(key);
       }
@@ -253,8 +298,152 @@ export class ChunkManager {
       }
     }
     this.replayEditsInChunk(chunk);
+    seedFluidLevels(chunk);
     chunk.ready = true;
+    rebuildChunkLights(chunk, this.lightWorld());
     return chunk;
+  }
+
+  private lightWorld() {
+    return {
+      getBlock: (wx: number, y: number, wz: number) => this.sampleBlock(wx, y, wz),
+      getChunk: (cx: number, cz: number) => this.chunks.get(chunkKey(cx, cz)),
+    };
+  }
+
+  getChunk(cx: number, cz: number): Chunk | undefined {
+    return this.chunks.get(chunkKey(cx, cz));
+  }
+
+  forEachReadyChunk(fn: (chunk: Chunk) => void): void {
+    for (const c of this.chunks.values()) if (c.ready) fn(c);
+  }
+
+  applyFluidBlock(wx: number, y: number, wz: number, block: number, level: number): boolean {
+    wx = Math.floor(wx);
+    y = Math.floor(y);
+    wz = Math.floor(wz);
+    if (y < 0 || y >= CHUNK_HEIGHT) return false;
+    if (y === 0 && block === Block.Air) return false;
+
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.chunks.get(chunkKey(cx, cz));
+    if (!chunk?.ready) return false;
+
+    const lx = wx - cx * CHUNK_SIZE;
+    const lz = wz - cz * CHUNK_SIZE;
+    const prev = chunk.getLocal(lx, y, lz);
+    if (prev === block && (block === Block.Air || chunk.fluidLevel[chunk.index(lx, y, lz)] === level)) {
+      return false;
+    }
+
+    if (!chunk.setLocal(lx, y, lz, block)) return false;
+    const i = chunk.index(lx, y, lz);
+    if (block === Block.Water || block === Block.Lava) {
+      chunk.fluidLevel[i] = level;
+      chunk.hasFluid = true;
+    } else {
+      chunk.fluidLevel[i] = 0;
+    }
+
+    if (block !== Block.Air) this.edits.set(`${wx},${y},${wz}`, block);
+    else this.edits.delete(`${wx},${y},${wz}`);
+    this.trackFluid(wx, y, wz, block, prev);
+
+    const key = chunkKey(cx, cz);
+    this.fluidDirty.add(key);
+    if (block === Block.Lava || prev === Block.Lava) this.fluidLightDirty.add(key);
+    if (lx === 0) this.fluidNeighborDirty.add(chunkKey(cx - 1, cz));
+    if (lx === CHUNK_SIZE - 1) this.fluidNeighborDirty.add(chunkKey(cx + 1, cz));
+    if (lz === 0) this.fluidNeighborDirty.add(chunkKey(cx, cz - 1));
+    if (lz === CHUNK_SIZE - 1) this.fluidNeighborDirty.add(chunkKey(cx, cz + 1));
+    return true;
+  }
+
+  /** Only active/spread fluids and deep cave water — not sea-level oceans. */
+  private shouldSimulateFluid(wx: number, y: number, wz: number, block: number): boolean {
+    const key = `${wx},${y},${wz}`;
+    if (block === Block.Lava) return this.activeFluids.has(key) || y < SEA_LEVEL;
+    if (block === Block.Water) {
+      if (this.activeFluids.has(key)) return true;
+      if (y < SEA_LEVEL - 4) return true;
+      return false;
+    }
+    return false;
+  }
+
+  private trackFluid(wx: number, y: number, wz: number, block: number, prev?: number, force = false): void {
+    const key = `${wx},${y},${wz}`;
+    if (block !== Block.Water && block !== Block.Lava) {
+      this.activeFluids.delete(key);
+      return;
+    }
+    if (force || block === Block.Lava) {
+      this.activeFluids.add(key);
+      return;
+    }
+    // Water: simulate player/spread sources, not static oceans at sea level.
+    if (y < SEA_LEVEL - 4 || this.activeFluids.has(key) || prev === Block.Air) {
+      this.activeFluids.add(key);
+    }
+  }
+
+  setFluidBlock(wx: number, y: number, wz: number, block: number, level: number): void {
+    this.applyFluidBlock(wx, y, wz, block, level);
+  }
+
+  flushFluidMeshes(): void {
+    for (const key of this.fluidLightDirty) {
+      const chunk = this.chunks.get(key);
+      if (chunk?.ready) rebuildChunkLights(chunk, this.lightWorld());
+    }
+    this.fluidLightDirty.clear();
+
+    for (const key of this.fluidDirty) {
+      const chunk = this.chunks.get(key);
+      if (!chunk?.ready) continue;
+      this.buildMesh(chunk);
+    }
+    // Only remesh neighbors that actually share a changed edge — avoid full 4-way thrash.
+    for (const key of this.fluidNeighborDirty) {
+      if (this.fluidDirty.has(key)) continue;
+      const [cx, cz] = key.split(',').map(Number) as [number, number];
+      this.remeshOne(cx, cz);
+    }
+    this.fluidDirty.clear();
+    this.fluidNeighborDirty.clear();
+  }
+
+  /** Fluid flow near the player — active water/lava only, not whole oceans. */
+  tickWorld(dt: number, px: number, pz: number): void {
+    if (this.activeFluids.size === 0) return;
+    tickFluidsNear(this.fluidSimHost(), dt, px, pz, 3);
+    this.flushFluidMeshes();
+  }
+
+  private fluidSimHost() {
+    return {
+      getBlock: (wx: number, y: number, wz: number) => this.getBlock(wx, y, wz),
+      setBlock: (wx: number, y: number, wz: number, block: number) => this.setBlock(wx, y, wz, block),
+      applyFluid: (wx: number, y: number, wz: number, block: number, level: number) =>
+        this.applyFluidBlock(wx, y, wz, block, level),
+      shouldSimulateFluid: (wx: number, y: number, wz: number, block: number) =>
+        this.shouldSimulateFluid(wx, y, wz, block),
+      getChunk: (cx: number, cz: number) => this.chunks.get(chunkKey(cx, cz)),
+      forEachReadyChunk: (fn: (chunk: Chunk) => void) => {
+        for (const c of this.chunks.values()) if (c.ready) fn(c);
+      },
+    };
+  }
+
+  getLightAt(wx: number, y: number, wz: number): number {
+    return sampleLight(this.lightWorld(), Math.floor(wx), Math.floor(y), Math.floor(wz));
+  }
+
+  /** Fluid level 0–8 at world coords (0 if not fluid). */
+  getFluidLevelAt(wx: number, y: number, wz: number): number {
+    return this.sampleFluidLevel(Math.floor(wx), Math.floor(y), Math.floor(wz));
   }
 
   private replayEditsInChunk(chunk: Chunk): void {
@@ -299,16 +488,28 @@ export class ChunkManager {
       chunk.waterMesh.geometry.dispose();
       chunk.waterMesh = null;
     }
+    if (chunk.lavaMesh) {
+      this.scene.remove(chunk.lavaMesh);
+      chunk.lavaMesh.geometry.dispose();
+      chunk.lavaMesh = null;
+    }
 
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
-    const { solid, cutout, water } = meshChunk(chunk.voxels, ox, oz, (wx, y, wz) =>
-      this.sampleBlock(wx, y, wz),
+    if (chunk.lightsDirty) rebuildChunkLights(chunk, this.lightWorld());
+    const { solid, cutout, water, lava } = meshChunk(
+      chunk.voxels,
+      ox,
+      oz,
+      (wx, y, wz) => this.sampleBlock(wx, y, wz),
+      (wx, y, wz) => sampleLight(this.lightWorld(), wx, y, wz),
+      chunk.fluidLevel,
+      (wx, y, wz) => this.sampleFluidLevel(wx, y, wz),
     );
 
     if (solid) {
       const mesh = new THREE.Mesh(solid, this.materials.solid);
-      mesh.castShadow = true;
+      mesh.castShadow = false;
       mesh.receiveShadow = true;
       mesh.frustumCulled = true;
       chunk.mesh = mesh;
@@ -317,11 +518,25 @@ export class ChunkManager {
 
     if (cutout) {
       const mesh = new THREE.Mesh(cutout, this.materials.cutout);
-      mesh.castShadow = true;
+      mesh.castShadow = false;
       mesh.receiveShadow = true;
       mesh.frustumCulled = true;
       mesh.renderOrder = 1;
+      cutout.computeBoundingBox();
+      cutout.boundingBox?.expandByScalar(0.45);
+      cutout.computeBoundingSphere();
       chunk.cutoutMesh = mesh;
+      this.scene.add(mesh);
+    }
+
+    // Transparent liquids after opaque/cutout (renderOrder + depthWrite:false).
+    if (lava) {
+      const mesh = new THREE.Mesh(lava, this.materials.lava);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.frustumCulled = true;
+      mesh.renderOrder = 20;
+      chunk.lavaMesh = mesh;
       this.scene.add(mesh);
     }
 
@@ -329,10 +544,12 @@ export class ChunkManager {
       const mesh = new THREE.Mesh(water, this.materials.water);
       mesh.receiveShadow = false;
       mesh.frustumCulled = true;
-      mesh.renderOrder = 10;
+      mesh.renderOrder = 21;
       chunk.waterMesh = mesh;
       this.scene.add(mesh);
     }
+
+    chunk.meshed = true;
   }
 
   private rebuildMeshQuiet(chunk: Chunk): void {
@@ -340,6 +557,7 @@ export class ChunkManager {
     this.buildMesh(chunk);
   }
 
+  /** Build this chunk, then refresh neighbors so shared faces cull correctly. */
   private buildMeshAndFixSeams(chunk: Chunk): void {
     this.buildMesh(chunk);
     for (const [dx, dz] of [
@@ -349,7 +567,7 @@ export class ChunkManager {
       [0, -1],
     ] as const) {
       const neighbor = this.chunks.get(chunkKey(chunk.cx + dx, chunk.cz + dz));
-      if (neighbor?.mesh || neighbor?.waterMesh) this.rebuildMeshQuiet(neighbor);
+      if (neighbor?.ready && neighbor.meshed) this.rebuildMeshQuiet(neighbor);
     }
   }
 
@@ -358,13 +576,23 @@ export class ChunkManager {
     const cx = Math.floor(wx / CHUNK_SIZE);
     const cz = Math.floor(wz / CHUNK_SIZE);
     const chunk = this.chunks.get(chunkKey(cx, cz));
-    if (!chunk) {
-      const h = this.world.getHeight(wx, wz);
-      if (y > h) return Block.Air;
-      if (y === h) return Block.Grass;
-      return Block.Stone;
-    }
+    // Missing neighbor → air so border faces stay visible until the neighbor remeshes.
+    if (!chunk?.ready) return Block.Air;
     return chunk.getLocal(wx - cx * CHUNK_SIZE, y, wz - cz * CHUNK_SIZE);
+  }
+
+  private sampleFluidLevel(wx: number, y: number, wz: number): number {
+    if (y < 0 || y >= CHUNK_HEIGHT) return 0;
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.chunks.get(chunkKey(cx, cz));
+    if (!chunk?.ready) return 0;
+    const lx = wx - cx * CHUNK_SIZE;
+    const lz = wz - cz * CHUNK_SIZE;
+    const b = chunk.getLocal(lx, y, lz);
+    if (b !== Block.Water && b !== Block.Lava) return 0;
+    const lv = chunk.fluidLevel[chunk.index(lx, y, lz)]!;
+    return lv > 0 ? lv : 8;
   }
 
   setBlock(wx: number, y: number, wz: number, block: number): boolean {
@@ -381,16 +609,43 @@ export class ChunkManager {
 
     const lx = wx - cx * CHUNK_SIZE;
     const lz = wz - cz * CHUNK_SIZE;
-    if (chunk.getLocal(lx, y, lz) === block) return false;
+    const prev = chunk.getLocal(lx, y, lz);
+    if (prev === block) return false;
     if (!chunk.setLocal(lx, y, lz, block)) return false;
+    if (block === Block.Water || block === Block.Lava) {
+      chunk.fluidLevel[chunk.index(lx, y, lz)] = 8;
+      chunk.hasFluid = true;
+    } else {
+      chunk.fluidLevel[chunk.index(lx, y, lz)] = 0;
+    }
 
-    this.edits.set(`${wx},${y},${wz}`, block);
+    const key = `${wx},${y},${wz}`;
+    if (block === Block.Air) this.edits.delete(key);
+    else this.edits.set(key, block);
+    const placedFluid = block === Block.Water || block === Block.Lava;
+    this.trackFluid(wx, y, wz, block, prev, placedFluid);
+
+    // Rebuild lights for this chunk and neighbors, then remesh.
+    rebuildChunkLights(chunk, this.lightWorld());
+    for (const [dx, dz] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const n = this.chunks.get(chunkKey(cx + dx, cz + dz));
+      if (n?.ready) rebuildChunkLights(n, this.lightWorld());
+    }
 
     this.buildMesh(chunk);
     if (lx === 0) this.remeshOne(cx - 1, cz);
     if (lx === CHUNK_SIZE - 1) this.remeshOne(cx + 1, cz);
     if (lz === 0) this.remeshOne(cx, cz - 1);
     if (lz === CHUNK_SIZE - 1) this.remeshOne(cx, cz + 1);
+    if (placedFluid) {
+      for (let i = 0; i < 8; i++) tickFluidsNear(this.fluidSimHost(), 0.15, wx, wz, 3);
+      this.flushFluidMeshes();
+    }
     return true;
   }
 

@@ -4,14 +4,16 @@ import { loadSettings, saveSettings, type Profile, type ViewMode } from '../ui/p
 import { PlayerAvatar, type AvatarPose } from './PlayerAvatar';
 
 const EYE_STAND = 1.62;
-const EYE_SNEAK = 1.28;
-const EYE_SIT = 0.95;
-const HEIGHT_STAND = 1.75;
-const HEIGHT_SNEAK = 1.45;
-const HEIGHT_SIT = 1.05;
-const PLAYER_WIDTH = 0.5;
-const THIRD_DIST = 3.8;
-const FRONT_DIST = 3.2;
+const EYE_SNEAK = 1.35;
+const EYE_SIT = 1.05;
+const HEIGHT_STAND = 1.8;
+const HEIGHT_SNEAK = 1.5;
+const HEIGHT_SIT = 1.15;
+const PLAYER_WIDTH = 0.6;
+/** Behind the player — far enough to see the world, not glued to the back. */
+const THIRD_DIST = 4.4;
+const FRONT_DIST = 3.6;
+const CAM_HEIGHT_LIFT = 0.35;
 
 export class PlayerController {
   readonly camera: THREE.PerspectiveCamera;
@@ -20,7 +22,7 @@ export class PlayerController {
   position = new THREE.Vector3(0, 80, 0);
   velocity = new THREE.Vector3();
   yaw = 0;
-  pitch = -0.15;
+  pitch = -0.12;
 
   viewMode: ViewMode = 'first';
   mouseSensitivity = 1;
@@ -42,19 +44,20 @@ export class PlayerController {
   private touchLookVelYaw = 0;
   private touchLookVelPitch = 0;
   private camYaw = 0;
-  private camPitch = -0.15;
+  private camPitch = -0.12;
   private readonly eyeWorld = new THREE.Vector3();
   private readonly aimDir = new THREE.Vector3();
   private readonly aimEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly aimQuat = new THREE.Quaternion();
   private readonly camDesired = new THREE.Vector3();
   private readonly camFocus = new THREE.Vector3();
+  lavaSubmersion = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
     private chunks: ChunkManager,
   ) {
-    this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 520);
     this.model = new PlayerAvatar();
     this.avatar = this.model.root;
     this.bindInput();
@@ -232,7 +235,12 @@ export class PlayerController {
   }
 
   getSubmersion(): number {
+    if (this.lavaSubmersion > 0.02) return 0;
     return this.chunks.getSubmersion(this.eyeWorld.x, this.eyeWorld.y, this.eyeWorld.z);
+  }
+
+  getLavaSubmersion(): number {
+    return this.lavaSubmersion;
   }
 
   getNetState() {
@@ -316,13 +324,21 @@ export class PlayerController {
       !this.sitting &&
       (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'));
     const speed = this.sitting ? 0 : sneak ? 2.1 : sprint ? 9.5 : 5.2;
-    const inWaterPreview = this.chunks.isBodyInWater(
+    const inLava = this.chunks.isBodyInLava(
       this.position.x,
       this.position.y,
       this.position.z,
       this.playerHeight,
     );
-    const moveSpeed = inWaterPreview ? speed * 0.48 : speed;
+    const inWater =
+      !inLava &&
+      this.chunks.isBodyInWater(
+        this.position.x,
+        this.position.y,
+        this.position.z,
+        this.playerHeight,
+      );
+    let moveSpeed = inWater ? speed * 0.52 : inLava ? speed * 0.24 : speed;
 
     const lookYaw = this.touchMode ? this.camYaw : this.yaw;
     const forward = new THREE.Vector3(-Math.sin(lookYaw), 0, -Math.cos(lookYaw));
@@ -344,24 +360,42 @@ export class PlayerController {
     this.velocity.x = wish.x;
     this.velocity.z = wish.z;
 
-    const inWater = this.chunks.isBodyInWater(
-      this.position.x,
-      this.position.y,
-      this.position.z,
-      this.playerHeight,
-    );
-
-    if (inWater) {
-      this.velocity.y -= 6 * dt;
-      this.velocity.y += 5.5 * dt;
-      this.velocity.y *= 1 - 3.5 * dt;
-      this.velocity.x *= 1 - 2.2 * dt;
-      this.velocity.z *= 1 - 2.2 * dt;
+    if (inLava) {
+      this.lavaSubmersion = Math.min(1, this.lavaSubmersion + dt * 2.2);
+      this.velocity.y -= 3.5 * dt;
+      this.velocity.y += 8.5 * dt;
+      this.velocity.y *= 1 - 2.8 * dt;
+      this.velocity.x *= 1 - 3.8 * dt;
+      this.velocity.z *= 1 - 3.8 * dt;
       if (!this.sitting && (this.keys.has('Space') || this.touchJump)) {
-        this.velocity.y += 16 * dt;
+        this.velocity.y += 11 * dt;
       }
+      if (sneak) this.velocity.y -= 14 * dt;
       this.onGround = false;
     } else {
+      this.lavaSubmersion = Math.max(0, this.lavaSubmersion - dt * 3.5);
+    }
+
+    if (inWater) {
+      const surfaceY = this.chunks.getWaterSurfaceY(
+        Math.floor(this.position.x),
+        Math.floor(this.position.z),
+      );
+      if (surfaceY !== null) {
+        const depth = surfaceY - (this.position.y + this.eyeHeight);
+        if (depth > 0.35) this.velocity.y += Math.min(18, depth * 8) * dt;
+      }
+      this.velocity.y -= 5.5 * dt;
+      this.velocity.y += 6.5 * dt;
+      this.velocity.y *= 1 - 3.2 * dt;
+      this.velocity.x *= 1 - 2.4 * dt;
+      this.velocity.z *= 1 - 2.4 * dt;
+      if (!this.sitting && (this.keys.has('Space') || this.touchJump)) {
+        this.velocity.y += 18 * dt;
+      }
+      if (sneak) this.velocity.y -= 12 * dt;
+      this.onGround = false;
+    } else if (!inLava) {
       this.velocity.y -= 28 * dt;
     }
 
@@ -369,6 +403,7 @@ export class PlayerController {
       this.onGround &&
       !this.sitting &&
       !inWater &&
+      !inLava &&
       (this.keys.has('Space') || this.touchJump)
     ) {
       this.velocity.y = sneak ? 7.2 : 9.2;
@@ -416,21 +451,30 @@ export class PlayerController {
       return;
     }
 
-    // Chest/head focus so the avatar sits naturally in frame.
-    this.camFocus.set(this.position.x, this.position.y + this.eyeHeight * 0.78, this.position.z);
+    // Aim at upper chest so third-person framing feels natural.
+    this.camFocus.set(
+      this.position.x,
+      this.position.y + this.eyeHeight * 0.72 + CAM_HEIGHT_LIFT * 0.25,
+      this.position.z,
+    );
 
     if (this.viewMode === 'front') {
-      // In front of the face, looking back at the player.
       this.camDesired.copy(this.camFocus).addScaledVector(look, FRONT_DIST);
+      this.camDesired.y += CAM_HEIGHT_LIFT * 0.4;
       this.camera.position.copy(this.pullCameraIn(this.camFocus, this.camDesired));
       this.camera.lookAt(this.camFocus);
       return;
     }
 
-    // Third: orbit behind along look axis, keep aiming into the world.
+    // Third: behind + slightly above, looking into the world.
     this.camDesired.copy(this.camFocus).addScaledVector(look, -THIRD_DIST);
+    this.camDesired.y += CAM_HEIGHT_LIFT;
     this.camera.position.copy(this.pullCameraIn(this.camFocus, this.camDesired));
-    this.camera.quaternion.copy(this.aimQuat);
+    this.camera.lookAt(
+      this.camFocus.x + look.x * 6,
+      this.camFocus.y + look.y * 6,
+      this.camFocus.z + look.z * 6,
+    );
   }
 
   private pullCameraIn(from: THREE.Vector3, desired: THREE.Vector3): THREE.Vector3 {
@@ -452,51 +496,62 @@ export class PlayerController {
   }
 
   private moveAxis(dt: number, axis: 'x' | 'y' | 'z'): void {
-    const delta = this.velocity[axis] * dt;
-    this.position[axis] += delta;
+    let remaining = this.velocity[axis] * dt;
+    if (remaining === 0) return;
 
     const height = this.playerHeight;
-    const minX = this.position.x - PLAYER_WIDTH * 0.5;
-    const maxX = this.position.x + PLAYER_WIDTH * 0.5;
-    const minY = this.position.y;
-    const maxY = this.position.y + height;
-    const minZ = this.position.z - PLAYER_WIDTH * 0.5;
-    const maxZ = this.position.z + PLAYER_WIDTH * 0.5;
-
-    const x0 = Math.floor(minX);
-    const x1 = Math.floor(maxX);
-    const y0 = Math.floor(minY);
-    const y1 = Math.floor(maxY);
-    const z0 = Math.floor(minZ);
-    const z1 = Math.floor(maxZ);
+    const half = PLAYER_WIDTH * 0.5;
+    // Substep so we never move more than half a block per probe (anti-tunnel).
+    const stepSize = 0.45;
+    const steps = Math.max(1, Math.ceil(Math.abs(remaining) / stepSize));
+    const step = remaining / steps;
 
     let hitGround = false;
 
-    for (let y = y0; y <= y1; y++) {
-      for (let z = z0; z <= z1; z++) {
-        for (let x = x0; x <= x1; x++) {
-          if (!this.chunks.isSolidAt(x, y, z)) continue;
+    for (let s = 0; s < steps; s++) {
+      this.position[axis] += step;
 
-          if (axis === 'y') {
-            if (delta > 0) {
-              this.position.y = y - height - 0.001;
-              this.velocity.y = 0;
-            } else if (delta < 0) {
-              this.position.y = y + 1;
-              this.velocity.y = 0;
-              hitGround = true;
+      const minX = this.position.x - half;
+      const maxX = this.position.x + half;
+      const minY = this.position.y;
+      const maxY = this.position.y + height;
+      const minZ = this.position.z - half;
+      const maxZ = this.position.z + half;
+
+      const x0 = Math.floor(minX);
+      const x1 = Math.floor(maxX);
+      const y0 = Math.floor(minY);
+      const y1 = Math.floor(maxY);
+      const z0 = Math.floor(minZ);
+      const z1 = Math.floor(maxZ);
+
+      let blocked = false;
+      for (let y = y0; y <= y1 && !blocked; y++) {
+        for (let z = z0; z <= z1 && !blocked; z++) {
+          for (let x = x0; x <= x1; x++) {
+            if (!this.chunks.isSolidAt(x, y, z)) continue;
+            blocked = true;
+            if (axis === 'y') {
+              if (step > 0) {
+                this.position.y = y - height - 0.001;
+                this.velocity.y = 0;
+              } else {
+                this.position.y = y + 1;
+                this.velocity.y = 0;
+                hitGround = true;
+              }
+            } else if (axis === 'x') {
+              this.position.x = step > 0 ? x - half - 0.001 : x + 1 + half + 0.001;
+              this.velocity.x = 0;
+            } else {
+              this.position.z = step > 0 ? z - half - 0.001 : z + 1 + half + 0.001;
+              this.velocity.z = 0;
             }
-          } else if (axis === 'x') {
-            if (delta > 0) this.position.x = x - PLAYER_WIDTH * 0.5 - 0.001;
-            else this.position.x = x + 1 + PLAYER_WIDTH * 0.5 + 0.001;
-            this.velocity.x = 0;
-          } else {
-            if (delta > 0) this.position.z = z - PLAYER_WIDTH * 0.5 - 0.001;
-            else this.position.z = z + 1 + PLAYER_WIDTH * 0.5 + 0.001;
-            this.velocity.z = 0;
+            break;
           }
         }
       }
+      if (blocked) break;
     }
 
     if (axis === 'y') this.onGround = hitGround;

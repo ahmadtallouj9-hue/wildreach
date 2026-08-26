@@ -9,6 +9,16 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
+      '/ollama': {
+        target: 'http://127.0.0.1:11434',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ollama/, ''),
+      },
+      '/vythera-train': {
+        target: 'http://127.0.0.1:8791',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/vythera-train/, ''),
+      },
       '/ws': {
         target: 'ws://localhost:8787',
         ws: true,
@@ -19,6 +29,16 @@ export default defineConfig({
     host: true,
     port: 4173,
     proxy: {
+      '/ollama': {
+        target: 'http://127.0.0.1:11434',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ollama/, ''),
+      },
+      '/vythera-train': {
+        target: 'http://127.0.0.1:8791',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/vythera-train/, ''),
+      },
       '/ws': {
         target: 'ws://localhost:8787',
         ws: true,

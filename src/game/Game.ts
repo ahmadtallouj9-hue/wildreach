@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WorldGen } from '../world/WorldGen';
+import { formatGenDebug, parseGenDebugMode, type GenDebugMode } from '../world/gen/GenDebug';
 import { ChunkManager } from '../world/ChunkManager';
 import { PlayerController } from '../player/PlayerController';
 import { BlockInteraction } from '../player/BlockInteraction';
@@ -7,6 +8,8 @@ import { Inventory } from '../player/Inventory';
 import { Sky } from '../render/Sky';
 import { TerrainMaterials } from '../render/TerrainMaterials';
 import { PostFX } from '../render/PostFX';
+import { FallingLeaves } from '../render/FallingLeaves';
+import { WanderMob } from '../entity/WanderMob';
 import { DiscoverySystem } from '../discovery/DiscoverySystem';
 import { Hud } from '../ui/Hud';
 import { InventoryUi } from '../ui/InventoryUi';
@@ -37,6 +40,8 @@ export class Game {
   private interaction: BlockInteraction;
   private sky: Sky;
   private postfx: PostFX;
+  private fallingLeaves: FallingLeaves | null = null;
+  private mobs: WanderMob[] = [];
   private discovery: DiscoverySystem;
   private hud: Hud;
   private touchControls: TouchControls | null = null;
@@ -48,10 +53,13 @@ export class Game {
   private worldLinkStatus: NetLinkStatus = 'offline';
   private playerName = 'Wanderer';
   private prefs: Settings = loadSettings();
+  private genDebug: GenDebugMode = parseGenDebugMode();
   private clock = new THREE.Clock();
   private running = false;
   private paused = true;
   private ignorePointerUnlock = false;
+  private onPointerLockChangeBound = () => this.onPointerLockChange();
+  private onResizeBound = () => this.onResize();
   readonly seed: string;
   onMenuRequest: (() => void) | null = null;
 
@@ -59,14 +67,13 @@ export class Game {
     this.seed = seed;
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: false,
       powerPreference: 'high-performance',
       stencil: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouchDevice() ? 1.5 : 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.domElement.classList.add('game-canvas');
@@ -89,6 +96,7 @@ export class Game {
     this.player = new PlayerController(this.renderer.domElement, this.chunks);
     this.scene.add(this.player.avatar);
     this.sky = new Sky(this.scene);
+    this.sky.viewDistanceChunks = worldSettings.renderDistance;
     this.sky.setTimeOfDay(WORLD_TIME_VALUES[worldSettings.time]);
     this.postfx = new PostFX(this.renderer, this.scene, this.player.camera);
     this.discovery = new DiscoverySystem();
@@ -166,11 +174,12 @@ export class Game {
 
     this.chunks.bootstrapAt(0, 0);
     this.player.spawnAt(0, 0);
+    this.spawnMobs();
 
     this.initMultiplayer(worldSettings, loadProfile());
 
-    document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
-    window.addEventListener('resize', () => this.onResize());
+    document.addEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    window.addEventListener('resize', this.onResizeBound);
     this.onResize();
   }
 
@@ -196,6 +205,7 @@ export class Game {
     this.player.invertY = settings.invertY;
     this.player.setFov(settings.fov);
     this.player.setViewMode(settings.viewMode);
+    this.hud.setViewMode(settings.viewMode);
     this.player.applyProfile(profile);
     if (skinPixels) this.player.applySkinPixels(skinPixels);
     this.chunks.setRenderDistance(settings.renderDistance);
@@ -288,9 +298,6 @@ export class Game {
       this.social?.respondJoin(id, accept);
       this.syncPauseSocial();
     });
-    this.pauseMenu.onFriendInvite((accountId) => {
-      this.social?.inviteToWorld(accountId);
-    });
     this.syncPauseSocial();
   }
 
@@ -304,20 +311,6 @@ export class Game {
       requests: this.social.incomingRequests.map((r) => ({
         id: r.id,
         name: r.from.profile.name || 'Friend',
-      })),
-      friends: this.social.friendList.map((f) => ({
-        accountId: f.accountId,
-        name: f.profile.name || 'Wanderer',
-        status: !f.online
-          ? 'Not connected'
-          : f.inGame
-            ? f.worldName
-              ? f.worldName
-              : 'Playing'
-            : 'Title screen',
-        online: f.online,
-        inGame: f.inGame,
-        canInvite: f.online && !f.inGame,
       })),
     });
   }
@@ -409,6 +402,8 @@ export class Game {
     this.setSessionCoveredByTitle(false);
     this.social?.setPresence({ inGame: false });
     this.renderer.setAnimationLoop(null);
+    document.removeEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    window.removeEventListener('resize', this.onResizeBound);
     this.hud.root.remove();
     this.inventoryUi.root.remove();
     this.chatUi.root.remove();
@@ -416,8 +411,16 @@ export class Game {
     this.touchControls?.root.remove();
     this.net?.disconnect();
     this.remotePlayers?.root.remove();
+    this.fallingLeaves?.dispose();
+    this.fallingLeaves = null;
+    for (const m of this.mobs) m.dispose();
+    this.mobs = [];
     this.renderer.domElement.remove();
     this.renderer.dispose();
+  }
+
+  private spawnMobs(): void {
+    // Mobs / A* pathfinding deferred — too costly while chunk streaming.
   }
 
   private onResize(): void {
@@ -437,7 +440,7 @@ export class Game {
     const journalBlocking = this.hud.isJournalOpen;
 
     if (worldLive && !journalBlocking) {
-      this.chunks.updateAround(this.player.position.x, this.player.position.z, 3);
+      this.chunks.updateAround(this.player.position.x, this.player.position.z, 1);
       if (canControl) {
         this.player.update(dt);
         this.interaction.update(dt);
@@ -454,15 +457,17 @@ export class Game {
         this.player.position.z,
         landmarksLive,
       );
+      this.chunks.tickWorld(dt, this.player.position.x, this.player.position.z);
     } else {
       this.chunks.updateAround(this.player.position.x, this.player.position.z, 1);
       this.interaction.update(dt);
     }
 
     const biome = this.chunks.getBiomeAt(this.player.position.x, this.player.position.z);
-    const submersion = this.player.getSubmersion();
+    const lavaSub = this.player.getLavaSubmersion();
+    const submersion = lavaSub > 0.02 ? 0 : this.player.getSubmersion();
     this.sky.update(dt, biome, submersion);
-    this.sky.follow(this.player.position.x, this.player.position.z);
+    this.sky.follow(this.player.position.x, this.player.position.z, this.player.position.y);
     this.materials.update(
       dt,
       this.sky.sunDir,
@@ -487,8 +492,10 @@ export class Game {
 
     this.hud.setPointerLocked(this.player.aimActive && canControl && !journalBlocking);
     this.hud.setTouchMode(this.player.touchControlsActive);
+    this.hud.setViewMode(this.player.viewMode);
     this.touchControls?.setEnabled(this.editingHud || (canControl && !journalBlocking));
     this.hud.setUnderwater(this.prefs.underwaterFx ? submersion : 0);
+    this.hud.setInLava(lavaSub);
     this.hud.tickFps(dt);
     if (worldLive && !journalBlocking) {
       this.net?.tickState(dt, { t: 'state', ...this.player.getNetState() });
@@ -514,6 +521,16 @@ export class Game {
       landmarks,
       players: others,
       dt: worldLive ? dt : 0,
+      lookAt: this.interaction.getLookAt(),
+      genDebug:
+        this.genDebug === 'off'
+          ? ''
+          : formatGenDebug(
+              this.world,
+              Math.floor(this.player.position.x),
+              Math.floor(this.player.position.z),
+              this.genDebug,
+            ),
     });
 
     this.postfx.render();
@@ -591,7 +608,6 @@ export class Game {
           worldName: worldNameFromSeed(this.seed),
           others: [],
         });
-        this.hud.showToast('Connection lost', 'Trying to rejoin this world…');
       },
       onReconnecting: () => {
         this.worldLinkStatus = 'reconnecting';
@@ -601,7 +617,6 @@ export class Game {
           worldName: worldNameFromSeed(this.seed),
           others: [],
         });
-        this.hud.showToast('Reconnecting…', 'Finding your world session');
       },
     });
 

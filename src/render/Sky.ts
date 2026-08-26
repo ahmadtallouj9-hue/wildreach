@@ -149,6 +149,8 @@ export class Sky {
   readonly sunDir = new THREE.Vector3(0.4, 1, 0.25);
   fogColor = new THREE.Color('#7aadb0');
   fogDensity = 0.004;
+  /** Chunks of view — softens horizon so distant streaming looks smooth. */
+  viewDistanceChunks = 7;
   cloudiness = 0.7;
   /** Player setting 0–1 multiplier for cloud cover. */
   cloudCover = 0.7;
@@ -158,10 +160,10 @@ export class Sky {
     this.scene.background = null;
     this.scene.fog = new THREE.FogExp2('#7aadb0', 0.004);
 
-    this.hemi = new THREE.HemisphereLight(0xc5e8ef, 0x2a4038, 0.45);
+    this.hemi = new THREE.HemisphereLight(0xc5e8ef, 0x3a4a42, 0.55);
     this.scene.add(this.hemi);
 
-    this.sun = new THREE.DirectionalLight(0xfff0d4, 1.35);
+    this.sun = new THREE.DirectionalLight(0xfff0d4, 1.2);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.camera.near = 1;
@@ -177,7 +179,7 @@ export class Sky {
     this.sun.target = this.sunTarget;
     this.scene.add(this.sun);
 
-    this.ambient = new THREE.AmbientLight(0x4a6070, 0.28);
+    this.ambient = new THREE.AmbientLight(0x7a8a92, 0.62);
     this.scene.add(this.ambient);
 
     this.skyMat = new THREE.ShaderMaterial({
@@ -212,12 +214,11 @@ export class Sky {
     this.timeOfDay = ((t % 1) + 1) % 1;
   }
 
-  follow(px: number, pz: number, _py = 40): void {
-    // Vertex shader nulls camera translation; still park sun for shadows
-    this.sunTarget.position.set(px, 40, pz);
+  follow(px: number, pz: number, py = 40): void {
+    this.sunTarget.position.set(px, py, pz);
     this.sun.position.set(
       px + this.sunDir.x * 80,
-      40 + this.sunDir.y * 90,
+      py + Math.max(24, this.sunDir.y * 90),
       pz + this.sunDir.z * 80,
     );
     this.sun.target.updateMatrixWorld();
@@ -230,14 +231,16 @@ export class Sky {
   update(dt: number, biome: BiomeId, submersion = 0): void {
     this.timeOfDay = (this.timeOfDay + dt * 0.006) % 1;
     const sunAngle = this.timeOfDay * Math.PI * 2;
-    this.sunDir.set(Math.cos(sunAngle), Math.sin(sunAngle), Math.sin(sunAngle) * 0.35).normalize();
+    this.sunDir
+      .set(Math.sin(sunAngle), -Math.cos(sunAngle), Math.cos(sunAngle) * 0.28)
+      .normalize();
 
-    const day = Math.max(0, this.sunDir.y);
+    const day = THREE.MathUtils.smoothstep(-0.12, 0.42, this.sunDir.y);
     const night = 1 - day;
-    this.sun.intensity = 0.15 + day * 1.55;
-    this.sun.castShadow = day > 0.08;
-    this.ambient.intensity = 0.1 + day * 0.26;
-    this.hemi.intensity = 0.18 + day * 0.42;
+    this.sun.intensity = 0.35 + day * 1.2;
+    this.sun.castShadow = this.sunDir.y > 0.18;
+    this.ambient.intensity = 0.58 + day * 0.2;
+    this.hemi.intensity = 0.48 + day * 0.28;
 
     const fogBase = BIOMES[biome].fogRgb;
     const skyDay = new THREE.Color().setRGB(0.42, 0.68, 0.8);
@@ -252,7 +255,9 @@ export class Sky {
     }
 
     this.fogColor.copy(sky).lerp(new THREE.Color().setRGB(...fogBase), 0.25);
-    this.fogDensity = 0.0028 + night * 0.0025;
+    // Soft horizon at ~85% of loaded terrain radius so pop-in stays hidden in mist.
+    const viewBlocks = Math.max(48, this.viewDistanceChunks * 16 * 0.85);
+    this.fogDensity = 1.35 / viewBlocks + night * 0.002;
     this.cloudiness = 0.62 + (fogBase[0] + fogBase[2]) * 0.1;
 
     const u = Math.min(1, Math.max(0, submersion));

@@ -13,6 +13,7 @@ export const BLOCK_NAMES: Record<number, string> = {
   [Block.Dirt]: 'Dirt',
   [Block.Stone]: 'Stone',
   [Block.Sand]: 'Sand',
+  [Block.Water]: 'Water',
   [Block.Wood]: 'Wood',
   [Block.Leaves]: 'Leaves',
   [Block.Snow]: 'Snow',
@@ -20,6 +21,32 @@ export const BLOCK_NAMES: Record<number, string> = {
   [Block.Crystal]: 'Crystal',
   [Block.Ruin]: 'Ruin',
   [Block.Moss]: 'Moss',
+  [Block.Gravel]: 'Gravel',
+  [Block.Ice]: 'Ice',
+  [Block.DarkStone]: 'Dark stone',
+  [Block.Torch]: 'Torch',
+  [Block.Lava]: 'Lava',
+};
+
+/** Short type label shown in the look-at viewer. */
+export const BLOCK_KINDS: Record<number, string> = {
+  [Block.Grass]: 'Surface block',
+  [Block.Dirt]: 'Soil',
+  [Block.Stone]: 'Building block',
+  [Block.Sand]: 'Loose sediment',
+  [Block.Water]: 'Fluid',
+  [Block.Wood]: 'Natural material',
+  [Block.Leaves]: 'Foliage',
+  [Block.Snow]: 'Surface cover',
+  [Block.Clay]: 'Sediment',
+  [Block.Crystal]: 'Rare mineral',
+  [Block.Ruin]: 'Structure block',
+  [Block.Moss]: 'Growth',
+  [Block.Gravel]: 'Loose rock',
+  [Block.Ice]: 'Frozen water',
+  [Block.DarkStone]: 'Deep rock',
+  [Block.Torch]: 'Light source',
+  [Block.Lava]: 'Molten fluid',
 };
 
 export function blockCssColor(id: number): string {
@@ -58,15 +85,18 @@ export class InventoryUi {
         <div class="glass-frost" aria-hidden="true"></div>
         <div class="inv-panel-scroll">
           <header class="inv-header">
-            <div class="inv-tabs">
-              <button type="button" class="inv-tab active" data-tab="pack">Pack</button>
-              <button type="button" class="inv-tab" data-tab="guide">Guide</button>
+            <div class="inv-heading">
+              <p class="inv-kicker">VYTHERA</p>
+              <div class="inv-tabs">
+                <button type="button" class="inv-tab active" data-tab="pack">PACK</button>
+                <button type="button" class="inv-tab" data-tab="guide">GUIDE</button>
+              </div>
             </div>
             <button type="button" class="inv-close" aria-label="Close">✕</button>
           </header>
           <div class="inv-body" data-view="pack">
             <section class="craft-bay">
-              <h3>Craft</h3>
+              <h3>CRAFT</h3>
               <div class="craft-row">
                 <div class="craft-grid"></div>
                 <span class="craft-arrow" aria-hidden="true">→</span>
@@ -75,13 +105,13 @@ export class InventoryUi {
               <p class="craft-hint">Arrange materials, then click the result.</p>
             </section>
             <section class="pack-bay">
-              <h3>Satchel</h3>
+              <h3>SATCHEL</h3>
               <div class="inv-grid"></div>
             </section>
           </div>
           <div class="inv-body guide-body" data-view="guide" hidden>
             <section>
-              <h3>Controls</h3>
+              <h3>CONTROLS</h3>
               <ul class="guide-controls">
                 <li><kbd>E</kbd> Pack &amp; craft</li>
                 <li><kbd>T</kbd> / <kbd>Enter</kbd> Chat (AR / EN)</li>
@@ -96,7 +126,7 @@ export class InventoryUi {
               </ul>
             </section>
             <section>
-              <h3>Recipes</h3>
+              <h3>RECIPES</h3>
               <ul class="guide-recipes"></ul>
             </section>
           </div>

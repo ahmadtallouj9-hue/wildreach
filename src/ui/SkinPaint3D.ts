@@ -88,11 +88,14 @@ export class SkinPaint3D {
       this.paintMeshes.push(mesh);
     }
     this.avatar.applySkinPixels(
-      createDefaultSkin('#e8c4a8', '#5ec4b0', '#e8c56a', {
-        hair: '#4a3728',
-        eyes: '#2e6b9e',
-        shoes: '#2f3e46',
-        hairStyle: 'short',
+      createDefaultSkin('#FFF0E6', '#2B2A2D', '#F4B6C2', {
+        hair: '#8C827B',
+        eyes: '#8C827B',
+        shoes: '#9E9088',
+        hairStyle: 'bangs',
+        face: 'kawaii',
+        sleeves: 'long',
+        pants: '#FAFAFA',
       }),
     );
 

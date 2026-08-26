@@ -141,25 +141,25 @@ const BslGradeShader = {
       }
 
       // Mild contrast + saturation (BSL-ish)
-      col = (col - 0.5) * 1.08 + 0.5;
+      col = (col - 0.5) * mix(1.02, 1.06, dayFactor) + 0.5;
       float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(luma), col, 1.12);
+      col = mix(vec3(luma), col, 1.08);
 
       // Warm daylight / cool night
       vec3 warm = vec3(1.04, 1.0, 0.94);
       vec3 cool = vec3(0.92, 0.96, 1.08);
       col *= mix(cool, warm, dayFactor);
 
-      col = aces(col * 1.05);
+      col = aces(col * mix(1.12, 1.05, dayFactor));
 
       // Soft vignette
       vec2 d = vUv - 0.5;
-      float vig = 1.0 - dot(d, d) * 0.55;
-      col *= mix(1.0, clamp(vig, 0.7, 1.0), 0.65 * intensity);
+      float vig = 1.0 - dot(d, d) * 0.4;
+      col *= mix(1.0, clamp(vig, 0.78, 1.0), 0.45 * intensity);
 
       // Film grain (very light)
       float grain = fract(sin(dot(vUv + time, vec2(12.9898, 78.233))) * 43758.5453);
-      col += (grain - 0.5) * 0.012 * intensity;
+      col += (grain - 0.5) * 0.004 * intensity;
 
       gl_FragColor = vec4(col, src.a);
     }
@@ -172,16 +172,23 @@ export class PostFX {
   private bloomPass: UnrealBloomPass;
   private gradePass: ShaderPass;
   private camera: THREE.Camera;
+  private scene: THREE.Scene;
+  private renderer: THREE.WebGLRenderer;
+  /** Multipass composer is expensive — keep off unless underwater FX needs it. */
+  private useComposer = false;
   private time = 0;
   private sunWorld = new THREE.Vector3();
   private sunNdc = new THREE.Vector3();
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
+    this.renderer = renderer;
+    this.scene = scene;
     this.camera = camera;
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
 
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.32, 0.5, 0.88);
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.18, 0.4, 0.92);
+    this.bloomPass.enabled = false;
     this.composer.addPass(this.bloomPass);
 
     this.underwaterPass = new ShaderPass(UnderwaterShader);
@@ -204,10 +211,13 @@ export class PostFX {
     this.underwaterPass.uniforms.time.value = this.time;
     this.underwaterPass.enabled = amount > 0.02;
     this.gradePass.uniforms.time.value = this.time;
+    // Only pay for composer when actually underwater.
+    this.useComposer = amount > 0.02;
   }
 
   /** Update sun shafts from world-space sun direction. */
   setSun(sunDir: THREE.Vector3, dayFactor: number, playerPos: THREE.Vector3): void {
+    if (!this.useComposer) return;
     this.sunWorld.copy(playerPos).addScaledVector(sunDir, 200);
     this.sunNdc.copy(this.sunWorld).project(this.camera);
     const x = this.sunNdc.x * 0.5 + 0.5;
@@ -217,8 +227,6 @@ export class PostFX {
     const strength = onScreen ? Math.max(0, dayFactor) * 0.38 : 0;
     this.gradePass.uniforms.sunStrength.value = strength;
     this.gradePass.uniforms.dayFactor.value = Math.max(0, dayFactor);
-    this.bloomPass.strength = 0.14 + dayFactor * 0.1;
-    this.bloomPass.threshold = 0.92 - dayFactor * 0.03;
   }
 
   setBrightness(amount: number): void {
@@ -229,6 +237,10 @@ export class PostFX {
   }
 
   render(): void {
+    if (!this.useComposer) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
     this.composer.render();
   }
 }

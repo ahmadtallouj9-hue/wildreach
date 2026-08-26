@@ -29,6 +29,8 @@ export type ProfileWire = Pick<
   | 'facial'
   | 'sleeves'
   | 'cape'
+  | 'backpack'
+  | 'belt'
 > & { skinData?: string };
 
 export type PlayerSnapshot = {
@@ -117,13 +119,9 @@ export function editKey(x: number, y: number, z: number): string {
 
 export function mpUrl(): string {
   const env = import.meta.env.VITE_MP_URL as string | undefined;
-  if (env) return env;
-  // Production default: Render multiplayer / friends server
-  if (typeof location !== 'undefined' && location.hostname.endsWith('vercel.app')) {
-    return 'wss://wildreach-mp.onrender.com';
-  }
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.host}/ws`;
+  if (env?.trim()) return env.trim();
+  // Always use hosted multiplayer so friends can connect from any device.
+  return 'wss://wildreach-mp.onrender.com';
 }
 
 export function worldRoomId(

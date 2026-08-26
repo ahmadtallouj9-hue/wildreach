@@ -1,4 +1,6 @@
 import './style.css';
+import './ui/vythera-ui.css';
+import './ui/modelEditor.css';
 import { Game } from './game/Game';
 import { MainMenu } from './ui/MainMenu';
 import { isTouchDevice } from './util/isTouchDevice';
@@ -31,7 +33,10 @@ function startWorld(seed: string): void {
   menu.hide();
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      ensureGame(seed).setPaused(false);
+      const g = ensureGame(seed);
+      // Prefs may have been emitted before Game existed (skin upload on title).
+      menu.pushPrefs();
+      g.setPaused(false);
     });
   });
 }

@@ -1,0 +1,10 @@
+# VYTHERA local training dependencies (install on the machine that trains)
+# pip install -r scripts/vythera-train/python/requirements.txt
+torch>=2.1.0
+transformers>=4.40.0
+peft>=0.11.0
+datasets>=2.19.0
+accelerate>=0.30.0
+safetensors>=0.4.0
+# Optional for QLoRA 4-bit (NVIDIA):
+# bitsandbytes>=0.43.0

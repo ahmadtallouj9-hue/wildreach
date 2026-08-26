@@ -59,6 +59,20 @@ export const RECIPES: Recipe[] = [
     result: { id: Block.Wood, count: 6 },
     hint: '3 Wood in a row → Wood×6',
   },
+  {
+    id: 'gravel',
+    name: 'River gravel',
+    pattern: [Block.Stone, Block.Sand, 0, Block.Sand, Block.Stone, 0, 0, 0, 0],
+    result: { id: Block.Gravel, count: 4 },
+    hint: 'Stone + Sand checker → Gravel',
+  },
+  {
+    id: 'ice',
+    name: 'Clear ice',
+    pattern: [Block.Snow, Block.Snow, 0, Block.Snow, Block.Snow, 0, 0, 0, 0],
+    result: { id: Block.Ice, count: 4 },
+    hint: '2×2 Snow → Ice',
+  },
 ];
 
 export class CraftingGrid {

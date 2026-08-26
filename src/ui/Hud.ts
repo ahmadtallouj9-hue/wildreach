@@ -1,8 +1,9 @@
 import { BIOMES, type BiomeId } from '../world/Biomes';
-import type { DiscoveryEvent, DiscoverySystem } from '../discovery/DiscoverySystem';
+import type { DiscoverySystem } from '../discovery/DiscoverySystem';
 import type { Landmark } from '../world/LandmarkGen';
 import { CHUNK_SIZE } from '../world/blocks';
 import { PLACEABLE, blockCssColor } from '../player/BlockInteraction';
+import { BLOCK_KINDS, BLOCK_NAMES } from './InventoryUi';
 import type { MapPlayerMarker } from '../net/RemotePlayers';
 import type { NetLinkStatus } from '../net/NetClient';
 
@@ -36,6 +37,10 @@ export class Hud {
   private localPlayerName = 'You';
   private toasts: { el: HTMLElement; t: number }[] = [];
   private fpsEl: HTMLElement;
+  private lookViewerEl: HTMLElement;
+  private lookNameEl: HTMLElement;
+  private lookKindEl: HTMLElement;
+  private lookSwatchEl: HTMLElement;
   private showFps = false;
   private fpsFrames = 0;
   private fpsTimer = 0;
@@ -47,8 +52,7 @@ export class Hud {
     this.root.innerHTML = `
       <div class="hud-frame">
       <div class="brand">
-        <span class="brand-mark">WR</span>
-        <span class="brand-title">Wildreach</span>
+        <span class="brand-title">VYTHERA</span>
         <span class="profile-chip" hidden><span class="profile-dot"></span><span class="profile-name"></span></span>
       </div>
       <div class="compass" aria-hidden="true">
@@ -67,6 +71,13 @@ export class Hud {
         <span class="coords-xyz">XYZ 0 0 0</span>
         <span class="coords-chunk">Chunk 0 0</span>
       </div>
+      <div class="look-viewer" hidden aria-live="polite">
+        <span class="look-swatch" aria-hidden="true"></span>
+        <div class="look-text">
+          <span class="look-kind"></span>
+          <span class="look-name"></span>
+        </div>
+      </div>
       <div class="reticle"></div>
       <div class="toast-stack"></div>
       <div class="palette-wrap">
@@ -75,16 +86,16 @@ export class Hud {
       </div>
       <aside class="journal" hidden>
         <header>
-          <h2>Field Journal</h2>
+          <h2>FIELD JOURNAL</h2>
           <button type="button" class="close-journal" aria-label="Close">✕</button>
         </header>
         <p class="journal-meta"><span class="distance">0</span> strides · seed <code class="seed"></code></p>
         <ul class="journal-list"></ul>
-        <p class="hint">LMB break · RMB / F / E place · Shift+LMB place · 1–8 select · J journal · M map</p>
+        <p class="hint">LMB break · RMB / F place · 1–9 select · J journal · M map</p>
       </aside>
       <aside class="map-panel" hidden>
         <header>
-          <h2>World Map</h2>
+          <h2>WORLD MAP</h2>
           <button type="button" class="close-map" aria-label="Close">✕</button>
         </header>
         <p class="map-meta"><span class="map-world-name">World</span> · <span class="map-player-count">1 here</span></p>
@@ -130,6 +141,10 @@ export class Hud {
     this.coordsEl = this.root.querySelector('.coords-xyz')!;
     this.coordsChunkEl = this.root.querySelector('.coords-chunk')!;
     this.fpsEl = this.root.querySelector('.fps-chip')!;
+    this.lookViewerEl = this.root.querySelector('.look-viewer')!;
+    this.lookNameEl = this.root.querySelector('.look-name')!;
+    this.lookKindEl = this.root.querySelector('.look-kind')!;
+    this.lookSwatchEl = this.root.querySelector('.look-swatch')!;
     this.seedEl.textContent = seed;
 
     this.buildPalette();
@@ -146,7 +161,7 @@ export class Hud {
       }
     });
 
-    this.discovery.onDiscover((ev) => this.pushToast(ev));
+    this.discovery.onDiscover(() => this.refreshJournal());
     this.setPaletteSelection(0);
   }
 
@@ -242,6 +257,19 @@ export class Hud {
     this.underwaterOverlay.style.opacity = String(u * 0.32);
     this.underwaterOverlay.style.visibility = u > 0.02 ? 'visible' : 'hidden';
     this.underwaterOverlay.classList.toggle('uw-active', u > 0.08);
+    if (u > 0.02) this.underwaterOverlay.classList.remove('lava-active');
+  }
+
+  setInLava(amount: number): void {
+    const u = Math.min(1, Math.max(0, amount));
+    if (u <= 0.02) {
+      this.underwaterOverlay.classList.remove('lava-active');
+      return;
+    }
+    this.underwaterOverlay.classList.add('lava-active');
+    this.underwaterOverlay.style.visibility = 'visible';
+    this.underwaterOverlay.style.opacity = String(0.18 + u * 0.38);
+    this.underwaterOverlay.classList.toggle('uw-active', u > 0.12);
   }
 
   setShowFps(on: boolean): void {
@@ -275,6 +303,10 @@ export class Hud {
 
   setTouchMode(on: boolean): void {
     this.root.classList.toggle('touch-mode', on);
+  }
+
+  setViewMode(mode: string): void {
+    this.root.classList.toggle('hud--no-reticle', mode === 'third' || mode === 'front');
   }
 
   toggleJournal(): void {
@@ -326,15 +358,6 @@ export class Hud {
     this.mapPanel.hidden = !open;
   }
 
-  private pushToast(ev: DiscoveryEvent): void {
-    const el = document.createElement('div');
-    el.className = `toast ${ev.kind}`;
-    el.innerHTML = `<strong>${ev.title}</strong><span>${ev.detail}</span>`;
-    this.toastEl.appendChild(el);
-    this.toasts.push({ el, t: 4.5 });
-    this.refreshJournal();
-  }
-
   private refreshJournal(): void {
     const items: string[] = [];
     for (const id of this.discovery.visitedBiomes) {
@@ -359,6 +382,8 @@ export class Hud {
     landmarks: Landmark[];
     players?: MapPlayerMarker[];
     dt: number;
+    genDebug?: string;
+    lookAt?: { id: number } | null;
   }): void {
     const def = BIOMES[opts.biome];
     const label = this.biomeEl.querySelector('.label')!;
@@ -374,7 +399,9 @@ export class Hud {
     const z = Math.floor(opts.playerZ);
     const cx = Math.floor(x / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
-    this.coordsEl.textContent = `XYZ ${x} ${y} ${z}`;
+    this.coordsEl.textContent = opts.genDebug
+      ? `XYZ ${x} ${y} ${z} · ${opts.genDebug}`
+      : `XYZ ${x} ${y} ${z}`;
     this.coordsChunkEl.textContent = `Chunk ${cx} ${cz}`;
 
     if (opts.nearest && opts.nearest.dist < 180) {
@@ -390,6 +417,16 @@ export class Hud {
     }
 
     this.distanceEl.textContent = Math.floor(opts.distance).toString();
+
+    const look = opts.lookAt;
+    if (look && look.id > 0) {
+      this.lookViewerEl.hidden = false;
+      this.lookNameEl.textContent = BLOCK_NAMES[look.id] ?? `Block ${look.id}`;
+      this.lookKindEl.textContent = BLOCK_KINDS[look.id] ?? 'Block';
+      this.lookSwatchEl.style.background = blockCssColor(look.id);
+    } else {
+      this.lookViewerEl.hidden = true;
+    }
 
     for (let i = this.toasts.length - 1; i >= 0; i--) {
       this.toasts[i].t -= opts.dt;
