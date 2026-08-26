@@ -107,6 +107,12 @@ export class VytheraVisionAI {
     }
   }
 
+  /** Test helper: pin to an isolated backend list (no live daemon fallback). */
+  replaceBackendsForTest(backends: VytheraVisionBackend[]): void {
+    this.backends = backends.length ? backends : this.backends;
+    if (backends[0]) this.backend = backends[0];
+  }
+
   /** Switch local vision stack (Ollama, daemon VLM+adapter, etc.). */
   setBackend(backend: VytheraVisionBackend): void {
     this.backend = backend;

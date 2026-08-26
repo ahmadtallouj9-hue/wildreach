@@ -354,10 +354,12 @@ async function main(): Promise<void> {
   const approved = vytheraDataset.approved().find((s) => s.id === dsId);
   ok('dataset modality IMAGE_TO_VOXEL', approved?.modality === 'IMAGE_TO_VOXEL');
 
-  // No-vision backend path
+  // No-vision backend path (isolate from live daemon / ACTIVE_VISION)
   const { VytheraTransformersVisionBackend } = await import('./vision/VytheraVisionAltBackends');
+  const emptyBackend = new VytheraTransformersVisionBackend();
   const emptyVision = createMockVytheraVision();
-  emptyVision.setBackend(new VytheraTransformersVisionBackend());
+  emptyVision.replaceBackendsForTest([emptyBackend]);
+  emptyVision.setBackend(emptyBackend);
   await emptyVision.refresh();
   ok('missing vision status', emptyVision.getStatus() === 'NO_VISION_MODEL' || emptyVision.getStatus() === 'OFFLINE');
   let blocked = false;

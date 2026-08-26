@@ -25,7 +25,6 @@ import {
   trainDaemonRollback,
 } from '../vision/learning/VytheraTrainingCapability';
 import { DEFAULT_LEARN_TARGETS } from '../vision/learning/VytheraTeachExample';
-import { listVisualConcepts } from '../vision/learning/VytheraVisualConcepts';
 import {
   listVisualTaskDefinitions,
   type VytheraVisualTaskType,
@@ -55,7 +54,9 @@ type Tab =
   | 'EVALUATION'
   | 'MODELS'
   | 'TOOLS'
-  | 'SETTINGS';
+  | 'SETTINGS'
+  | 'PRIVACY'
+  | 'JOBS';
 
 const STATUS: Record<string, string> = {
   CONNECTED: '● CONNECTED',
@@ -63,6 +64,24 @@ const STATUS: Record<string, string> = {
   NO_MODEL: '● LOCAL MODEL REQUIRED',
   BUSY: '● BUSY',
   ERROR: '● ERROR',
+};
+
+const TAB_META: Record<
+  Tab,
+  { label: string; icon: string; group: 'AI' | 'LEARNING' | 'SYSTEM'; workspace: string }
+> = {
+  CHAT: { label: 'AI Chat', icon: '◇', group: 'AI', workspace: 'AI CHAT' },
+  IMAGE: { label: 'Image Learning', icon: '▣', group: 'LEARNING', workspace: 'IMAGE LEARNING' },
+  DATASET: { label: 'Dataset', icon: '▦', group: 'LEARNING', workspace: 'DATASET' },
+  TRAINING: { label: 'Train / Adapt', icon: '◎', group: 'LEARNING', workspace: 'TRAIN / ADAPT' },
+  EVALUATION: { label: 'Evaluation', icon: '◈', group: 'LEARNING', workspace: 'EVALUATION' },
+  MODELS: { label: 'Models', icon: '⬡', group: 'LEARNING', workspace: 'MODELS' },
+  MEMORY: { label: 'Memory', icon: '◉', group: 'AI', workspace: 'MEMORY' },
+  KNOWLEDGE: { label: 'Knowledge', icon: '✦', group: 'AI', workspace: 'KNOWLEDGE' },
+  TOOLS: { label: 'Tools', icon: '⚙', group: 'SYSTEM', workspace: 'TOOLS' },
+  JOBS: { label: 'Jobs', icon: '▤', group: 'SYSTEM', workspace: 'JOBS' },
+  SETTINGS: { label: 'Settings', icon: '☰', group: 'SYSTEM', workspace: 'SETTINGS' },
+  PRIVACY: { label: 'Privacy', icon: '⊘', group: 'SYSTEM', workspace: 'PRIVACY' },
 };
 
 function getTitle(t: VytheraVisualTaskType): string {
@@ -79,6 +98,9 @@ export class VytheraAIStudio {
   private modelSelect: HTMLSelectElement;
   private tabHost: HTMLElement;
   private panelHost: HTMLElement;
+  private inspectorHost: HTMLElement;
+  private workspaceTitleEl: HTMLElement;
+  private toastEl: HTMLElement;
   private tab: Tab = 'CHAT';
   private busy = false;
   private abort: AbortController | null = null;
@@ -86,55 +108,89 @@ export class VytheraAIStudio {
   private onNotify: (msg: string) => void;
   private imageMode: VytheraImageMode = 'UNDERSTAND';
   private imagePreviewUrl: string | null = null;
-  private imageMeta: { hash: string; fileName: string; palette: unknown; teachId?: string } | null =
-    null;
+  private imageMeta: {
+    hash: string;
+    fileName: string;
+    palette: unknown;
+    teachId?: string;
+    privacyStripped?: boolean;
+  } | null = null;
   private learnTargets = { ...DEFAULT_LEARN_TARGETS };
   private taskCategoryEnabled: Record<string, boolean> = Object.fromEntries(
     listVisualTaskDefinitions().map((d) => [d.type, true]),
   );
   private teachMoreFilter: VytheraVisualTaskType[] | null = null;
   private lastStageLabel = '';
+  private imageZoom = 1;
+  private lastPrivacyStripped = false;
 
   constructor(_onExecute: (actions: unknown[]) => void, onNotify: (msg: string) => void) {
     this.onNotify = (msg) => {
       const mode = loadVytheraAISettings().privacyMode !== false;
-      onNotify(sanitizeForDisplay(String(msg ?? ''), { privacyMode: mode }));
+      const safe = sanitizeForDisplay(String(msg ?? ''), { privacyMode: mode });
+      onNotify(safe);
+      if (this.toastEl) this.toastEl.textContent = safe;
     };
     this.root = document.createElement('div');
-    this.root.className = 'mod-project-ai vythera-ai-studio';
+    this.root.className = 'mod-project-ai vythera-ai-studio vas-shell';
     this.root.innerHTML = `
-      <header class="mod-ai-header mod-ai-header--sub">
-        <div class="mod-ai-brand">
-          <span class="mod-ai-orb" aria-hidden="true">◈</span>
-          <div>
-            <p class="voxel-editor-label mod-ai-title">VYTHERA AI</p>
-            <p class="mod-ai-subtitle">Game intelligence · local · tool-mediated</p>
-          </div>
+      <header class="vas-topbar" role="banner">
+        <div class="vas-brand">
+          <span class="vas-brand-mark" aria-hidden="true">◈</span>
+          <div class="vas-brand-word">VYTHERA <span>AI</span></div>
         </div>
-        <div class="mod-ai-header-actions">
-          <button type="button" class="mod-ai-cancel-btn" data-ai-cancel hidden>Cancel</button>
+        <div class="vas-workspace-title" data-workspace-title>AI CHAT</div>
+        <div class="vas-top-status">
+          <span class="vas-pill" data-pill="chat" data-state="off" title="Local chat service"><span class="vas-dot"></span><span>Local AI</span></span>
+          <span class="vas-pill" data-pill="gpu" data-state="off" title="Local GPU readiness"><span class="vas-dot"></span><span>GPU</span></span>
+          <span class="vas-pill" data-pill="train" data-state="off" title="Local training daemon"><span class="vas-dot"></span><span>Training</span></span>
+          <span class="vas-pill" data-pill="privacy" data-state="ok" title="Privacy mode"><span class="vas-dot"></span><span>Privacy</span></span>
+          <button type="button" class="vas-cancel" data-ai-cancel hidden>Cancel</button>
         </div>
       </header>
-      <div class="mod-local-ai-status">
-        <span class="mod-local-ai-conn" data-conn>● Checking…</span>
+      <div class="vas-body">
+        <nav class="vas-nav" aria-label="VYTHERA AI navigation">
+          <div class="vythera-ai-tabs vas-nav-tabs" role="tablist"></div>
+          <button type="button" class="vas-nav-toggle" data-nav-toggle title="Collapse navigation ([)">Nav</button>
+        </nav>
+        <div class="vas-resize vas-resize-nav" data-resize="nav" role="separator" aria-orientation="vertical" tabindex="0"></div>
+        <main class="vas-workspace">
+          <div class="vas-workspace-scroll vythera-ai-panel" role="main"></div>
+        </main>
+        <div class="vas-resize vas-resize-insp" data-resize="insp" role="separator" aria-orientation="vertical" tabindex="0"></div>
+        <aside class="vas-inspector" aria-label="Inspector">
+          <div class="vas-insp-head">
+            <span class="vas-insp-title">Inspector</span>
+            <button type="button" class="vas-insp-toggle" data-insp-toggle title="Collapse inspector (])">⟩</button>
+          </div>
+          <div class="vas-insp-body" data-inspector></div>
+        </aside>
+      </div>
+      <footer class="vas-statusbar" role="status">
+        <span class="vas-pill" data-conn data-state="off"><span class="vas-dot"></span><span>Local AI</span></span>
         <span data-chat-svc>${PRIVACY_SAFE_STATUS.ollamaLabel}</span>
         <span data-train-svc>${PRIVACY_SAFE_STATUS.daemonLabel}</span>
-        <span class="mod-local-ai-cloud">Cloud: DISABLED</span>
-        <span data-privacy>PRIVACY MODE: ON</span>
-      </div>
-      <div class="vythera-ai-tabs" role="tablist"></div>
-      <div class="vythera-ai-panel"></div>
-      <p class="mod-project-ai-status" aria-live="polite"></p>
+        <span data-privacy>Privacy On</span>
+        <span data-bottom-dataset>Dataset —</span>
+        <span class="vas-toast" data-toast aria-live="polite"></span>
+      </footer>
+      <p class="mod-project-ai-status" aria-live="polite" hidden></p>
+      <div class="mod-local-ai-status" hidden></div>
+      <header class="mod-ai-header mod-ai-header--sub" hidden></header>
     `;
     this.connEl = this.root.querySelector('[data-conn]') as HTMLElement;
     this.statusEl = this.root.querySelector('.mod-project-ai-status') as HTMLElement;
     this.tabHost = this.root.querySelector('.vythera-ai-tabs') as HTMLElement;
     this.panelHost = this.root.querySelector('.vythera-ai-panel') as HTMLElement;
+    this.inspectorHost = this.root.querySelector('[data-inspector]') as HTMLElement;
+    this.workspaceTitleEl = this.root.querySelector('[data-workspace-title]') as HTMLElement;
+    this.toastEl = this.root.querySelector('[data-toast]') as HTMLElement;
     this.feed = document.createElement('div');
     this.input = document.createElement('textarea');
     this.modelSelect = document.createElement('select');
 
     this.buildTabs();
+    this.bindShellChrome();
     this.renderTab();
     this.root.querySelector('[data-ai-cancel]')!.addEventListener('click', () => this.cancel());
     void this.refresh();
@@ -160,74 +216,194 @@ export class VytheraAIStudio {
       'EVALUATION',
       'MODELS',
       'TOOLS',
+      'JOBS',
       'SETTINGS',
+      'PRIVACY',
     ];
   }
 
   private buildTabs(): void {
-    for (const t of this.allTabs()) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'vythera-ai-tab';
-      b.textContent =
-        t === 'IMAGE' ? 'TEACH VYTHERA' : t === 'TRAINING' ? 'TRAIN / ADAPT' : t;
-      b.addEventListener('click', () => {
-        this.tab = t;
-        this.renderTab();
-      });
-      this.tabHost.appendChild(b);
+    this.tabHost.replaceChildren();
+    const groups: Array<'AI' | 'LEARNING' | 'SYSTEM'> = ['AI', 'LEARNING', 'SYSTEM'];
+    for (const g of groups) {
+      const wrap = document.createElement('div');
+      wrap.className = 'vas-nav-group';
+      const lab = document.createElement('div');
+      lab.className = 'vas-nav-group-label';
+      lab.textContent = g === 'LEARNING' ? 'Learning' : g === 'AI' ? 'AI' : 'System';
+      wrap.appendChild(lab);
+      for (const t of this.allTabs().filter((x) => TAB_META[x].group === g)) {
+        const meta = TAB_META[t];
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'vythera-ai-tab vas-nav-btn';
+        b.dataset.tab = t;
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', 'false');
+        b.title = meta.label;
+        b.innerHTML = `<span class="vas-nav-ico" aria-hidden="true">${meta.icon}</span><span class="vas-nav-label">${meta.label}</span>`;
+        b.addEventListener('click', () => {
+          this.tab = t;
+          this.renderTab();
+        });
+        wrap.appendChild(b);
+      }
+      this.tabHost.appendChild(wrap);
     }
+  }
+
+  private bindShellChrome(): void {
+    this.root.querySelector('[data-nav-toggle]')?.addEventListener('click', () => {
+      this.root.classList.toggle('is-nav-collapsed');
+    });
+    this.root.querySelector('[data-insp-toggle]')?.addEventListener('click', () => {
+      this.root.classList.toggle('is-insp-collapsed');
+    });
+    this.root.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+      if (e.key === '[') this.root.classList.toggle('is-nav-collapsed');
+      if (e.key === ']') this.root.classList.toggle('is-insp-collapsed');
+      if (e.key === 'F' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+        e.preventDefault();
+        this.root.classList.toggle('is-workspace-full');
+      }
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        const i = Number(e.key) - 1;
+        const t = this.allTabs()[i];
+        if (t) {
+          this.tab = t;
+          this.renderTab();
+        }
+      }
+    });
+    this.bindResize('nav', '--vas-nav-w', 48, 280);
+    this.bindResize('insp', '--vas-insp-w', 180, 380);
+  }
+
+  private bindResize(kind: 'nav' | 'insp', cssVar: string, min: number, max: number): void {
+    const handle = this.root.querySelector(`[data-resize="${kind}"]`) as HTMLElement | null;
+    if (!handle) return;
+    let dragging = false;
+    handle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      handle.classList.add('is-dragging');
+      handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const rect = this.root.getBoundingClientRect();
+      let w =
+        kind === 'nav' ? e.clientX - rect.left : rect.right - e.clientX;
+      w = Math.max(min, Math.min(max, w));
+      this.root.style.setProperty(cssVar, `${Math.round(w)}px`);
+    });
+    const end = () => {
+      dragging = false;
+      handle.classList.remove('is-dragging');
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
   }
 
   private renderTab(): void {
     const tabs = this.allTabs();
-    this.tabHost.querySelectorAll('.vythera-ai-tab').forEach((el, i) => {
-      el.classList.toggle('is-active', tabs[i] === this.tab);
+    this.tabHost.querySelectorAll('.vas-nav-btn').forEach((el) => {
+      const btn = el as HTMLElement;
+      const active = btn.dataset.tab === this.tab;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
+    this.workspaceTitleEl.textContent = TAB_META[this.tab].workspace;
     this.panelHost.replaceChildren();
     if (this.tab === 'CHAT') this.renderChat();
     else if (this.tab === 'IMAGE') this.renderImageLearning();
     else if (this.tab === 'MEMORY') this.renderMemory();
     else if (this.tab === 'KNOWLEDGE') this.renderKnowledge();
     else if (this.tab === 'DATASET') this.renderDataset();
-    else if (this.tab === 'TRAINING') this.renderTraining();
+    else if (this.tab === 'TRAINING' || this.tab === 'JOBS') this.renderTraining();
     else if (this.tab === 'EVALUATION') this.renderEval();
     else if (this.tab === 'MODELS') this.renderModels();
     else if (this.tab === 'TOOLS') this.renderTools();
+    else if (this.tab === 'PRIVACY') this.renderPrivacy();
     else this.renderSettings();
+    this.updateInspector();
+    void tabs;
+  }
+
+  private updateInspector(): void {
+    this.inspectorHost.replaceChildren();
+    const block = (k: string, v: string, mono = false) => {
+      const d = document.createElement('div');
+      d.className = 'vas-insp-block';
+      d.innerHTML = `<div class="vas-insp-k">${k}</div><div class="vas-insp-v${mono ? ' mono' : ''}"></div>`;
+      (d.querySelector('.vas-insp-v') as HTMLElement).textContent = v;
+      this.inspectorHost.appendChild(d);
+    };
+    const privacy = loadVytheraAISettings().privacyMode !== false;
+    const dash = vytheraVisualLearning.dashboard();
+    block('Workspace', TAB_META[this.tab].workspace);
+    block('Stage', this.lastStageLabel || '—');
+    block('Vision', vytheraVision.getStatus());
+    block('Active model', sanitizeForDisplay(vytheraVision.activeVisionModel() || '—', { privacyMode: privacy }), true);
+    block('Dataset approved', String(dash.dataset.approved));
+    block('Concepts', String(dash.concepts));
+    block('Privacy', privacy ? 'ON · Local only' : 'OFF');
+    block('Cloud', 'DISABLED');
+    if (this.imageMeta) {
+      block('Image hash', this.imageMeta.hash.slice(0, 16) + '…', true);
+      block('File', this.imageMeta.fileName);
+      if (this.imageMeta.privacyStripped || this.lastPrivacyStripped) {
+        block('Metadata', 'STRIPPED');
+      }
+    }
   }
 
   private renderImageLearning(): void {
     const wrap = document.createElement('div');
-    wrap.className = 'vythera-ai-image';
+    wrap.className = 'vythera-ai-image vas-view';
     const dash = vytheraVisualLearning.dashboard();
+
+    const head = document.createElement('div');
+    head.className = 'vas-view-head';
+    head.innerHTML = `
+      <h2>Image Learning</h2>
+      <p>Teach VYTHERA visual concepts and game-specific knowledge. Saving a reference is not model training.</p>`;
+
     const stage = document.createElement('p');
     stage.className = 'vythera-ai-stage';
     stage.textContent = this.lastStageLabel
-      ? `Stage: ${this.lastStageLabel}`
-      : 'Stages: Reference Memory → Learning Dataset → Train/Adapt → Evaluate → Promote';
+      ? `Stage · ${this.lastStageLabel}`
+      : 'Pipeline · Reference → Dataset → Train/Adapt → Evaluate → Promote';
 
-    const note = document.createElement('p');
-    note.className = 'mod-ai-subtitle';
-    note.textContent =
-      'TEACH VYTHERA · local only · saving a reference is NOT model training';
-
-    const visionStatus = document.createElement('p');
+    const visionStatus = document.createElement('div');
+    visionStatus.className = 'vas-row';
     const vs = vytheraVision.getStatus();
-    const activeV = vytheraVision.activeVisionModel() || '—';
-    visionStatus.textContent =
-      vs === 'READY'
-        ? `VISION MODEL: Installed · ACTIVE: ${activeV}`
-        : vs === 'NO_VISION_MODEL'
-          ? 'VISION MODEL: Missing — LOCAL VISION MODEL NOT INSTALLED'
-          : `VISION MODEL: ${vs}`;
+    const activeV = sanitizeForDisplay(vytheraVision.activeVisionModel() || '—', {
+      privacyMode: true,
+    });
+    const vsBadge = document.createElement('span');
+    vsBadge.className = `vas-badge${vs === 'READY' ? ' vas-badge--ok' : ''}`;
+    vsBadge.textContent =
+      vs === 'READY' ? `Local VLM · ${activeV}` : vs === 'NO_VISION_MODEL' ? 'Local vision model not installed' : `Vision · ${vs}`;
+    visionStatus.appendChild(vsBadge);
+    const privBadge = document.createElement('span');
+    privBadge.className = 'vas-badge vas-badge--priv';
+    privBadge.textContent = 'Private · Local';
+    visionStatus.appendChild(privBadge);
+    if (this.imageMeta?.privacyStripped || this.lastPrivacyStripped) {
+      const strip = document.createElement('span');
+      strip.className = 'vas-badge vas-badge--ok';
+      strip.textContent = 'Privacy metadata stripped';
+      visionStatus.appendChild(strip);
+    }
 
     const stats = document.createElement('p');
-    stats.textContent = `Dataset: ${dash.dataset.approved} approved · ${dash.dataset.training} train · ${dash.dataset.validation} val · concepts ${dash.concepts} · refs ${listImageRefs().length}`;
+    stats.className = 'mod-ai-subtitle';
+    stats.textContent = `Dataset ${dash.dataset.approved} approved · ${dash.dataset.training} train · ${dash.dataset.validation} val · ${dash.concepts} concepts · ${listImageRefs().length} refs`;
 
     const drop = document.createElement('div');
-    drop.className = 'vythera-ai-image-drop';
-    drop.textContent = 'Drop Image Here (PNG / JPG / WEBP)';
+    drop.className = 'vythera-ai-image-drop vas-drop';
+    drop.innerHTML = `<div class="vas-drop-title">Drop image here</div><div class="vas-drop-sub">PNG · JPG · WEBP</div>`;
     drop.addEventListener('dragover', (e) => {
       e.preventDefault();
       drop.classList.add('is-drag');
@@ -242,8 +418,8 @@ export class VytheraAIStudio {
 
     const fileBtn = document.createElement('button');
     fileBtn.type = 'button';
-    fileBtn.className = 'voxel-editor-btn';
-    fileBtn.textContent = 'Choose Local Image';
+    fileBtn.className = 'vas-btn vas-btn--primary';
+    fileBtn.textContent = 'Choose Image';
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
@@ -255,22 +431,52 @@ export class VytheraAIStudio {
     });
     const pasteBtn = document.createElement('button');
     pasteBtn.type = 'button';
-    pasteBtn.className = 'voxel-editor-btn';
+    pasteBtn.className = 'vas-btn';
     pasteBtn.textContent = 'Paste Clipboard Image';
     pasteBtn.addEventListener('click', () => void this.pasteClipboardImage(preview, paletteEl));
 
+    const dropActions = document.createElement('div');
+    dropActions.className = 'vas-row';
+    dropActions.style.justifyContent = 'center';
+    dropActions.style.marginTop = '0.55rem';
+    dropActions.append(fileBtn, pasteBtn, fileInput);
+    drop.appendChild(dropActions);
+
+    const stageWrap = document.createElement('div');
+    stageWrap.className = 'vas-image-stage';
     const preview = document.createElement('img');
     preview.className = 'vythera-ai-image-preview';
     preview.alt = 'Local image preview';
-    if (this.imagePreviewUrl) preview.src = this.imagePreviewUrl;
-    else preview.hidden = true;
+    if (this.imagePreviewUrl) {
+      preview.src = this.imagePreviewUrl;
+      preview.style.transform = `scale(${this.imageZoom})`;
+      drop.hidden = true;
+    } else {
+      preview.hidden = true;
+      stageWrap.hidden = true;
+    }
+    const toolbar = document.createElement('div');
+    toolbar.className = 'vas-image-toolbar';
+    for (const [label, fn] of [
+      ['−', () => { this.imageZoom = Math.max(0.5, this.imageZoom - 0.15); preview.style.transform = `scale(${this.imageZoom})`; }],
+      ['+', () => { this.imageZoom = Math.min(3, this.imageZoom + 0.15); preview.style.transform = `scale(${this.imageZoom})`; }],
+      ['Fit', () => { this.imageZoom = 1; preview.style.transform = 'scale(1)'; }],
+    ] as Array<[string, () => void]>) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'vas-btn vas-btn--ghost';
+      b.textContent = label;
+      b.addEventListener('click', fn);
+      toolbar.appendChild(b);
+    }
+    stageWrap.append(preview, toolbar);
 
     const paletteEl = document.createElement('pre');
     paletteEl.className = 'vythera-ai-json';
     if (this.imageMeta?.palette) paletteEl.textContent = JSON.stringify(this.imageMeta.palette, null, 2);
 
     const modes = document.createElement('div');
-    modes.className = 'mod-project-ai-chips';
+    modes.className = 'mod-project-ai-chips vas-row';
     for (const m of [
       { id: 'UNDERSTAND' as VytheraImageMode, label: 'Understand' },
       { id: 'RECREATE' as VytheraImageMode, label: 'Recreate' },
@@ -280,7 +486,7 @@ export class VytheraAIStudio {
     ]) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'mod-ai-chip';
+      b.className = 'mod-ai-chip vas-chip';
       b.textContent = m.label;
       b.classList.toggle('is-active', this.imageMode === m.id);
       b.addEventListener('click', () => {
@@ -290,12 +496,27 @@ export class VytheraAIStudio {
       modes.appendChild(b);
     }
 
+    const analysisSection = document.createElement('section');
+    analysisSection.className = 'vas-section';
+    const analysisHead = document.createElement('div');
+    analysisHead.className = 'vas-section-head';
+    analysisHead.innerHTML = `<h3>Vision Analysis</h3>`;
+    const analysisBody = document.createElement('div');
+    analysisBody.className = 'vas-section-body';
+    const last = vytheraVision.last();
+    if (last?.analysis) {
+      analysisBody.appendChild(this.buildAnalysisAccordion(last.analysis));
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'vas-empty';
+      empty.innerHTML = `<strong>No analysis yet</strong>Run Analyze after importing an image.`;
+      analysisBody.appendChild(empty);
+    }
     const understand = document.createElement('pre');
     understand.className = 'vythera-ai-json';
-    const last = vytheraVision.last();
-    understand.textContent = last?.analysis
-      ? JSON.stringify(last.analysis, null, 2)
-      : 'AI Understanding will appear here after Analyze.';
+    understand.hidden = true;
+    understand.textContent = last?.analysis ? JSON.stringify(last.analysis, null, 2) : '';
+    analysisSection.append(analysisHead, analysisBody, understand);
 
     const corrections = document.createElement('textarea');
     corrections.className = 'mod-ai-input';
@@ -305,7 +526,7 @@ export class VytheraAIStudio {
 
     const learnBox = document.createElement('div');
     learnBox.className = 'vythera-ai-learn-targets';
-    const targetKeys: (keyof typeof this.learnTargets)[] = [
+    const targetKeys: (keyof typeof DEFAULT_LEARN_TARGETS)[] = [
       'visualStyle',
       'objects',
       'materials',
@@ -337,16 +558,16 @@ export class VytheraAIStudio {
     resultHost.className = 'vythera-ai-image-result';
 
     const actions = document.createElement('div');
-    actions.className = 'mod-ai-compose';
-    const mk = (label: string, fn: () => void) => {
+    actions.className = 'mod-ai-compose vas-row';
+    const mk = (label: string, fn: () => void, primary = false) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'voxel-editor-btn';
+      b.className = primary ? 'vas-btn vas-btn--primary' : 'vas-btn';
       b.textContent = label;
       b.addEventListener('click', fn);
       actions.appendChild(b);
     };
-    mk('Analyze', () => void this.runImageAnalyze('', resultHost, understand));
+    mk('Analyze', () => void this.runImageAnalyze('', resultHost, understand), true);
     mk('Apply Corrections', () => {
       const id = this.imageMeta?.teachId ?? vytheraVision.getActiveTeachExample()?.id;
       if (!id) {
@@ -364,7 +585,7 @@ export class VytheraAIStudio {
         this.renderTab();
       }
     });
-    mk('REJECT', () => {
+    mk('Reject', () => {
       const id = this.imageMeta?.teachId ?? vytheraVision.getActiveTeachExample()?.id;
       if (!id) return;
       const res = vytheraVisualLearning.reject(id, corrections.value || 'user rejected');
@@ -374,7 +595,7 @@ export class VytheraAIStudio {
         this.renderTab();
       }
     });
-    mk('SAVE AS REFERENCE', () => {
+    mk('Save as Reference', () => {
       const id = this.imageMeta?.teachId ?? vytheraVision.getActiveTeachExample()?.id;
       if (!id) return;
       void vytheraVisualLearning.saveAsReference(id).then((res) => {
@@ -383,7 +604,7 @@ export class VytheraAIStudio {
         this.onNotify(res.message);
       });
     });
-    mk('ADD TO DATASET', () => {
+    mk('Add to Dataset', () => {
       const id = this.imageMeta?.teachId ?? vytheraVision.getActiveTeachExample()?.id;
       if (!id) {
         this.onNotify('No teach session');
@@ -400,7 +621,7 @@ export class VytheraAIStudio {
         this.renderTab();
       }
     });
-    mk('TRAIN / ADAPT', () => {
+    mk('Train / Adapt', () => {
       void vytheraVisualLearning
         .requestTrainAdapt({ baseVisionModel: vytheraVision.activeVisionModel() })
         .then((res) => {
@@ -423,61 +644,110 @@ export class VytheraAIStudio {
 
     this.renderLastImageResult(resultHost);
 
-    const h1 = document.createElement('h4');
-    h1.textContent = 'AI Understanding';
-    const h2 = document.createElement('h4');
-    h2.textContent = 'Corrections';
-    const h3 = document.createElement('h4');
-    h3.textContent = 'Learn';
-    const concepts = document.createElement('p');
-    concepts.textContent =
-      'Runtime concepts: ' +
-      listVisualConcepts()
-        .slice(0, 6)
-        .map((c) => c.name)
-        .join(', ');
+    const corrSection = document.createElement('section');
+    corrSection.className = 'vas-section';
+    corrSection.innerHTML = `<div class="vas-section-head"><h3>Corrections</h3></div>`;
+    const corrBody = document.createElement('div');
+    corrBody.className = 'vas-section-body';
+    corrBody.append(corrections, document.createElement('div'));
+    (corrBody.lastChild as HTMLElement).className = 'vas-section-head';
+    (corrBody.lastChild as HTMLElement).innerHTML = '<h3>Learn Targets</h3>';
+    corrBody.appendChild(learnBox);
+    corrSection.appendChild(corrBody);
 
     const multiTaskSection = this.buildMultiTaskTeachSection();
 
     wrap.append(
-      note,
+      head,
       stage,
       visionStatus,
       stats,
       drop,
-      fileBtn,
-      pasteBtn,
-      fileInput,
-      preview,
+      stageWrap,
       modes,
-      h1,
-      understand,
-      h2,
-      corrections,
-      h3,
-      learnBox,
+      analysisSection,
+      corrSection,
       actions,
       multiTaskSection,
       resultHost,
-      concepts,
+      paletteEl,
     );
     this.panelHost.appendChild(wrap);
   }
 
+  private buildAnalysisAccordion(analysis: import('../vision/VytheraImageAnalysis').VytheraImageAnalysis): HTMLElement {
+    const host = document.createElement('div');
+    const confPct = Math.round((analysis.confidence ?? 0) * 100);
+    const confEl = (pct: number) => {
+      const span = document.createElement('span');
+      span.className = 'vas-conf';
+      span.innerHTML = `<span class="vas-conf-bar"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span>${pct}%`;
+      return span;
+    };
+    const add = (title: string, body: string, pct = confPct) => {
+      const det = document.createElement('details');
+      det.className = 'vas-acc';
+      det.open = title === 'Scene' || title === 'Objects';
+      const sum = document.createElement('summary');
+      sum.textContent = title;
+      sum.appendChild(confEl(pct));
+      const b = document.createElement('div');
+      b.className = 'vas-acc-body';
+      b.textContent = body;
+      det.append(sum, b);
+      host.appendChild(det);
+    };
+    add('Scene', analysis.scene?.description || analysis.subject.name || analysis.subject.category);
+    add(
+      'Objects',
+      (analysis.scene?.objects?.map((o) => o.name || o.type).join(', ') || analysis.features.join(', ') || analysis.subject.category),
+    );
+    add('Terrain', analysis.scene?.terrain || '—');
+    add('Materials', analysis.materials.join(', ') || '—');
+    add(
+      'Palette',
+      analysis.palette.colors
+        .slice(0, 6)
+        .map((c) => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`)
+        .join(' · ') || '—',
+    );
+    add('Lighting', analysis.scene?.lighting || '—');
+    add(
+      'Style',
+      [
+        analysis.style.voxelLike ? 'voxel-like' : 'non-voxel',
+        `chunkiness ${analysis.style.chunkiness.toFixed(2)}`,
+        ...(analysis.style.styleNotes ?? []),
+      ].join(' · '),
+    );
+    add(
+      'Voxel Structure',
+      analysis.shape.silhouette ||
+        analysis.components.map((c) => c.name).join(', ') ||
+        '—',
+    );
+    return host;
+  }
+
   private buildMultiTaskTeachSection(): HTMLElement {
-    const section = document.createElement('div');
-    section.className = 'vythera-ai-multitask';
-    const title = document.createElement('h4');
-    title.textContent = 'LEARNING TASKS · one image → many samples';
+    const section = document.createElement('section');
+    section.className = 'vythera-ai-multitask vas-section';
+    const head = document.createElement('div');
+    head.className = 'vas-section-head';
+    head.innerHTML = `<h3>Learning Tasks</h3>`;
+    const body = document.createElement('div');
+    body.className = 'vas-section-body';
+
     const hint = document.createElement('p');
     hint.className = 'mod-ai-subtitle';
     hint.textContent =
-      'IMAGE ANALYZED → GENERATE LEARNING TASKS → CORRECT → APPROVE → ADD TO DATASET (does not train)';
+      'Analyze → Generate learning tasks → Correct → Approve → Add to dataset (does not train)';
 
     const cats = document.createElement('div');
     cats.className = 'vythera-ai-learn-targets';
     const genLabel = document.createElement('p');
-    genLabel.textContent = 'Generate:';
+    genLabel.className = 'vas-task-label';
+    genLabel.textContent = 'Generate categories';
     cats.appendChild(genLabel);
     for (const d of listVisualTaskDefinitions()) {
       const lab = document.createElement('label');
@@ -501,76 +771,79 @@ export class VytheraAIStudio {
     const preview = hash ? vytheraVisualLearningTasks.previewDataset(hash) : null;
     const balance = taskTypeBalance(vytheraVisualDataset.list());
 
-    const summary = document.createElement('pre');
-    summary.className = 'vythera-ai-json';
-    summary.textContent = report
-      ? [
-          `Generated: ${report.generated}`,
-          `Answered: ${report.answered}`,
-          `Corrected: ${report.corrected}`,
-          `Valid: ${report.valid}`,
-          `Approved: ${report.approved}`,
-          `Rejected: ${report.rejected}`,
-          `Needs correction: ${report.needsCorrection}`,
-          preview
-            ? `VISION DATASET PREVIEW · Source: ${preview.sourceImageHash.slice(0, 12)}… · Approved tasks: ${preview.trainingRecordsToAdd} · Next: ${preview.datasetVersionLabel}`
-            : '',
-          preview && Object.keys(preview.categories).length
-            ? Object.entries(preview.categories)
-                .map(([k, n]) => `  ${k}: ${n}`)
-                .join('\n')
-            : '',
-          balance.warning ? `Balance: ${balance.warning}` : '',
-          Object.keys(balance.percents).length
-            ? 'Dataset balance:\n' +
-              Object.entries(balance.percents)
-                .map(([k, p]) => `  ${k}  ${p}%`)
-                .join('\n')
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n')
-      : 'Analyze an image, then generate learning tasks.';
+    const stats = document.createElement('div');
+    stats.className = 'vas-task-stats';
+    if (report) {
+      stats.innerHTML = `
+        <span><strong>${report.generated}</strong> generated</span>
+        <span><strong>${report.approved}</strong> approved</span>
+        <span><strong>${report.needsCorrection}</strong> need review</span>
+        <span><strong>${report.rejected}</strong> rejected</span>`;
+    } else {
+      stats.innerHTML = `<span>No tasks yet</span>`;
+    }
+
+    if (preview && Object.keys(balance.percents).length) {
+      const bal = document.createElement('div');
+      bal.className = 'vas-balance';
+      for (const [k, p] of Object.entries(balance.percents).slice(0, 10)) {
+        const row = document.createElement('div');
+        row.className = 'vas-balance-row';
+        row.innerHTML = `<span>${k}</span><span class="vas-balance-track"><i style="width:${p}%"></i></span><span>${p}%</span>`;
+        bal.appendChild(row);
+      }
+      if (balance.warning) {
+        const w = document.createElement('p');
+        w.className = 'mod-ai-subtitle';
+        w.textContent = balance.warning;
+        bal.appendChild(w);
+      }
+      body.appendChild(bal);
+    }
 
     const actions = document.createElement('div');
-    actions.className = 'mod-ai-compose';
-    const mk = (label: string, fn: () => void) => {
+    actions.className = 'mod-ai-compose vas-row';
+    const mk = (label: string, fn: () => void, primary = false) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'voxel-editor-btn';
+      b.className = primary ? 'vas-btn vas-btn--primary' : 'vas-btn';
       b.textContent = label;
       b.addEventListener('click', fn);
       actions.appendChild(b);
     };
 
-    mk('GENERATE LEARNING TASKS', () => {
-      const id = this.imageMeta?.teachId ?? vytheraVision.getActiveTeachExample()?.id;
-      if (!id) {
-        this.onNotify('Load and analyze an image first');
-        return;
-      }
-      if (vytheraVision.getStatus() === 'NO_VISION_MODEL') {
-        this.onNotify('LOCAL VISION MODEL NOT INSTALLED');
-        return;
-      }
-      const enabled = listVisualTaskDefinitions()
-        .map((d) => d.type)
-        .filter((t) => this.taskCategoryEnabled[t] !== false);
-      const r = vytheraVisualLearning.generateLearningTasks(id, { enabledTypes: enabled });
-      this.lastStageLabel = r.stageLabel;
-      this.onNotify(r.message);
-      this.teachMoreFilter = null;
-      this.renderTab();
-    });
+    mk(
+      'Generate Learning Tasks',
+      () => {
+        const id = this.imageMeta?.teachId ?? vytheraVision.getActiveTeachExample()?.id;
+        if (!id) {
+          this.onNotify('Load and analyze an image first');
+          return;
+        }
+        if (vytheraVision.getStatus() === 'NO_VISION_MODEL') {
+          this.onNotify('LOCAL VISION MODEL NOT INSTALLED');
+          return;
+        }
+        const enabled = listVisualTaskDefinitions()
+          .map((d) => d.type)
+          .filter((t) => this.taskCategoryEnabled[t] !== false);
+        const r = vytheraVisualLearning.generateLearningTasks(id, { enabledTypes: enabled });
+        this.lastStageLabel = r.stageLabel;
+        this.onNotify(r.message);
+        this.teachMoreFilter = null;
+        this.renderTab();
+      },
+      true,
+    );
 
-    mk('APPROVE ALL VALID', () => {
+    mk('Approve All Valid', () => {
       if (!hash) return;
       const r = vytheraVisualLearningTasks.approveAllValid(hash);
       this.onNotify(`Approved ${r.approved.length} · skipped ${r.skipped.length}`);
       this.renderTab();
     });
 
-    mk('ADD APPROVED TASKS TO DATASET', () => {
+    mk('Add Approved Tasks to Dataset', () => {
       const id = this.imageMeta?.teachId ?? vytheraVision.getActiveTeachExample()?.id;
       if (!id) {
         this.onNotify('No teach session');
@@ -584,13 +857,8 @@ export class VytheraAIStudio {
       }
     });
 
-    mk('TEACH MORE', () => {
-      const byLearn: Record<string, number> = {};
-      for (const [k, p] of Object.entries(balance.percents)) {
-        byLearn[k] = p / 100;
-      }
-      // Prefer eval-style weak categories: low share counts as needs more
-      const report = learningReportFromEval(
+    mk('Teach More', () => {
+      const reportLearn = learningReportFromEval(
         Object.fromEntries(
           listVisualTaskDefinitions().map((d) => [
             d.type,
@@ -598,8 +866,8 @@ export class VytheraAIStudio {
           ]),
         ),
       );
-      const weak = report.needsMore.length
-        ? (report.needsMore as VytheraVisualTaskType[])
+      const weak = reportLearn.needsMore.length
+        ? (reportLearn.needsMore as VytheraVisualTaskType[])
         : (['VOXEL_STRUCTURE', 'VYTHERA_STYLE', 'GAME_ASSET_PLAN'] as VytheraVisualTaskType[]);
       this.teachMoreFilter = weak.filter((t) => listVisualTaskDefinitions().some((d) => d.type === t));
       for (const d of listVisualTaskDefinitions()) {
@@ -612,43 +880,66 @@ export class VytheraAIStudio {
     });
 
     const list = document.createElement('div');
-    list.className = 'vythera-ai-task-list';
+    list.className = 'vythera-ai-task-list vas-task-list';
     for (const task of tasks.slice(0, 24)) {
       list.appendChild(this.buildTaskReviewCard(task));
     }
+    if (!tasks.length) {
+      const empty = document.createElement('div');
+      empty.className = 'vas-empty';
+      empty.innerHTML = `<strong>No learning tasks</strong>Generate tasks after analyzing an image.`;
+      list.appendChild(empty);
+    }
 
-    section.append(title, hint, cats, summary, actions, list);
+    body.append(hint, cats, stats, actions, list);
+    section.append(head, body);
     return section;
   }
 
   private buildTaskReviewCard(task: VytheraVisualLearningTask): HTMLElement {
     const card = document.createElement('div');
-    card.className = 'vythera-ai-task-card';
-    const head = document.createElement('p');
-    head.textContent = `TASK: ${task.title} · ${task.status} · conf ${(task.confidence ?? 0).toFixed(2)}`;
+    card.className = 'vythera-ai-task-card vas-task-card';
+    if (task.status === 'APPROVED') card.classList.add('is-approved');
+    if (task.status === 'REJECTED') card.classList.add('is-rejected');
+    if (task.correctedAnswer != null) card.classList.add('is-changed');
+
+    const head = document.createElement('div');
+    head.className = 'vas-task-type';
+    head.textContent = `${task.title} · ${task.status}`;
+    const conf = document.createElement('div');
+    conf.className = 'vas-conf';
+    const pct = Math.round((task.confidence ?? 0) * 100);
+    conf.innerHTML = `<span class="vas-conf-bar"><i style="width:${pct}%"></i></span>confidence ${pct}%`;
+
+    const aiLab = document.createElement('div');
+    aiLab.className = 'vas-task-label';
+    aiLab.textContent = 'AI Answer';
     const ai = document.createElement('pre');
     ai.className = 'vythera-ai-json';
-    ai.textContent =
-      'AI ANSWER:\n' +
-      sanitizeForDisplay(JSON.stringify(task.aiAnswer ?? null, null, 2).slice(0, 1200), {
-        privacyMode: true,
-      });
+    ai.textContent = sanitizeForDisplay(JSON.stringify(task.aiAnswer ?? null, null, 2).slice(0, 1200), {
+      privacyMode: true,
+    });
+
+    const corrLab = document.createElement('div');
+    corrLab.className = 'vas-task-label';
+    corrLab.textContent = task.correctedAnswer != null ? 'Corrected Answer · Changed' : 'Correct Answer';
     const edit = document.createElement('textarea');
     edit.className = 'mod-ai-input';
     edit.rows = 5;
     edit.placeholder = 'CORRECT ANSWER (JSON)';
     edit.value = JSON.stringify(effectiveTaskAnswer(task) ?? {}, null, 2);
+
     const row = document.createElement('div');
-    row.className = 'mod-ai-compose';
-    const mk = (label: string, fn: () => void) => {
+    row.className = 'mod-ai-compose vas-row';
+    const mk = (label: string, fn: () => void, cls = 'vas-btn') => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'voxel-editor-btn';
+      b.className = cls;
       b.textContent = label;
       b.addEventListener('click', fn);
       row.appendChild(b);
     };
-    mk('SAVE CORRECTION', () => {
+    mk('Save Correction', () => {
       try {
         const parsed = JSON.parse(edit.value) as unknown;
         const r = vytheraVisualLearningTasks.saveCorrection(task.id, parsed);
@@ -658,17 +949,17 @@ export class VytheraAIStudio {
         this.onNotify('Correction must be valid JSON');
       }
     });
-    mk('APPROVE', () => {
+    mk('Approve', () => {
       const r = vytheraVisualLearningTasks.approve(task.id);
       this.onNotify(r.ok ? 'Approved' : r.error);
       this.renderTab();
-    });
-    mk('REJECT', () => {
+    }, 'vas-btn vas-btn--ok');
+    mk('Reject', () => {
       const r = vytheraVisualLearningTasks.reject(task.id);
       this.onNotify(r.ok ? 'Rejected' : r.error);
       this.renderTab();
-    });
-    card.append(head, ai, document.createTextNode('CORRECT ANSWER:'), edit, row);
+    }, 'vas-btn vas-btn--danger');
+    card.append(head, conf, aiLab, ai, corrLab, edit, row);
     return card;
   }
 
@@ -732,13 +1023,16 @@ export class VytheraAIStudio {
         fileName: loaded.fileName,
         palette: loaded.palette,
         teachId: loaded.teachExampleId,
+        privacyStripped: !!loaded.privacyMetadataStripped,
       };
+      this.lastPrivacyStripped = !!loaded.privacyMetadataStripped;
       paletteEl.textContent = JSON.stringify(loaded.palette, null, 2);
       this.lastStageLabel = LEARNING_STAGE_LABELS.REFERENCE_SAVED;
       this.onNotify(
         `IMPORTED · hash ${loaded.hash.slice(0, 8)}… · not training data yet` +
           (loaded.privacyMetadataStripped ? ' · PRIVACY METADATA: STRIPPED' : ''),
       );
+      this.renderTab();
     } catch (e) {
       this.onNotify(e instanceof Error ? e.message : 'Image load failed');
     }
@@ -821,7 +1115,10 @@ export class VytheraAIStudio {
 
   private renderChat(): void {
     const wrap = document.createElement('div');
-    wrap.className = 'vythera-ai-chat';
+    wrap.className = 'vythera-ai-chat vas-view';
+    const head = document.createElement('div');
+    head.className = 'vas-view-head';
+    head.innerHTML = `<h2>AI Chat</h2><p>Local models and VYTHERA tools only — cloud disabled.</p>`;
     this.feed = document.createElement('div');
     this.feed.className = 'mod-project-ai-feed';
     this.feed.appendChild(msgEl('assistant', 'VYTHERA AI is ready. I use local models + VYTHERA tools only — no cloud.'));
@@ -830,10 +1127,10 @@ export class VytheraAIStudio {
     this.input.rows = 3;
     this.input.placeholder = 'Create a voxel dragon… Make wings larger… Glow when clicked…';
     const row = document.createElement('div');
-    row.className = 'mod-ai-compose';
+    row.className = 'vas-chat-compose';
     const send = document.createElement('button');
     send.type = 'button';
-    send.className = 'voxel-editor-btn mod-ai-add';
+    send.className = 'vas-btn vas-btn--primary';
     send.textContent = 'Send';
     send.addEventListener('click', () => void this.send());
     this.input.addEventListener('keydown', (e) => {
@@ -844,7 +1141,8 @@ export class VytheraAIStudio {
     });
     row.append(this.input, send);
     const chips = document.createElement('div');
-    chips.className = 'mod-project-ai-chips';
+    chips.className = 'mod-project-ai-chips vas-row';
+    chips.style.marginTop = '0.45rem';
     for (const c of [
       'Create a voxel dragon',
       'Make the wings larger',
@@ -854,7 +1152,7 @@ export class VytheraAIStudio {
     ]) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'mod-ai-chip';
+      b.className = 'mod-ai-chip vas-chip';
       b.textContent = c;
       b.addEventListener('click', () => {
         this.input.value = c;
@@ -862,7 +1160,7 @@ export class VytheraAIStudio {
       });
       chips.appendChild(b);
     }
-    wrap.append(this.feed, row, chips);
+    wrap.append(head, this.feed, row, chips);
     this.panelHost.appendChild(wrap);
   }
 
@@ -1431,12 +1729,83 @@ export class VytheraAIStudio {
 
   private async refresh(): Promise<void> {
     const state = await vytheraAI.refresh();
-    this.connEl.textContent = STATUS[state] ?? state;
+    const privacy = loadVytheraAISettings().privacyMode !== false;
+    this.connEl.dataset.state = state === 'CONNECTED' ? 'ok' : state === 'BUSY' ? 'warn' : 'off';
+    const connLabel = this.connEl.querySelector('span:last-child');
+    if (connLabel) connLabel.textContent = STATUS[state]?.replace(/^●\s*/, '') ?? state;
     this.connEl.classList.toggle('is-offline', state === 'OFFLINE' || state === 'NO_MODEL');
-    const vs = vytheraVision.getStatus();
-    if (vs === 'NO_VISION_MODEL' && this.tab === 'IMAGE') {
-      /* status already shown in IMAGE panel */
+
+    const setPill = (key: string, st: 'ok' | 'warn' | 'off' | 'err') => {
+      const el = this.root.querySelector(`[data-pill="${key}"]`) as HTMLElement | null;
+      if (el) el.dataset.state = st;
+    };
+    setPill('chat', state === 'CONNECTED' ? 'ok' : state === 'BUSY' ? 'warn' : 'off');
+    setPill('privacy', privacy ? 'ok' : 'warn');
+
+    const privEl = this.root.querySelector('[data-privacy]');
+    if (privEl) privEl.textContent = privacy ? 'Privacy On' : 'Privacy Off';
+
+    const dash = vytheraVisualLearning.dashboard();
+    const dsEl = this.root.querySelector('[data-bottom-dataset]');
+    if (dsEl) {
+      dsEl.textContent = `Dataset ${dash.dataset.approved} approved · v${dash.dataset.versions}`;
     }
+
+    void probeTrainingCapability().then((cap) => {
+      const online = !!cap.local?.daemonOnline;
+      const gpu = !!(cap.local?.gpu?.detected || cap.local?.gpu?.available);
+      setPill('train', online ? (cap.available ? 'ok' : 'warn') : 'off');
+      setPill('gpu', gpu ? 'ok' : 'off');
+      const trainEl = this.root.querySelector('[data-train-svc]');
+      if (trainEl) {
+        trainEl.textContent = online
+          ? `${PRIVACY_SAFE_STATUS.daemonLabel}: Ready`
+          : `${PRIVACY_SAFE_STATUS.daemonLabel}: Idle`;
+      }
+      const chatEl = this.root.querySelector('[data-chat-svc]');
+      if (chatEl) {
+        chatEl.textContent =
+          state === 'CONNECTED'
+            ? `${PRIVACY_SAFE_STATUS.ollamaLabel}: Online`
+            : `${PRIVACY_SAFE_STATUS.ollamaLabel}: Offline`;
+      }
+    });
+  }
+
+  private renderPrivacy(): void {
+    const wrap = document.createElement('div');
+    wrap.className = 'vas-view';
+    wrap.innerHTML = `
+      <div class="vas-view-head">
+        <h2>Privacy</h2>
+        <p>Local-only controls. No IP addresses, hostnames, or absolute paths are shown here.</p>
+      </div>`;
+    const grid = document.createElement('div');
+    grid.className = 'vas-privacy-grid';
+    const privacy = loadVytheraAISettings().privacyMode !== false;
+    const cards: Array<[string, string]> = [
+      ['Privacy Mode', privacy ? 'ON' : 'OFF'],
+      ['Local Only', '✓'],
+      ['Cloud Training', 'OFF'],
+      ['Telemetry', 'OFF'],
+      ['Image Metadata', 'STRIPPED ON INGEST'],
+      ['Network Exposure', 'LOOPBACK ONLY'],
+      ['Chat Service', PRIVACY_SAFE_STATUS.ollamaLabel],
+      ['Training Daemon', PRIVACY_SAFE_STATUS.daemonLabel],
+    ];
+    for (const [k, v] of cards) {
+      const c = document.createElement('div');
+      c.className = 'vas-privacy-card';
+      c.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div>`;
+      grid.appendChild(c);
+    }
+    const note = document.createElement('p');
+    note.className = 'mod-ai-subtitle';
+    note.style.marginTop = '0.75rem';
+    note.textContent =
+      'Persisted logs redact paths and secrets. Process internals may still use real local paths.';
+    wrap.append(grid, note);
+    this.panelHost.appendChild(wrap);
   }
 
   private cancel(): void {

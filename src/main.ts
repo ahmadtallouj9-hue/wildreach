@@ -1,6 +1,7 @@
 import './style.css';
 import './ui/vythera-ui.css';
 import './ui/modelEditor.css';
+import './vythera_ai/ui/vythera-ai-studio.css';
 import { Game } from './game/Game';
 import { MainMenu } from './ui/MainMenu';
 import { isTouchDevice } from './util/isTouchDevice';
