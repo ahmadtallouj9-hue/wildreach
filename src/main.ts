@@ -1,7 +1,6 @@
 import './style.css';
-import './ui/tokens.css';
-import './ui/vythera-ui.css';
-import './ui/game-ui.css';
+import './ui/theme/tokens.css';
+import './ui/theme/screens.css';
 import './ui/modelEditor.css';
 import './vythera_ai/ui/vythera-ai-studio.css';
 import { Game } from './game/Game';

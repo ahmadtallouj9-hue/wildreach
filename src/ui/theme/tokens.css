@@ -1,0 +1,114 @@
+/**
+ * VYTHERA UI — design tokens (new system)
+ * Dark · mysterious · voxel-fantasy · restrained gold / moss / teal
+ */
+
+:root {
+  --vy-void: #030507;
+  --vy-bg: #070a0e;
+  --vy-surface: #0c1016;
+  --vy-surface-2: #121820;
+  --vy-surface-3: #1a222c;
+  --vy-ink: #e8ebe4;
+  --vy-ink-dim: #a8b0a6;
+  --vy-muted: #6e7a72;
+  --vy-faint: #3d4650;
+
+  --vy-line: rgba(210, 220, 200, 0.1);
+  --vy-line-strong: rgba(220, 228, 210, 0.22);
+  --vy-gold: #c9a227;
+  --vy-gold-dim: rgba(201, 162, 39, 0.14);
+  --vy-gold-glow: rgba(201, 162, 39, 0.32);
+  --vy-moss: #5f9e78;
+  --vy-moss-dim: rgba(95, 158, 120, 0.16);
+  --vy-teal: #4eb8a8;
+  --vy-teal-dim: rgba(78, 184, 168, 0.14);
+  --vy-ok: #6bb56f;
+  --vy-warn: #c9923a;
+  --vy-err: #c45d5d;
+  --vy-info: #6a90b0;
+
+  --vy-font-brand: 'Cinzel Decorative', Cinzel, Georgia, serif;
+  --vy-font-display: 'Cinzel', Georgia, serif;
+  --vy-font-ui: 'Outfit', system-ui, sans-serif;
+  --vy-font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  --vy-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --vy-fast: 140ms;
+  --vy-med: 220ms;
+  --vy-slow: 360ms;
+
+  --vy-space-1: 4px;
+  --vy-space-2: 8px;
+  --vy-space-3: 12px;
+  --vy-space-4: 16px;
+  --vy-space-5: 24px;
+  --vy-space-6: 32px;
+  --vy-radius: 3px;
+  --vy-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --vy-safe-t: max(12px, env(safe-area-inset-top));
+  --vy-safe-b: max(12px, env(safe-area-inset-bottom));
+  --vy-safe-l: max(12px, env(safe-area-inset-left));
+  --vy-safe-r: max(12px, env(safe-area-inset-right));
+
+  /* legacy aliases so residual selectors don't break mid-migration */
+  --bg: var(--vy-bg);
+  --ink: var(--vy-ink);
+  --muted: var(--vy-muted);
+  --accent: var(--vy-gold);
+  --font-body: var(--vy-font-ui);
+  --font-display: var(--vy-font-display);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --vy-fast: 1ms;
+    --vy-med: 1ms;
+    --vy-slow: 1ms;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--vy-void);
+  color: var(--vy-ink);
+  font-family: var(--vy-font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+:focus-visible {
+  outline: 1px solid var(--vy-gold);
+  outline-offset: 2px;
+}
+
+.game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.game-canvas--title-covered {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.title-over-session .game-canvas {
+  visibility: hidden;
+}

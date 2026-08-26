@@ -2,14 +2,15 @@ import { BIOMES, type BiomeId } from '../world/Biomes';
 import type { DiscoverySystem } from '../discovery/DiscoverySystem';
 import type { Landmark } from '../world/LandmarkGen';
 import { CHUNK_SIZE } from '../world/blocks';
-import { PLACEABLE, blockCssColor } from '../player/BlockInteraction';
-import { BLOCK_KINDS, BLOCK_NAMES } from './InventoryUi';
+import { BLOCK_KINDS, BLOCK_NAMES, blockCssColor } from './InventoryUi';
 import type { MapPlayerMarker } from '../net/RemotePlayers';
 import type { NetLinkStatus } from '../net/NetClient';
 
 export class Hud {
   readonly root: HTMLElement;
   private biomeEl: HTMLElement;
+  private biomeLabel: HTMLElement;
+  private biomeDot: HTMLElement;
   private compassNeedle: HTMLElement;
   private landmarkPin: HTMLElement;
   private toastEl: HTMLElement;
@@ -19,8 +20,7 @@ export class Hud {
   private mapCtx: CanvasRenderingContext2D;
   private distanceEl: HTMLElement;
   private seedEl: HTMLElement;
-  private paletteEl: HTMLElement;
-  private paletteNameEl: HTMLElement;
+  private paletteWrap: HTMLElement;
   private coordsEl: HTMLElement;
   private coordsChunkEl: HTMLElement;
   private journalOpen = false;
@@ -41,6 +41,9 @@ export class Hud {
   private lookNameEl: HTMLElement;
   private lookKindEl: HTMLElement;
   private lookSwatchEl: HTMLElement;
+  private profileChip: HTMLElement;
+  private profileNameEl: HTMLElement;
+  private profileDot: HTMLElement;
   private showFps = false;
   private fpsFrames = 0;
   private fpsTimer = 0;
@@ -49,109 +52,107 @@ export class Hud {
   constructor(private discovery: DiscoverySystem, seed: string) {
     this.root = document.createElement('div');
     this.root.id = 'hud';
+    this.root.className = 'vy-hud';
     this.root.innerHTML = `
-      <div class="hud-frame">
-      <div class="brand">
-        <span class="brand-title">VYTHERA</span>
-        <span class="profile-chip" hidden><span class="profile-dot"></span><span class="profile-name"></span></span>
+      <div class="vy-hud__brand">
+        <span class="vy-hud__brand-title">VYTHERA</span>
+        <span class="vy-chip vy-hud__profile" hidden>
+          <span class="vy-dot vy-hud__profile-dot"></span>
+          <span class="vy-hud__profile-name"></span>
+        </span>
       </div>
-      <div class="hud-day-chip" data-day-chip aria-label="World time">Exploring</div>
-      <div class="compass" aria-hidden="true">
-        <div class="compass-ring">
-          <span class="tick n">N</span>
-          <span class="tick e">E</span>
-          <span class="tick s">S</span>
-          <span class="tick w">W</span>
-          <div class="needle"></div>
-          <div class="landmark-pin" hidden></div>
+      <div class="vy-chip vy-hud__day" data-day-chip aria-label="World time">Exploring</div>
+      <div class="vy-hud__compass" aria-hidden="true">
+        <span class="vy-hud__tick vy-hud__tick--n">N</span>
+        <span class="vy-hud__tick vy-hud__tick--e">E</span>
+        <span class="vy-hud__tick vy-hud__tick--s">S</span>
+        <span class="vy-hud__tick vy-hud__tick--w">W</span>
+        <div class="vy-hud__needle"></div>
+        <div class="vy-hud__pin" hidden></div>
+      </div>
+      <div class="vy-chip vy-hud__biome">
+        <span class="vy-dot vy-hud__biome-dot"></span>
+        <span class="vy-hud__biome-label">…</span>
+      </div>
+      <div class="vy-chip vy-hud__mp" hidden>
+        <span class="vy-dot vy-hud__mp-dot"></span>
+        <span class="vy-hud__mp-label">Solo</span>
+      </div>
+      <div class="vy-hud__coords" aria-label="Coordinates">
+        <span class="vy-hud__xyz">XYZ 0 0 0</span>
+        <span class="vy-hud__chunk">Chunk 0 0</span>
+      </div>
+      <div class="vy-hud__look" hidden aria-live="polite">
+        <span class="vy-hud__look-swatch" aria-hidden="true"></span>
+        <div class="vy-hud__look-text">
+          <span class="vy-hud__look-kind"></span>
+          <span class="vy-hud__look-name"></span>
         </div>
       </div>
-      <div class="biome-chip"><span class="dot"></span><span class="label">…</span></div>
-      <div class="mp-chip" hidden><span class="mp-dot"></span><span class="mp-label">Solo</span></div>
-      <div class="coords" aria-label="Coordinates">
-        <span class="coords-xyz">XYZ 0 0 0</span>
-        <span class="coords-chunk">Chunk 0 0</span>
-      </div>
-      <div class="look-viewer" hidden aria-live="polite">
-        <span class="look-swatch" aria-hidden="true"></span>
-        <div class="look-text">
-          <span class="look-kind"></span>
-          <span class="look-name"></span>
-        </div>
-      </div>
-      <div class="reticle"></div>
-      <div class="toast-stack"></div>
-      <div class="palette-wrap">
-        <div class="palette-name" aria-live="polite"></div>
-        <div class="block-palette" role="listbox" aria-label="Placeable blocks"></div>
-      </div>
-      <aside class="journal" hidden>
+      <div class="vy-hud__reticle"></div>
+      <div class="vy-hud__toasts"></div>
+      <div class="vy-hud__palette" hidden aria-hidden="true"></div>
+      <aside class="vy-side vy-hud__journal" hidden>
         <header>
           <h2>DISCOVERY</h2>
-          <button type="button" class="close-journal" aria-label="Close">✕</button>
+          <button type="button" class="vy-btn vy-btn--ghost vy-hud__close-journal" aria-label="Close">✕</button>
         </header>
-        <p class="journal-meta"><span class="distance">0</span> strides · seed <code class="seed"></code></p>
-        <ul class="journal-list"></ul>
-        <p class="hint">LMB break · RMB / F place · 1–9 select · J discovery · M map</p>
+        <p class="vy-hud__journal-meta"><span class="vy-hud__distance">0</span> strides · seed <code class="vy-hud__seed"></code></p>
+        <ul class="vy-hud__journal-list"></ul>
+        <p class="vy-hud__hint">LMB break · RMB / F place · 1–9 select · J discovery · M map</p>
       </aside>
-      <aside class="map-panel" hidden>
+      <aside class="vy-side vy-hud__map" hidden>
         <header>
           <h2>WORLD MAP</h2>
-          <button type="button" class="close-map" aria-label="Close">✕</button>
+          <button type="button" class="vy-btn vy-btn--ghost vy-hud__close-map" aria-label="Close">✕</button>
         </header>
-        <p class="map-meta"><span class="map-world-name">World</span> · <span class="map-player-count">1 here</span></p>
-        <canvas class="sketch-map" width="360" height="360"></canvas>
-        <ul class="map-legend" aria-hidden="true">
-          <li><span class="map-legend-you"></span> You</li>
-          <li><span class="map-legend-other"></span> Players</li>
-          <li><span class="map-legend-site"></span> Sites</li>
+        <p class="vy-hud__map-meta"><span class="vy-hud__map-world">World</span> · <span class="vy-hud__map-count">1 here</span></p>
+        <canvas class="vy-hud__map-canvas" width="360" height="360"></canvas>
+        <ul class="vy-hud__map-legend" aria-hidden="true">
+          <li><span class="vy-hud__legend-you"></span> You</li>
+          <li><span class="vy-hud__legend-other"></span> Players</li>
+          <li><span class="vy-hud__legend-site"></span> Sites</li>
         </ul>
-        <ul class="map-roster"></ul>
+        <ul class="vy-hud__map-roster"></ul>
       </aside>
-      <div class="underwater-overlay" aria-hidden="true">
-        <span class="uw-bubble"></span>
-        <span class="uw-bubble"></span>
-        <span class="uw-bubble"></span>
-        <span class="uw-bubble"></span>
-        <span class="uw-bubble"></span>
-        <span class="uw-bubble"></span>
-      </div>
-      <div class="fps-chip" hidden>0 FPS</div>
-      </div>
+      <div class="vy-uw" aria-hidden="true"></div>
+      <div class="vy-hud__fps" hidden>0 FPS</div>
     `;
 
-    this.biomeEl = this.root.querySelector('.biome-chip')!;
-    this.compassNeedle = this.root.querySelector('.needle')!;
-    this.landmarkPin = this.root.querySelector('.landmark-pin')!;
-    this.toastEl = this.root.querySelector('.toast-stack')!;
-    this.journalPanel = this.root.querySelector('.journal')!;
-    this.journalList = this.root.querySelector('.journal-list')!;
-    this.mapPanel = this.root.querySelector('.map-panel')!;
-    this.mapCanvas = this.root.querySelector('.sketch-map')!;
+    this.biomeEl = this.root.querySelector('.vy-hud__biome')!;
+    this.biomeLabel = this.root.querySelector('.vy-hud__biome-label')!;
+    this.biomeDot = this.root.querySelector('.vy-hud__biome-dot')!;
+    this.compassNeedle = this.root.querySelector('.vy-hud__needle')!;
+    this.landmarkPin = this.root.querySelector('.vy-hud__pin')!;
+    this.toastEl = this.root.querySelector('.vy-hud__toasts')!;
+    this.journalPanel = this.root.querySelector('.vy-hud__journal')!;
+    this.journalList = this.root.querySelector('.vy-hud__journal-list')!;
+    this.mapPanel = this.root.querySelector('.vy-hud__map')!;
+    this.mapCanvas = this.root.querySelector('.vy-hud__map-canvas')!;
     this.mapCtx = this.mapCanvas.getContext('2d')!;
-    this.distanceEl = this.root.querySelector('.distance')!;
-    this.seedEl = this.root.querySelector('.seed')!;
-    this.underwaterOverlay = this.root.querySelector('.underwater-overlay')!;
-    this.mpChip = this.root.querySelector('.mp-chip')!;
-    this.mpLabel = this.root.querySelector('.mp-label')!;
-    this.mapRosterEl = this.root.querySelector('.map-roster')!;
-    this.mapMetaCountEl = this.root.querySelector('.map-player-count')!;
-    this.mapWorldNameEl = this.root.querySelector('.map-world-name')!;
-    this.paletteEl = this.root.querySelector('.block-palette')!;
-    this.paletteNameEl = this.root.querySelector('.palette-name')!;
-    this.coordsEl = this.root.querySelector('.coords-xyz')!;
-    this.coordsChunkEl = this.root.querySelector('.coords-chunk')!;
-    this.fpsEl = this.root.querySelector('.fps-chip')!;
-    this.lookViewerEl = this.root.querySelector('.look-viewer')!;
-    this.lookNameEl = this.root.querySelector('.look-name')!;
-    this.lookKindEl = this.root.querySelector('.look-kind')!;
-    this.lookSwatchEl = this.root.querySelector('.look-swatch')!;
+    this.distanceEl = this.root.querySelector('.vy-hud__distance')!;
+    this.seedEl = this.root.querySelector('.vy-hud__seed')!;
+    this.underwaterOverlay = this.root.querySelector('.vy-uw')!;
+    this.mpChip = this.root.querySelector('.vy-hud__mp')!;
+    this.mpLabel = this.root.querySelector('.vy-hud__mp-label')!;
+    this.mapRosterEl = this.root.querySelector('.vy-hud__map-roster')!;
+    this.mapMetaCountEl = this.root.querySelector('.vy-hud__map-count')!;
+    this.mapWorldNameEl = this.root.querySelector('.vy-hud__map-world')!;
+    this.paletteWrap = this.root.querySelector('.vy-hud__palette')!;
+    this.coordsEl = this.root.querySelector('.vy-hud__xyz')!;
+    this.coordsChunkEl = this.root.querySelector('.vy-hud__chunk')!;
+    this.fpsEl = this.root.querySelector('.vy-hud__fps')!;
+    this.lookViewerEl = this.root.querySelector('.vy-hud__look')!;
+    this.lookNameEl = this.root.querySelector('.vy-hud__look-name')!;
+    this.lookKindEl = this.root.querySelector('.vy-hud__look-kind')!;
+    this.lookSwatchEl = this.root.querySelector('.vy-hud__look-swatch')!;
+    this.profileChip = this.root.querySelector('.vy-hud__profile')!;
+    this.profileNameEl = this.root.querySelector('.vy-hud__profile-name')!;
+    this.profileDot = this.root.querySelector('.vy-hud__profile-dot')!;
     this.seedEl.textContent = seed;
 
-    this.buildPalette();
-
-    this.root.querySelector('.close-journal')!.addEventListener('click', () => this.setJournal(false));
-    this.root.querySelector('.close-map')!.addEventListener('click', () => this.setMap(false));
+    this.root.querySelector('.vy-hud__close-journal')!.addEventListener('click', () => this.setJournal(false));
+    this.root.querySelector('.vy-hud__close-map')!.addEventListener('click', () => this.setMap(false));
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyJ') this.setJournal(!this.journalOpen);
@@ -163,28 +164,6 @@ export class Hud {
     });
 
     this.discovery.onDiscover(() => this.refreshJournal());
-    this.setPaletteSelection(0);
-  }
-
-  private buildPalette(): void {
-    this.paletteEl.innerHTML = PLACEABLE.map(
-      (b, i) => `
-      <div class="palette-slot" data-index="${i}" title="${b.name} (${i + 1})">
-        <span class="swatch" style="background:${blockCssColor(b.id)}"></span>
-        <span class="slot-name">${b.name}</span>
-        <span class="key">${i + 1}</span>
-      </div>`,
-    ).join('');
-  }
-
-  setPaletteSelection(index: number): void {
-    const i = Math.max(0, Math.min(PLACEABLE.length - 1, index));
-    const slots = this.paletteEl.querySelectorAll('.palette-slot');
-    slots.forEach((el, idx) => {
-      el.classList.toggle('active', idx === i);
-    });
-    const block = PLACEABLE[i];
-    this.paletteNameEl.textContent = block ? block.name : '';
   }
 
   setWorldLink(opts: {
@@ -196,14 +175,14 @@ export class Hud {
     this.worldLinkStatus = opts.status;
     if (opts.worldName) {
       this.worldDisplayName = opts.worldName;
-      if (this.mapWorldNameEl) this.mapWorldNameEl.textContent = opts.worldName;
+      this.mapWorldNameEl.textContent = opts.worldName;
     }
     const online = opts.status === 'connected';
     const linking = opts.status === 'connecting' || opts.status === 'reconnecting';
     this.mpChip.hidden = opts.status === 'offline';
-    this.mpChip.classList.toggle('mp-online', online);
-    this.mpChip.classList.toggle('mp-wait', linking);
-    this.mpChip.classList.toggle('mp-down', opts.status === 'offline');
+    this.mpChip.classList.toggle('vy-hud__mp--online', online);
+    this.mpChip.classList.toggle('vy-hud__mp--wait', linking);
+    this.mpChip.classList.toggle('vy-hud__mp--down', opts.status === 'offline');
     if (opts.status === 'connecting') {
       this.mpLabel.textContent = 'Joining world…';
     } else if (opts.status === 'reconnecting') {
@@ -216,27 +195,15 @@ export class Hud {
     }
     void this.worldLinkStatus;
     void this.worldDisplayName;
-    if (this.mapMetaCountEl) {
-      this.mapMetaCountEl.textContent =
-        opts.count <= 1 ? 'Just you' : `${opts.count} players`;
+    this.mapMetaCountEl.textContent =
+      opts.count <= 1 ? 'Just you' : `${opts.count} players`;
+    const rows = [
+      `<li class="vy-hud__roster-you"><span class="vy-dot"></span>${escapeHtml(this.localPlayerName)} (you)</li>`,
+    ];
+    for (const name of opts.others ?? []) {
+      rows.push(`<li><span class="vy-dot vy-hud__roster-other"></span>${escapeHtml(name)}</li>`);
     }
-    if (this.mapRosterEl) {
-      const rows = [
-        `<li class="you"><span class="dot"></span>${escapeMap(this.localPlayerName)} (you)</li>`,
-      ];
-      for (const name of opts.others ?? []) {
-        rows.push(`<li><span class="dot other"></span>${escapeMap(name)}</li>`);
-      }
-      this.mapRosterEl.innerHTML = rows.join('');
-    }
-  }
-
-  /** Bridge for older call sites */
-  setMultiplayer(count: number, online: boolean): void {
-    this.setWorldLink({
-      status: online ? 'connected' : count > 0 ? 'reconnecting' : 'offline',
-      count,
-    });
+    this.mapRosterEl.innerHTML = rows.join('');
   }
 
   setLocalPlayerName(name: string): void {
@@ -245,10 +212,10 @@ export class Hud {
 
   showToast(title: string, detail = ''): void {
     const el = document.createElement('div');
-    el.className = 'toast player';
+    el.className = 'vy-toast';
     el.innerHTML = detail
-      ? `<strong>${title}</strong><span>${detail}</span>`
-      : `<strong>${title}</strong>`;
+      ? `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>`
+      : `<strong>${escapeHtml(title)}</strong>`;
     this.toastEl.appendChild(el);
     this.toasts.push({ el, t: 4.5 });
   }
@@ -299,7 +266,7 @@ export class Hud {
   }
 
   setPointerLocked(_locked: boolean): void {
-    /* Click-to-play overlay removed — Escape opens the pause menu instead. */
+    /* Escape opens the pause menu; no click-to-play overlay. */
   }
 
   setTouchMode(on: boolean): void {
@@ -324,28 +291,21 @@ export class Hud {
     this.root.classList.toggle('menu-open', open);
   }
 
-  /** Inventory hotbar replaces the old material tray. */
+  /** Inventory hotbar replaces the material tray. */
   hidePalette(): void {
-    const wrap = this.root.querySelector<HTMLElement>('.palette-wrap');
-    if (wrap) {
-      wrap.hidden = true;
-      wrap.style.display = 'none';
-    }
+    this.paletteWrap.hidden = true;
+    this.paletteWrap.style.display = 'none';
   }
 
   setProfileName(name: string, accent?: string): void {
-    const chip = this.root.querySelector<HTMLElement>('.profile-chip');
-    const nameEl = this.root.querySelector('.profile-name');
-    const dot = this.root.querySelector<HTMLElement>('.profile-dot');
-    if (!chip || !nameEl) return;
     const label = name.trim();
     if (!label) {
-      chip.hidden = true;
+      this.profileChip.hidden = true;
       return;
     }
-    chip.hidden = false;
-    nameEl.textContent = label;
-    if (dot && accent) dot.style.background = accent;
+    this.profileChip.hidden = false;
+    this.profileNameEl.textContent = label;
+    if (accent) this.profileDot.style.background = accent;
   }
 
   private setJournal(open: boolean): void {
@@ -362,13 +322,19 @@ export class Hud {
   private refreshJournal(): void {
     const items: string[] = [];
     for (const id of this.discovery.visitedBiomes) {
-      items.push(`<li class="biome"><span class="tag">Biome</span>${BIOMES[id].name}</li>`);
+      items.push(
+        `<li class="vy-hud__entry vy-hud__entry--biome"><span class="vy-hud__tag">Biome</span>${escapeHtml(BIOMES[id].name)}</li>`,
+      );
     }
     for (const lm of this.discovery.foundLandmarks.values()) {
-      items.push(`<li class="landmark"><span class="tag">Site</span>${lm.name}</li>`);
+      items.push(
+        `<li class="vy-hud__entry vy-hud__entry--site"><span class="vy-hud__tag">Site</span>${escapeHtml(lm.name)}</li>`,
+      );
     }
     this.journalList.innerHTML =
-      items.length > 0 ? items.join('') : '<li class="empty">Nothing logged yet — walk the reaches.</li>';
+      items.length > 0
+        ? items.join('')
+        : '<li class="vy-hud__entry vy-hud__entry--empty">Nothing logged yet — walk the reaches.</li>';
   }
 
   update(opts: {
@@ -387,10 +353,8 @@ export class Hud {
     lookAt?: { id: number } | null;
   }): void {
     const def = BIOMES[opts.biome];
-    const label = this.biomeEl.querySelector('.label')!;
-    const dot = this.biomeEl.querySelector('.dot') as HTMLElement;
-    label.textContent = def.name;
-    dot.style.background = def.color;
+    this.biomeLabel.textContent = def.name;
+    this.biomeDot.style.background = def.color;
     this.biomeEl.style.borderColor = def.color;
 
     this.compassNeedle.style.transform = `rotate(${opts.facingDeg}deg)`;
@@ -552,7 +516,7 @@ export class Hud {
   }
 }
 
-function escapeMap(s: string): string {
+function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] || c,
   );

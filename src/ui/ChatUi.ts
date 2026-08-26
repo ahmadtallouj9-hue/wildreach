@@ -33,14 +33,13 @@ export class ChatUi {
 
   constructor() {
     this.root = document.createElement('div');
-    this.root.className = 'chat-root';
+    this.root.className = 'chat-root vy-chat';
     this.root.innerHTML = `
-      <div class="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
-      <form class="chat-form" hidden>
-        <label class="chat-label" for="chat-input">Chat</label>
+      <div class="vy-chat__log" role="log" aria-live="polite" aria-relevant="additions"></div>
+      <form class="vy-chat__form" hidden>
         <input
-          id="chat-input"
-          class="chat-input"
+          id="vy-chat-input"
+          class="vy-chat__input"
           type="text"
           maxlength="${MAX_LEN}"
           autocomplete="off"
@@ -48,17 +47,17 @@ export class ChatUi {
           autocapitalize="sentences"
           spellcheck="true"
           dir="auto"
-          lang=""
+          aria-label="Chat"
           placeholder="Type… / اكتب هنا"
           enterkeyhint="send"
         />
-        <button type="submit" class="chat-send" aria-label="Send">➤</button>
+        <button type="submit" class="vy-btn" aria-label="Send">Send</button>
       </form>
     `;
 
-    this.logEl = this.root.querySelector('.chat-log')!;
-    this.formEl = this.root.querySelector('.chat-form')!;
-    this.inputEl = this.root.querySelector('.chat-input')!;
+    this.logEl = this.root.querySelector('.vy-chat__log')!;
+    this.formEl = this.root.querySelector('.vy-chat__form')!;
+    this.inputEl = this.root.querySelector('.vy-chat__input')!;
 
     this.formEl.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -123,13 +122,13 @@ export class ChatUi {
   }
 
   push(msg: ChatMessage): void {
-    const row = document.createElement('div');
-    row.className = 'chat-row';
-    if (msg.self) row.classList.add('chat-self');
-    if (msg.system) row.classList.add('chat-system');
-
     const text = sanitizeChat(msg.text);
     if (!text && !msg.system) return;
+
+    const row = document.createElement('div');
+    row.className = 'vy-chat__row';
+    if (msg.self) row.classList.add('vy-chat__row--self');
+    if (msg.system) row.classList.add('vy-chat__row--system');
 
     const rtl = isRtl(`${msg.name} ${text}`);
     row.dir = rtl ? 'rtl' : 'ltr';
@@ -138,10 +137,10 @@ export class ChatUi {
       row.textContent = text;
     } else {
       const nameEl = document.createElement('span');
-      nameEl.className = 'chat-name';
+      nameEl.className = 'vy-chat__name';
       nameEl.textContent = msg.name || 'Wanderer';
       const body = document.createElement('span');
-      body.className = 'chat-text';
+      body.className = 'vy-chat__text';
       body.textContent = text;
       row.append(nameEl, document.createTextNode(rtl ? ' :' : ': '), body);
     }

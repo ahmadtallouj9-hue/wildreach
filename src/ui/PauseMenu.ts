@@ -2,7 +2,7 @@ export type PauseMenuAction = 'resume' | 'title' | 'settings' | 'social';
 
 export type PauseJoinRequest = { id: string; name: string };
 
-/** In-game pause overlay — VYTHERA cinematic panel. */
+/** In-game pause overlay — VYTHERA dark panel with gold accents. */
 export class PauseMenu {
   readonly root: HTMLElement;
   private onAction: ((action: PauseMenuAction) => void) | null = null;
@@ -12,32 +12,23 @@ export class PauseMenu {
 
   constructor() {
     this.root = document.createElement('div');
-    this.root.className = 'pause-menu';
+    this.root.className = 'pause-menu vy-pause';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="pause-menu__dim" aria-hidden="true"></div>
-      <div class="pause-menu__panel" role="dialog" aria-modal="true" aria-labelledby="pause-menu-title">
-        <h2 id="pause-menu-title" class="pause-menu__title">VYTHERA</h2>
-        <div class="menu-brand-ornament pause-menu__ornament" aria-hidden="true">
-          <span class="menu-brand-line"></span>
-          <span class="menu-lotus">
-            <svg viewBox="0 0 36 30" width="28" height="24" fill="none">
-              <path d="M18 26c-6-5-10-10-10-15 0-4 3-7 7-7 1.4 0 2.6.5 3.5 1.3C19.4 4.5 20.6 4 22 4c4 0 7 3 7 7 0 5-4 10-11 15z" fill="currentColor"/>
-            </svg>
-          </span>
-          <span class="menu-brand-line"></span>
-        </div>
-        <div class="pause-menu__social"></div>
-        <div class="pause-menu__actions">
-          <button type="button" class="pause-menu__btn pause-menu__btn--play" data-action="resume">RESUME</button>
-          <button type="button" class="pause-menu__btn" data-action="settings">SETTINGS</button>
-          <button type="button" class="pause-menu__btn" data-action="social">SOCIAL</button>
-          <button type="button" class="pause-menu__btn" data-action="title">QUIT TO TITLE</button>
+      <div class="vy-pause__dim" aria-hidden="true"></div>
+      <div class="vy-pause__panel" role="dialog" aria-modal="true" aria-labelledby="vy-pause-title">
+        <h2 id="vy-pause-title" class="vy-pause__title">VYTHERA</h2>
+        <div class="vy-pause__social"></div>
+        <div class="vy-pause__actions">
+          <button type="button" class="vy-btn vy-btn--primary" data-action="resume">Resume</button>
+          <button type="button" class="vy-btn" data-action="settings">Settings</button>
+          <button type="button" class="vy-btn" data-action="social">Social</button>
+          <button type="button" class="vy-btn" data-action="title">Quit to title</button>
         </div>
       </div>
     `;
 
-    this.socialEl = this.root.querySelector('.pause-menu__social')!;
+    this.socialEl = this.root.querySelector('.vy-pause__social')!;
 
     this.root.querySelectorAll<HTMLButtonElement>('[data-action]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -68,17 +59,15 @@ export class PauseMenu {
     }
 
     this.socialEl.innerHTML = `
-      <section class="pause-menu__block">
-        <p class="pause-menu__section-title">Join requests</p>
+      <section class="vy-pause__block">
+        <p class="vy-pause__section">Join requests</p>
         ${requests
           .map(
             (r) => `
-          <div class="pause-menu__row pause-menu__row--stack">
-            <span class="pause-menu__row-text">${escapeHtml(r.name)} wants to join</span>
-            <div class="pause-menu__row-actions">
-              <button type="button" class="pause-menu__btn pause-menu__btn--small" data-accept="${r.id}">Accept</button>
-              <button type="button" class="pause-menu__btn pause-menu__btn--small pause-menu__btn--ghost" data-deny="${r.id}">Deny</button>
-            </div>
+          <div class="vy-actions">
+            <span class="vy-pause__row-text">${escapeHtml(r.name)} wants to join</span>
+            <button type="button" class="vy-btn" data-accept="${r.id}">Accept</button>
+            <button type="button" class="vy-btn vy-btn--ghost" data-deny="${r.id}">Deny</button>
           </div>
         `,
           )
@@ -101,7 +90,7 @@ export class PauseMenu {
   setOpen(open: boolean): void {
     this.open = open;
     this.root.hidden = !open;
-    this.root.classList.toggle('pause-menu--open', open);
+    this.root.classList.toggle('vy-pause--open', open);
   }
 }
 

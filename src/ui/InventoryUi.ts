@@ -75,73 +75,67 @@ export class InventoryUi {
 
   constructor(private readonly inventory: Inventory) {
     this.root = document.createElement('div');
-    this.root.className = 'inv-root';
+    this.root.className = 'inv-root vy-inv';
     this.root.innerHTML = `
-      <div class="hotbar-wrap">
-        <div class="hotbar-name" aria-live="polite"></div>
-        <div class="hotbar" role="listbox" aria-label="Hotbar"></div>
+      <div class="vy-hotbar">
+        <div class="vy-hotbar__name" aria-live="polite"></div>
+        <div class="vy-hotbar__row" role="listbox" aria-label="Hotbar"></div>
       </div>
-      <div class="inv-panel glass-window" hidden>
-        <div class="glass-frost" aria-hidden="true"></div>
-        <div class="inv-panel-scroll">
-          <header class="inv-header">
-            <div class="inv-heading">
-              <p class="inv-kicker">INVENTORY</p>
-              <div class="inv-tabs">
-                <button type="button" class="inv-tab active" data-tab="pack">PACK</button>
-                <button type="button" class="inv-tab" data-tab="guide">GUIDE</button>
-              </div>
+      <div class="vy-inv-panel" hidden>
+        <header class="vy-inv-head">
+          <div class="vy-inv-tabs">
+            <button type="button" class="vy-inv-tab is-active" data-tab="pack">Pack</button>
+            <button type="button" class="vy-inv-tab" data-tab="guide">Guide</button>
+          </div>
+          <button type="button" class="vy-btn vy-btn--ghost" data-close aria-label="Close">✕</button>
+        </header>
+        <div class="vy-inv-body" data-view="pack">
+          <section class="vy-craft">
+            <h3>Crafting</h3>
+            <div class="vy-craft__row">
+              <div class="vy-craft__grid"></div>
+              <span class="vy-craft__arrow" aria-hidden="true">→</span>
+              <div class="vy-slot" data-kind="result" data-index="0"></div>
             </div>
-            <button type="button" class="inv-close" aria-label="Close">✕</button>
-          </header>
-          <div class="inv-body" data-view="pack">
-            <section class="craft-bay">
-              <h3>CRAFTING</h3>
-              <div class="craft-row">
-                <div class="craft-grid"></div>
-                <span class="craft-arrow" aria-hidden="true">↓</span>
-                <div class="result-slot slot" data-kind="result" data-index="0"></div>
-              </div>
-              <p class="craft-hint">Arrange materials, then take the result.</p>
-            </section>
-            <section class="pack-bay">
-              <h3>SATCHEL</h3>
-              <div class="inv-grid"></div>
-            </section>
-          </div>
-          <div class="inv-body guide-body" data-view="guide" hidden>
-            <section>
-              <h3>CONTROLS</h3>
-              <ul class="guide-controls">
-                <li><kbd>E</kbd> Pack &amp; craft</li>
-                <li><kbd>T</kbd> / <kbd>Enter</kbd> Chat (AR / EN)</li>
-                <li><kbd>G</kbd> Field guide</li>
-                <li><kbd>Ctrl</kbd> Sneak</li>
-                <li><kbd>C</kbd> Sit / stand</li>
-                <li><kbd>Space</kbd> Jump</li>
-                <li><kbd>Shift</kbd> Sprint</li>
-                <li><kbd>V</kbd> First / third / front view</li>
-                <li><kbd>1–9</kbd> Hotbar · <kbd>F</kbd> / RMB place · LMB break</li>
-                <li><kbd>J</kbd> Journal · <kbd>M</kbd> Map</li>
-              </ul>
-            </section>
-            <section>
-              <h3>RECIPES</h3>
-              <ul class="guide-recipes"></ul>
-            </section>
-          </div>
+            <p class="vy-craft__hint">Arrange materials, then take the result.</p>
+          </section>
+          <section class="vy-pack">
+            <h3>Satchel</h3>
+            <div class="vy-pack__grid"></div>
+          </section>
+        </div>
+        <div class="vy-inv-body" data-view="guide" hidden>
+          <section class="vy-pack">
+            <h3>Controls</h3>
+            <ul class="vy-guide__list">
+              <li><kbd>E</kbd> Pack &amp; craft</li>
+              <li><kbd>T</kbd> / <kbd>Enter</kbd> Chat (AR / EN)</li>
+              <li><kbd>G</kbd> Field guide</li>
+              <li><kbd>Ctrl</kbd> Sneak</li>
+              <li><kbd>C</kbd> Sit / stand</li>
+              <li><kbd>Space</kbd> Jump</li>
+              <li><kbd>Shift</kbd> Sprint</li>
+              <li><kbd>V</kbd> First / third / front view</li>
+              <li><kbd>1–9</kbd> Hotbar · <kbd>F</kbd> / RMB place · LMB break</li>
+              <li><kbd>J</kbd> Journal · <kbd>M</kbd> Map</li>
+            </ul>
+          </section>
+          <section class="vy-pack">
+            <h3>Recipes</h3>
+            <ul class="vy-guide__recipes"></ul>
+          </section>
         </div>
       </div>
-      <div class="inv-cursor" hidden></div>
+      <div class="vy-inv-cursor" hidden></div>
     `;
 
-    this.panel = this.root.querySelector('.inv-panel')!;
-    this.hotbarEl = this.root.querySelector('.hotbar')!;
-    this.hotbarNameEl = this.root.querySelector('.hotbar-name')!;
-    this.invGrid = this.root.querySelector('.inv-grid')!;
-    this.craftGridEl = this.root.querySelector('.craft-grid')!;
-    this.resultSlot = this.root.querySelector('.result-slot')!;
-    this.cursorEl = this.root.querySelector('.inv-cursor')!;
+    this.panel = this.root.querySelector('.vy-inv-panel')!;
+    this.hotbarEl = this.root.querySelector('.vy-hotbar__row')!;
+    this.hotbarNameEl = this.root.querySelector('.vy-hotbar__name')!;
+    this.invGrid = this.root.querySelector('.vy-pack__grid')!;
+    this.craftGridEl = this.root.querySelector('.vy-craft__grid')!;
+    this.resultSlot = this.root.querySelector('[data-kind="result"]')!;
+    this.cursorEl = this.root.querySelector('.vy-inv-cursor')!;
 
     this.buildStaticGrids();
     this.buildGuide();
@@ -189,10 +183,10 @@ export class InventoryUi {
 
   private setTab(tab: PanelTab): void {
     this.tab = tab;
-    this.root.querySelectorAll('.inv-tab').forEach((el) => {
-      el.classList.toggle('active', (el as HTMLElement).dataset.tab === tab);
+    this.root.querySelectorAll('.vy-inv-tab').forEach((el) => {
+      el.classList.toggle('is-active', (el as HTMLElement).dataset.tab === tab);
     });
-    this.root.querySelectorAll('.inv-body').forEach((el) => {
+    this.root.querySelectorAll('.vy-inv-body').forEach((el) => {
       (el as HTMLElement).hidden = (el as HTMLElement).dataset.view !== tab;
     });
   }
@@ -210,10 +204,10 @@ export class InventoryUi {
   }
 
   private buildGuide(): void {
-    const list = this.root.querySelector('.guide-recipes')!;
+    const list = this.root.querySelector('.vy-guide__recipes')!;
     list.innerHTML = RECIPES.map(
-      (r) => `<li>
-        <span class="guide-swatch" style="background:${blockCssColor(r.result.id)}"></span>
+      (r) => `<li class="vy-guide__recipe">
+        <span class="vy-slot__swatch vy-guide__swatch" style="background:${blockCssColor(r.result.id)}"></span>
         <div>
           <strong>${r.name}</strong>
           <span>${r.hint}</span>
@@ -223,16 +217,16 @@ export class InventoryUi {
   }
 
   private bind(): void {
-    this.root.querySelector('.inv-close')!.addEventListener('click', () => this.setOpen(false));
-    this.root.querySelectorAll('.inv-tab').forEach((btn) => {
+    this.root.querySelector('[data-close]')!.addEventListener('click', () => this.setOpen(false));
+    this.root.querySelectorAll('.vy-inv-tab').forEach((btn) => {
       btn.addEventListener('click', () =>
         this.setTab((btn as HTMLElement).dataset.tab as PanelTab),
       );
     });
 
     this.hotbarEl.addEventListener('click', (e) => {
-      const slot = (e.target as HTMLElement).closest('.slot') as HTMLElement | null;
-      if (!slot || slot.closest('.inv-panel')) return;
+      const slot = (e.target as HTMLElement).closest('.vy-slot') as HTMLElement | null;
+      if (!slot || slot.closest('.vy-inv-panel')) return;
       const idx = Number(slot.dataset.index);
       if (!Number.isFinite(idx)) return;
       this.inventory.setHotbar(idx);
@@ -241,7 +235,7 @@ export class InventoryUi {
     });
 
     this.root.addEventListener('click', (e) => {
-      const slot = (e.target as HTMLElement).closest('.slot') as HTMLElement | null;
+      const slot = (e.target as HTMLElement).closest('.vy-slot') as HTMLElement | null;
       if (!slot || !this.open) return;
       this.clickSlot(
         slot.dataset.kind as SlotKind,
@@ -251,7 +245,7 @@ export class InventoryUi {
     });
 
     this.root.addEventListener('contextmenu', (e) => {
-      const slot = (e.target as HTMLElement).closest('.slot') as HTMLElement | null;
+      const slot = (e.target as HTMLElement).closest('.vy-slot') as HTMLElement | null;
       if (!slot || !this.open) return;
       e.preventDefault();
       this.clickSlot(slot.dataset.kind as SlotKind, Number(slot.dataset.index), true);
@@ -382,22 +376,22 @@ export class InventoryUi {
   }
 
   private paintRow(el: HTMLElement, hotbar: boolean): void {
-    const nodes = el.querySelectorAll('.slot');
+    const nodes = el.querySelectorAll('.vy-slot');
     const count = hotbar ? HOTBAR_SIZE : INV_SIZE;
     for (let i = 0; i < count; i++) {
       const node = nodes[i] as HTMLElement;
-      node.classList.toggle('active', hotbar && i === this.inventory.selectedHotbar);
-      node.classList.toggle('hotbar-band', !hotbar && i < HOTBAR_SIZE);
+      node.classList.toggle('is-active', hotbar && i === this.inventory.selectedHotbar);
+      node.classList.toggle('vy-slot--band', !hotbar && i < HOTBAR_SIZE);
       paintSlot(node, this.inventory.slots[i]);
     }
   }
 
   private paintCraft(): void {
-    const nodes = this.craftGridEl.querySelectorAll('.slot');
+    const nodes = this.craftGridEl.querySelectorAll('.vy-slot');
     for (let i = 0; i < 9; i++) paintSlot(nodes[i] as HTMLElement, this.craft.cells[i]);
     const result = this.craft.peekResult();
     paintSlot(this.resultSlot, result);
-    this.resultSlot.classList.toggle('ready', !!result);
+    this.resultSlot.classList.toggle('is-ready', !!result);
   }
 
   private paintHotbarName(): void {
@@ -416,13 +410,13 @@ export class InventoryUi {
 }
 
 function slotHtml(kind: SlotKind, index: number, key: string): string {
-  return `<div class="slot" data-kind="${kind}" data-index="${index}">${
-    key ? `<span class="slot-key">${key}</span>` : ''
+  return `<div class="vy-slot" data-kind="${kind}" data-index="${index}">${
+    key ? `<span class="vy-slot__key">${key}</span>` : ''
   }</div>`;
 }
 
 function paintSlot(el: HTMLElement, stack: ItemStack | null): void {
-  const key = el.querySelector('.slot-key');
+  const key = el.querySelector('.vy-slot__key');
   const keyHtml = key ? key.outerHTML : '';
   if (!stack) {
     el.innerHTML = keyHtml;
@@ -434,7 +428,6 @@ function paintSlot(el: HTMLElement, stack: ItemStack | null): void {
 }
 
 function stackHtml(stack: ItemStack): string {
-  return `<span class="slot-swatch" style="background:${blockCssColor(stack.id)}"></span>
-    <span class="slot-count">${stack.count > 1 ? stack.count : ''}</span>
-    <span class="slot-label">${BLOCK_NAMES[stack.id] ?? ''}</span>`;
+  return `<span class="vy-slot__swatch" style="background:${blockCssColor(stack.id)}"></span>
+    <span class="vy-slot__count">${stack.count > 1 ? stack.count : ''}</span>`;
 }
