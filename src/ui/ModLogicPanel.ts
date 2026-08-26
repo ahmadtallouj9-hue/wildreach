@@ -1,30 +1,18 @@
 import { VytheraAIStudio } from '../vythera_ai/ui/VytheraAIStudio';
 import type { ProjectAction } from '../modding/ModProjectPlanner';
 import type { VytheraEditorHost } from '../vythera_ai/host/VytheraEditorHost';
-import {
-  interpretModLine,
-  interpretModScripts,
-  ruleCardTitle,
-  TRIGGER_META,
-} from '../modding/ModAiInterpreter';
-import { listModCommands, ModCommandBinder } from '../modding/ModCommandBinder';
+import { interpretModScripts, TRIGGER_META } from '../modding/ModAiInterpreter';
+import { ModCommandBinder } from '../modding/ModCommandBinder';
 import type { ModTrigger } from '../modding/ModLogicParser';
-import { normalizeScriptLines } from '../modding/ModLogicParser';
 import type { ParticleStyle } from '../modding/ModStudioAi';
 import { ProfilePreview3D } from './ProfilePreview3D';
 import { loadProfile } from './prefs';
 import { decodeSkin } from '../player/SkinAtlas';
 
-const DEFAULT_SCRIPT = `When I click, shoot a blue fireball
-Glow when spawned`;
-
-/** Character skin + Project AI co-builder + behavior list. */
+/** Character skin + VYTHERA AI co-builder (scripts still loadable via AI / asset). */
 export class ModLogicPanel {
   readonly root: HTMLElement;
-  private readonly behaviorList: HTMLElement;
   private readonly validationEl: HTMLElement;
-  private readonly ruleCountEl: HTMLElement;
-  private readonly emptyState: HTMLElement;
   private readonly skinHost: HTMLElement;
   private readonly projectAi: VytheraAIStudio;
   private skinPreview: ProfilePreview3D | null = null;
@@ -53,10 +41,9 @@ export class ModLogicPanel {
           <span class="mod-ai-orb" aria-hidden="true">✦</span>
           <div>
             <p class="voxel-editor-label mod-ai-title">Character</p>
-            <p class="mod-ai-subtitle">Preview + behaviors for your mod</p>
+            <p class="mod-ai-subtitle">Skin preview + Studio AI</p>
           </div>
         </div>
-        <span class="mod-ai-rule-count">0 rules</span>
       </header>
       <section class="mod-char-skin">
         <div class="mod-char-skin-preview" aria-label="Player skin preview"></div>
@@ -67,24 +54,13 @@ export class ModLogicPanel {
         </div>
       </section>
       <div class="mod-project-ai-slot"></div>
-      <p class="voxel-editor-label mod-ai-section-label">Quick powers</p>
-      <div class="mod-ai-powers"></div>
-      <div class="mod-ai-list-head">
-        <p class="voxel-editor-label">Behaviors</p>
-        <button type="button" class="mod-ai-clear" title="Clear all">Clear</button>
-      </div>
-      <div class="mod-ai-empty">No behaviors yet — ask Project AI or tap a power.</div>
-      <ul class="mod-ai-behaviors" aria-label="Mod behaviors"></ul>
       <div class="mod-ai-chat" aria-live="polite" hidden></div>
       <p class="mod-logic-validation" aria-live="polite"></p>
       <p class="voxel-editor-label mod-ai-section-label">Test in workshop</p>
       <div class="mod-logic-test"></div>
       <button type="button" class="voxel-editor-btn mod-ai-run-all">▶ Run all behaviors</button>`;
 
-    this.behaviorList = this.root.querySelector('.mod-ai-behaviors') as HTMLElement;
     this.validationEl = this.root.querySelector('.mod-logic-validation') as HTMLElement;
-    this.ruleCountEl = this.root.querySelector('.mod-ai-rule-count') as HTMLElement;
-    this.emptyState = this.root.querySelector('.mod-ai-empty') as HTMLElement;
     this.skinHost = this.root.querySelector('.mod-char-skin-preview') as HTMLElement;
 
     this.projectAi = new VytheraAIStudio(
@@ -93,11 +69,9 @@ export class ModLogicPanel {
     );
     this.root.querySelector('.mod-project-ai-slot')!.appendChild(this.projectAi.root);
 
-    this.buildPowers();
     this.buildTestButtons();
-    this.setScripts(normalizeScriptLines(DEFAULT_SCRIPT));
+    this.commit(false);
 
-    this.root.querySelector('.mod-ai-clear')!.addEventListener('click', () => this.clearAll());
     this.root.querySelector('.mod-ai-run-all')!.addEventListener('click', () => this.runAll());
     this.root.querySelector('.mod-char-skin-refresh')!.addEventListener('click', () => {
       this.refreshPlayerSkin();
@@ -108,7 +82,6 @@ export class ModLogicPanel {
   /** Show/hide + sync the live player skin preview. */
   setActive(on: boolean): void {
     this.root.classList.toggle('is-active', on);
-    // Docked panel visibility is controlled by the Character section; keep root visible for layout.
     this.root.hidden = false;
     if (on) {
       this.ensureSkinPreview();
@@ -170,23 +143,6 @@ export class ModLogicPanel {
     this.commit();
   }
 
-  private buildPowers(): void {
-    const host = this.root.querySelector('.mod-ai-powers') as HTMLElement;
-    for (const cmd of listModCommands()) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'mod-ai-power';
-      btn.title = cmd.description;
-      btn.innerHTML = `<span>${cmd.icon}</span><span>${cmd.label}</span>`;
-      btn.addEventListener('click', () => {
-        this.lines.push(cmd.quickPrompt);
-        this.commit();
-        this.onNotify(`Added: ${cmd.label}`);
-      });
-      host.appendChild(btn);
-    }
-  }
-
   private buildTestButtons(): void {
     const host = this.root.querySelector('.mod-logic-test') as HTMLElement;
     const triggers: ModTrigger[] = ['on_click', 'on_use', 'on_spawn', 'on_tick', 'on_collision'];
@@ -200,13 +156,6 @@ export class ModLogicPanel {
       btn.addEventListener('click', () => this.testTrigger(t));
       host.appendChild(btn);
     }
-  }
-
-  private clearAll(): void {
-    if (!this.lines.length) return;
-    this.lines = [];
-    this.commit();
-    this.onNotify('Cleared all behaviors.');
   }
 
   private testTrigger(trigger: ModTrigger): void {
@@ -241,72 +190,16 @@ export class ModLogicPanel {
           },
         ]),
     });
-    if (!n) this.onNotify('Add behaviors first.');
-  }
-
-  private moveLine(index: number, dir: -1 | 1): void {
-    const next = index + dir;
-    if (next < 0 || next >= this.lines.length) return;
-    [this.lines[index], this.lines[next]] = [this.lines[next]!, this.lines[index]!];
-    this.commit();
-  }
-
-  private duplicateLine(index: number): void {
-    this.lines.splice(index + 1, 0, this.lines[index]!);
-    this.commit();
-  }
-
-  private removeLine(index: number, doCommit = true): void {
-    this.lines.splice(index, 1);
-    if (doCommit) this.commit();
-    else this.renderBehaviors();
-  }
-
-  private renderBehaviors(): void {
-    this.behaviorList.replaceChildren();
-    this.emptyState.hidden = this.lines.length > 0;
-    this.ruleCountEl.textContent = `${this.lines.length} rule${this.lines.length === 1 ? '' : 's'}`;
-
-    this.lines.forEach((line, i) => {
-      const { rule, summary } = interpretModLine(line);
-      if (!rule) return;
-      const meta = TRIGGER_META[rule.trigger];
-      const li = document.createElement('li');
-      li.className = 'mod-ai-behavior';
-      li.innerHTML = `
-        <div class="mod-ai-behavior-top">
-          <span class="mod-ai-trigger-badge">${meta.icon} ${meta.short}</span>
-          <span class="mod-ai-behavior-title">${escapeHtml(ruleCardTitle(rule))}</span>
-        </div>
-        <p class="mod-ai-behavior-text">“${escapeHtml(line)}”</p>
-        ${summary ? `<p class="mod-ai-behavior-meta">${escapeHtml(summary)}</p>` : ''}
-        <div class="mod-ai-behavior-actions">
-          <button type="button" class="mod-ai-act" data-act="up" title="Move up">▲</button>
-          <button type="button" class="mod-ai-act" data-act="down" title="Move down">▼</button>
-          <button type="button" class="mod-ai-act" data-act="dup" title="Duplicate">⧉</button>
-          <button type="button" class="mod-ai-act mod-ai-act--danger" data-act="del" title="Remove">×</button>
-        </div>`;
-
-      li.querySelector('[data-act="up"]')!.addEventListener('click', () => this.moveLine(i, -1));
-      li.querySelector('[data-act="down"]')!.addEventListener('click', () => this.moveLine(i, 1));
-      li.querySelector('[data-act="dup"]')!.addEventListener('click', () => this.duplicateLine(i));
-      li.querySelector('[data-act="del"]')!.addEventListener('click', () => this.removeLine(i));
-      this.behaviorList.appendChild(li);
-    });
+    if (!n) this.onNotify('No behaviors loaded yet.');
   }
 
   private commit(notifyChange = true): void {
-    const { errors } = interpretModScripts(this.lines);
+    const { errors, rules } = interpretModScripts(this.lines);
     this.validationEl.textContent = errors.length ? errors.join(' · ') : '';
     this.validationEl.classList.toggle('mod-logic-validation--error', errors.length > 0);
     if (notifyChange && !errors.length) this.onChange(this.getScripts());
-    this.renderBehaviors();
-    this.binder.loadRules(interpretModScripts(this.lines).rules);
+    this.binder.loadRules(rules);
   }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function asParticleStyle(s: string): ParticleStyle {

@@ -14,7 +14,7 @@ export const MOD_STUDIO_GUIDE_HTML = `
             <li><strong>Modeling</strong> — place and erase voxels. Build swords, dragons, animals, characters, cities.</li>
             <li><strong>Texturing</strong> — paint the 16×16 tile for each color, or click faces on the 3D model (UV).</li>
             <li><strong>Animation</strong> — split into parts, pose with gizmos, add timeline keyframes.</li>
-            <li><strong>Character</strong> — skin preview, stamp your skin character, Project AI, behaviors &amp; powers.</li>
+            <li><strong>Character</strong> — skin preview, stamp your skin character, Studio AI, workshop tests.</li>
           </ul>
         </section>
         <section>
