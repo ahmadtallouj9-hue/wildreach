@@ -62,6 +62,36 @@ function makeTerrainFrag(cutout: boolean): string {
     float rustle = sin(time * 2.35 + vWorldPos.x * 1.6 + vWorldPos.z * 1.25) * 0.05 * vWind;
     color *= 1.0 + rustle;`
     : '';
+  // Flat colours removed the per-block detail the old textures used to carry,
+  // so neighbouring faces read as one featureless slab. Rebuild that legibility
+  // from geometry instead: a hairline along every block boundary plus a faint
+  // per-block shade offset. Both come from world position, so they stay correct
+  // however faces are batched. Skipped on the cutout pass, whose foliage sways
+  // — a grid derived from a moving position would swim.
+  const voxelGrid = cutout
+    ? ''
+    : `
+    vec3 inside = vWorldPos - N * 0.5;
+    vec3 aN = abs(N);
+    vec2 cell = (aN.y > aN.x && aN.y > aN.z)
+      ? inside.xz
+      : (aN.x > aN.z ? inside.zy : inside.xy);
+    vec2 toEdge = min(fract(cell), 1.0 - fract(cell));
+    vec2 texel = max(fwidth(cell), vec2(1e-5));
+    // Two widths, whichever reads better: a screen-space hairline so distant
+    // blocks stay separated, and a world-space seam so a block filling the
+    // screen still shows its own borders rather than a blank plane.
+    float nearEdge = min(toEdge.x, toEdge.y);
+    float hairline = 1.0 - smoothstep(0.5, 1.5, min(toEdge.x / texel.x, toEdge.y / texel.y));
+    float seam = 1.0 - smoothstep(0.012, 0.032, nearEdge);
+    float line = max(hairline, seam);
+    // Let it go before far terrain collapses into a dark wire mesh.
+    line *= 1.0 - smoothstep(40.0, 110.0, dist);
+    color *= 1.0 - line * 0.28;
+
+    vec3 cellId = floor(inside);
+    float jitter = fract(sin(dot(cellId, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    color *= 0.94 + jitter * 0.12;`;
   return /* glsl */ `
   uniform sampler2D map;
   uniform vec3 sunDir;
@@ -105,6 +135,7 @@ function makeTerrainFrag(cutout: boolean): string {
     ${rustle}
 
     float dist = length(vWorldPos - cameraPosition);
+    ${voxelGrid}
     float fog = clamp(1.0 - exp(-dist * fogDensity), 0.0, 0.72);
     float atmo = smoothstep(48.0, 220.0, dist);
     color = mix(color, fogColor, clamp(fog + atmo * 0.22, 0.0, 0.78));
