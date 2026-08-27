@@ -23,6 +23,7 @@ import { mpUrl, worldRoomId, type ProfileWire } from '../net/protocol';
 import { loadProfile, loadSettings, type Profile, type Settings } from '../ui/prefs';
 import { loadWorldSettings, WORLD_TIME_VALUES, type WorldSettings } from '../ui/worldSettings';
 import { worldNameFromSeed } from '../ui/worldNames';
+import { styleFingerprint } from '../world/style/styleHash';
 import { isTouchDevice } from '../util/isTouchDevice';
 import { applyHudLayout, HudLayoutEditor, loadHudLayout } from '../ui/HudLayout';
 
@@ -85,6 +86,7 @@ export class Game {
     this.world = new WorldGen(seed, {
       terrain: worldSettings.terrain,
       caves: worldSettings.caves,
+      style: worldSettings.style ?? null,
     });
     this.chunks = new ChunkManager(
       this.scene,
@@ -332,6 +334,8 @@ export class Game {
       structures: worldSettings.structures,
       time: worldSettings.time,
       renderDistance: worldSettings.renderDistance,
+      styleHash: styleFingerprint(worldSettings.style),
+      styleName: worldSettings.style?.name,
     };
     this.social.setPresence({
       inGame: true,
@@ -556,6 +560,8 @@ export class Game {
       structures: worldSettings.structures,
       time: worldSettings.time,
       renderDistance: worldSettings.renderDistance,
+      styleHash: styleFingerprint(worldSettings.style),
+      styleName: worldSettings.style?.name,
     };
     const profileWire: ProfileWire = { ...profile };
     const room = worldRoomId(this.seed, worldWire);

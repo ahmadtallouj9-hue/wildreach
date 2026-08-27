@@ -11,19 +11,34 @@ import { TerrainShape, type TerrainType } from './TerrainShape';
 import { VegetationGenerator } from './VegetationGenerator';
 import { WorldSeed } from './SeedSystem';
 import { WORLD_GENERATION_VERSION } from './version';
+import {
+  DEFAULT_TERRAIN_MODE,
+  splitSurfaceHeight,
+  surfaceHeightFromStep,
+  type TerrainResolutionMode,
+} from '../terrainResolution';
+import { NEUTRAL_TUNING, type TerrainTuning } from '../style/styleTuning';
 
 export interface PipelineOptions {
   terrain: TerrainType;
   caves: boolean;
+  /** Whether the surface resolves to terrain voxels or whole blocks. */
+  terrainMode: TerrainResolutionMode;
+  /** Custom world-style tuning. Neutral tuning reproduces stock terrain. */
+  tuning: TerrainTuning;
 }
 
 export interface ColumnClimate {
   climate: ClimateSample;
-  /** Softened surface height. */
+  /** Topmost fully solid gameplay block. */
   height: number;
   biome: BiomeId;
-  /** Raw height before cliff softening. */
+  /** Raw continuous height before cliff softening. */
   rawHeight: number;
+  /** Sub-block surface elevation in terrain voxels (0..SURFACE_STEPS-1). */
+  step: number;
+  /** Continuous surface height in world units, after softening + snapping. */
+  exactHeight: number;
 }
 
 /**
@@ -46,10 +61,12 @@ export class ChunkPipeline {
     this.options = {
       terrain: options?.terrain ?? 'balanced',
       caves: options?.caves !== false,
+      terrainMode: options?.terrainMode ?? DEFAULT_TERRAIN_MODE,
+      tuning: options?.tuning ?? NEUTRAL_TUNING,
     };
     this.seed = new WorldSeed(seedSource);
-    this.climate = new ClimateSampler(this.seed);
-    this.terrain = new TerrainShape(this.seed, this.options.terrain);
+    this.climate = new ClimateSampler(this.seed, this.options.tuning);
+    this.terrain = new TerrainShape(this.seed, this.options.terrain, this.options.tuning);
     this.caves = new CaveGenerator(this.seed, this.options.caves);
     this.ores = new OreGenerator(this.seed);
     this.vegetation = new VegetationGenerator(this.seed);
@@ -67,9 +84,17 @@ export class ChunkPipeline {
     if (hit) return hit;
 
     const climate = this.climate.sample(wx, wz);
-    const rawHeight = this.terrain.surfaceHeight(wx, wz, climate);
+    const rawHeight = this.terrain.surfaceHeightExact(wx, wz, climate);
     const biome = selectBiome(climate, rawHeight);
-    const col: ColumnClimate = { climate, height: rawHeight, biome, rawHeight };
+    const split = splitSurfaceHeight(rawHeight, this.options.terrainMode);
+    const col: ColumnClimate = {
+      climate,
+      height: split.blockHeight,
+      biome,
+      rawHeight,
+      step: split.step,
+      exactHeight: surfaceHeightFromStep(split.blockHeight, split.step),
+    };
     this.cache.set(k, col);
     return col;
   }
@@ -85,9 +110,17 @@ export class ChunkPipeline {
     ] as const) {
       nMin = Math.min(nMin, this.rawColumn(wx + dx, wz + dz).rawHeight);
     }
-    const height = this.terrain.softenHeight(base.rawHeight, nMin);
-    const biome = selectBiome(base.climate, height);
-    return { climate: base.climate, height, biome, rawHeight: base.rawHeight };
+    const softened = this.terrain.softenHeight(base.rawHeight, nMin);
+    const split = splitSurfaceHeight(softened, this.options.terrainMode);
+    const biome = selectBiome(base.climate, split.blockHeight);
+    return {
+      climate: base.climate,
+      height: split.blockHeight,
+      biome,
+      rawHeight: base.rawHeight,
+      step: split.step,
+      exactHeight: surfaceHeightFromStep(split.blockHeight, split.step),
+    };
   }
 
   getHeight(wx: number, wz: number): number {
@@ -122,6 +155,7 @@ export class ChunkPipeline {
           height: col.height,
           biome: col.biome,
           surface: col.height,
+          step: col.step,
         };
       }
     }

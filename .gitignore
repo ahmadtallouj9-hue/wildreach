@@ -29,3 +29,6 @@ dist-ssr
 .vythera/
 adapters/
 models/vythera-jobs/
+
+# Developer-only terrain reference images (third-party, never published)
+public/dev-reference/

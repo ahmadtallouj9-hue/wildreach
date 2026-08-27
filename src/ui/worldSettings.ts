@@ -1,3 +1,6 @@
+import { sanitizeStyle } from '../world/style/styleValidation';
+import type { VytheraWorldStyle } from '../world/style/WorldStyle';
+
 export type TerrainType = 'balanced' | 'flat' | 'mountains' | 'islands' | 'wild';
 export type WorldTime = 'day' | 'noon' | 'sunset' | 'night';
 
@@ -8,6 +11,12 @@ export interface WorldSettings {
   structures: boolean;
   time: WorldTime;
   renderDistance: number;
+  /**
+   * Custom world style, embedded rather than referenced by id: a world must
+   * keep generating the same terrain even if the player later edits or deletes
+   * the style in their library.
+   */
+  style?: VytheraWorldStyle | null;
 }
 
 const WORLD_KEY = 'wildreach.worlds';
@@ -60,6 +69,7 @@ function normalize(settings: Partial<WorldSettings>): WorldSettings {
     structures: settings.structures !== false,
     time: TIMES.includes(settings.time as WorldTime) ? (settings.time as WorldTime) : 'day',
     renderDistance: Math.min(8, Math.max(3, Math.round(Number(settings.renderDistance) || 7))),
+    style: settings.style ? sanitizeStyle(settings.style) : null,
   };
 }
 

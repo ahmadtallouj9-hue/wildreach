@@ -3,6 +3,8 @@ import type { ColumnInfo } from './ColumnInfo';
 import { ChunkPipeline, type PipelineOptions } from './gen/ChunkPipeline';
 import { WORLD_GENERATION_VERSION } from './gen/version';
 import type { TerrainType } from './gen/TerrainShape';
+import type { VytheraWorldStyle } from './style/WorldStyle';
+import { NEUTRAL_TUNING, tuningFromStyle } from './style/styleTuning';
 
 export type { ColumnInfo } from './ColumnInfo';
 export type { TerrainType } from './gen/TerrainShape';
@@ -11,6 +13,8 @@ export { WORLD_GENERATION_VERSION };
 export interface WorldGenOptions {
   terrain: TerrainType;
   caves: boolean;
+  /** Optional custom world style. Omitted means stock VYTHERA terrain. */
+  style: VytheraWorldStyle | null;
 }
 
 /**
@@ -27,6 +31,7 @@ export class WorldGen {
     const opts: Partial<PipelineOptions> = {
       terrain: options?.terrain ?? 'balanced',
       caves: options?.caves !== false,
+      tuning: options?.style ? tuningFromStyle(options.style) : NEUTRAL_TUNING,
     };
     this.pipeline = new ChunkPipeline(seed, opts);
   }

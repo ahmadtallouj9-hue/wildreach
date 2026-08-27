@@ -9,6 +9,14 @@ export type WorldSettingsWire = {
   structures: boolean;
   time: WorldTime;
   renderDistance: number;
+  /**
+   * Fingerprint of the world style in use, or 'default'. Two players whose
+   * styles disagree would generate different terrain for the same seed, so
+   * this participates in the room id to keep them apart.
+   */
+  styleHash?: string;
+  /** Human-readable style name, for the "world style required" notice. */
+  styleName?: string;
 };
 
 export type ProfileWire = Pick<
@@ -126,7 +134,11 @@ export function mpUrl(): string {
 
 export function worldRoomId(
   seed: string,
-  world: Pick<WorldSettingsWire, 'terrain' | 'caves' | 'structures' | 'time' | 'renderDistance'>,
+  world: Pick<
+    WorldSettingsWire,
+    'terrain' | 'caves' | 'structures' | 'time' | 'renderDistance' | 'styleHash'
+  >,
 ): string {
-  return `${seed.trim()}|${world.terrain}|${world.caves ? 1 : 0}|${world.structures ? 1 : 0}|${world.time}|${world.renderDistance}`;
+  const style = world.styleHash && world.styleHash !== 'default' ? `|${world.styleHash}` : '';
+  return `${seed.trim()}|${world.terrain}|${world.caves ? 1 : 0}|${world.structures ? 1 : 0}|${world.time}|${world.renderDistance}${style}`;
 }

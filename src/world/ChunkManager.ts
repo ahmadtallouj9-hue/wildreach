@@ -8,6 +8,7 @@ import { seedFluidLevels, tickFluidsNear } from './FluidSim';
 import type { WorldGen } from './WorldGen';
 import { BIOMES, type BiomeId } from './Biomes';
 import type { TerrainMaterials } from '../render/TerrainMaterials';
+import { surfaceHeightFromStep } from './terrainResolution';
 
 export class ChunkManager {
   private chunks = new Map<string, Chunk>();
@@ -166,6 +167,35 @@ export class ChunkManager {
     const lz = wz - cz * CHUNK_SIZE;
     const col = chunk.columns[lz * CHUNK_SIZE + lx];
     return col?.height ?? this.world.getHeight(Math.floor(wx), Math.floor(wz));
+  }
+
+  /**
+   * Sub-voxel surface offset for a column, in terrain voxels.
+   *
+   * Returns 0 unless `y` is the column's natural generated surface block, so
+   * player-placed blocks stay flat-topped on the gameplay grid.
+   */
+  surfaceStep(wx: number, wz: number, y?: number): number {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.chunks.get(chunkKey(cx, cz));
+    if (!chunk?.columns) return 0;
+    const lx = wx - cx * CHUNK_SIZE;
+    const lz = wz - cz * CHUNK_SIZE;
+    const col = chunk.columns[lz * CHUNK_SIZE + lx];
+    if (!col) return 0;
+    if (y !== undefined && y !== col.height) return 0;
+    return col.step;
+  }
+
+  /**
+   * Standing height in world units, including the sub-voxel surface offset.
+   * Use this for placement and collision resolution rather than surfaceHeight.
+   */
+  groundHeight(wx: number, wz: number): number {
+    const bx = Math.floor(wx);
+    const bz = Math.floor(wz);
+    return surfaceHeightFromStep(this.surfaceHeight(bx, bz) + 1, this.surfaceStep(bx, bz));
   }
 
   updateAround(px: number, pz: number, _maxBuildsPerFrame = 2): void {
@@ -505,6 +535,7 @@ export class ChunkManager {
       (wx, y, wz) => sampleLight(this.lightWorld(), wx, y, wz),
       chunk.fluidLevel,
       (wx, y, wz) => this.sampleFluidLevel(wx, y, wz),
+      (wx, y, wz) => this.surfaceStep(wx, wz, y),
     );
 
     if (solid) {

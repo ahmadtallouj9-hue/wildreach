@@ -17,7 +17,9 @@
     "test:online": "tsx src/online/privacy/privacy.test.ts && tsx scripts/_smoke_online.ts",
     "test:background": "tsx src/ui/background/background.test.ts",
     "test:landscape": "tsx src/world/gen/landscape.test.ts",
-    "test": "npm run test:gen && npm run test:ai && npm run test:privacy && npm run test:multitask && npm run test:train && npm run test:modhub && npm run test:online && npm run test:background && npm run test:landscape",
+    "test:resolution": "tsx src/world/terrainResolution.test.ts",
+    "test:terrainlab": "tsx src/dev/terrainlab/terrainlab.test.ts",
+    "test": "npm run test:gen && npm run test:ai && npm run test:privacy && npm run test:multitask && npm run test:train && npm run test:modhub && npm run test:online && npm run test:background && npm run test:landscape && npm run test:resolution && npm run test:terrainlab && npm run test:worldstyle",
     "vythera:online": "tsx server/online/index.ts",
     "vythera:security:audit": "tsx scripts/vythera-security/audit.ts",
     "vythera:multitask:integration": "tsx scripts/vythera-train/run-multitask-integration.ts",
@@ -32,7 +34,8 @@
     "preview:mp": "concurrently -n web,mp -c cyan,magenta \"vite preview\" \"tsx server/index.ts\"",
     "deploy": "npx vercel --prod --yes",
     "deploy:prebuilt": "npm run build && npx vercel deploy --prod --yes",
-    "deploy:surge": "npm run build && npx surge dist wildreach-game.surge.sh"
+    "deploy:surge": "npm run build && npx surge dist wildreach-game.surge.sh",
+    "test:worldstyle": "tsx src/world/style/worldStyle.test.ts"
   },
   "devDependencies": {
     "@types/three": "^0.185.4",

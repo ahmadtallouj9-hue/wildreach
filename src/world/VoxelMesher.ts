@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Block, CHUNK_HEIGHT, CHUNK_SIZE, isOpaque } from './blocks';
 import { faceTexture, tileUv } from '../render/TextureAtlas';
+import { TERRAIN_VOXEL_SIZE } from './terrainResolution';
 
 type V3 = [number, number, number];
 export type NeighborLookup = (x: number, y: number, z: number) => number;
@@ -46,6 +47,10 @@ class MeshBuf {
     waterDepth = 0,
     spanU = 1,
     spanV = 1,
+    /** Raises the top of this block by N world units (terrain sub-voxel surface). */
+    lift = 0,
+    /** Lowest Y of a side skirt, relative to the block origin. */
+    sideBase = 0,
   ): void {
     const face = FACES[faceIndex]!;
     const { u0, v0, u1, v1 } = tileUv(faceTexture(block, faceIndex));
@@ -81,7 +86,14 @@ class MeshBuf {
       if (block === Block.Water) ao = Math.min(1, 0.12 + waterDepth / 16);
       aos.push(ao);
       const inset = block === Block.Water && faceIndex === 0 ? 0.12 : 0;
-      this.pos.push(ox + c[0], oy + c[1] - inset, oz + c[2]);
+      // Sub-voxel terrain surface: raise the top ring of the cube and drop the
+      // skirt base so adjacent columns of differing height stay watertight.
+      let cy = c[1];
+      if (lift !== 0 || sideBase !== 0) {
+        if (face.dir[1] === 1) cy = 1 + lift;
+        else if (face.dir[1] === 0) cy = c[1] === 1 ? 1 + lift : sideBase;
+      }
+      this.pos.push(ox + c[0], oy + cy - inset, oz + c[2]);
       this.nrm.push(face.dir[0], face.dir[1], face.dir[2]);
       const uu = i === 0 || i === 3 ? 0 : 1;
       const vv = i <= 1 ? 0 : 1;
@@ -209,6 +221,11 @@ export function meshChunk(
   getLight: LightLookup = () => 15,
   _fluidLevel: Uint8Array | null = null,
   _getFluidLevel?: FluidLevelLookup,
+  /**
+   * Sub-voxel surface elevation for a world column, in terrain voxels.
+   * Omit (or return 0) for LEGACY whole-block terrain.
+   */
+  getSurfaceStep: (wx: number, y: number, wz: number) => number = () => 0,
 ): ChunkMeshes {
   const solid = new MeshBuf();
   const cutout = new MeshBuf();
@@ -225,10 +242,25 @@ export function meshChunk(
         if (!block || !isOpaque(block)) continue;
         const wx = originX + x;
         const wz = originZ + z;
+
+        // A column's topmost opaque block carries the sub-voxel surface offset.
+        const isTop = !isOpaque(nb(x, y, z, 0, 1, 0));
+        const lift = isTop ? getSurfaceStep(wx, y, wz) * TERRAIN_VOXEL_SIZE : 0;
+
         for (let fi = 0; fi < 6; fi++) {
           const face = FACES[fi]!;
-          if (!showFace(block, nb(x, y, z, face.dir[0], face.dir[1], face.dir[2]), false)) continue;
-          solid.addFace(wx, y, wz, fi, block, getBlock, getLight, 0, 1, 1);
+          const neighbor = nb(x, y, z, face.dir[0], face.dir[1], face.dir[2]);
+          if (showFace(block, neighbor, false)) {
+            solid.addFace(wx, y, wz, fi, block, getBlock, getLight, 0, 1, 1, lift);
+            continue;
+          }
+          // Hidden side face, but a shorter neighbouring surface leaves a seam
+          // between its raised top and ours. Close it with a skirt quad.
+          if (lift <= 0 || face.dir[1] !== 0) continue;
+          if (isOpaque(nb(x, y, z, face.dir[0], 1, face.dir[2]))) continue;
+          const nLift = getSurfaceStep(wx + face.dir[0], y, wz + face.dir[2]) * TERRAIN_VOXEL_SIZE;
+          if (nLift >= lift) continue;
+          solid.addFace(wx, y, wz, fi, block, getBlock, getLight, 0, 1, 1, lift, 1 + nLift);
         }
       }
     }

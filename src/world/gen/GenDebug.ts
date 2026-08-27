@@ -44,7 +44,9 @@ export function formatGenDebug(world: WorldGen, wx: number, wz: number, mode: Ge
     case 'erosion':
       return `erosion=${c.erosion.toFixed(3)} peaks=${c.peaksValleys.toFixed(3)}`;
     case 'height':
-      return `height=${col.height} river=${c.river.toFixed(2)}`;
+      return `height=${col.height} river=${c.river.toFixed(2)} valley=${c.valleyFactor.toFixed(2)} ridge=${c.ridgeStrength.toFixed(2)}`;
+    case 'water':
+      return `river=${c.river.toFixed(3)} cont=${c.continentalness.toFixed(3)} h=${col.height}`;
     case 'seed':
       return `seed=${world.seed} v=${world.generationVersion}`;
     default:

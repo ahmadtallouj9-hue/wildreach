@@ -1,0 +1,261 @@
+.vy-lab {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #0b1016;
+  font-family: system-ui, sans-serif;
+}
+
+/* Stage holds the render surfaces; the panel sits beside it. */
+.vy-lab__stage {
+  position: absolute;
+  inset: 0 348px 0 0;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.vy-lab__stage:active {
+  cursor: grabbing;
+}
+
+.vy-lab__sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.vy-lab__sky .vy-pixel-bg__stage,
+.vy-lab__sky canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+}
+
+.vy-lab__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.vy-lab__canvas--b {
+  z-index: 2;
+  display: none;
+}
+
+.vy-lab__reference {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 50%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+  pointer-events: none;
+  border-right: 2px solid rgba(255, 255, 255, 0.45);
+}
+
+/* --- Side by side: A left, B right --- */
+.vy-lab[data-mode='split'] .vy-lab__canvas--a {
+  width: 50%;
+}
+
+.vy-lab[data-mode='split'] .vy-lab__canvas--b {
+  display: block;
+  left: 50%;
+  width: 50%;
+  border-left: 2px solid rgba(255, 255, 255, 0.45);
+}
+
+/* --- Overlay: B blended on top of A --- */
+.vy-lab[data-mode='overlay'] .vy-lab__canvas--b {
+  display: block;
+}
+
+/* --- Reference: image left, VYTHERA right --- */
+.vy-lab[data-mode='reference'] .vy-lab__reference {
+  display: block;
+}
+
+.vy-lab[data-mode='reference'] .vy-lab__canvas--a {
+  left: 50%;
+  width: 50%;
+}
+
+.vy-lab__panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  width: 348px;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 14px 16px 24px;
+  background: rgba(10, 15, 22, 0.94);
+  color: #dce6f2;
+  font-size: 12px;
+}
+
+.vy-lab__panel h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vy-lab__note {
+  margin: 0 0 10px;
+  color: #7f93ab;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.vy-lab__label {
+  margin: 13px 0 5px;
+  color: #8fa6bf;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vy-lab__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vy-lab__panel button {
+  flex: 1 1 auto;
+  min-width: 38px;
+  padding: 6px 9px;
+  border: 1px solid #2c3f56;
+  border-radius: 5px;
+  background: #16202c;
+  color: #cfe0f0;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.vy-lab__panel button:hover {
+  background: #1d2b3a;
+}
+
+.vy-lab__panel button.is-active {
+  border-color: #5d9fd6;
+  background: #23486b;
+  color: #fff;
+}
+
+.vy-lab__wide {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.vy-lab__target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  padding: 8px 9px;
+  border: 1px solid #2c3f56;
+  border-radius: 5px;
+  background: #121b25;
+}
+
+.vy-lab__target span {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.vy-lab__target b {
+  color: #8ecbff;
+}
+
+.vy-lab__saved {
+  color: #7f93ab;
+  font-size: 10px;
+}
+
+.vy-lab__status {
+  margin-top: 9px;
+  color: #8fa6bf;
+  font-size: 11px;
+}
+
+.vy-lab__bar {
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: #1c2836;
+  overflow: hidden;
+}
+
+.vy-lab__bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #5d9fd6;
+  transition: width 0.1s linear;
+}
+
+.vy-lab__check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: #b9cbdd;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.vy-lab__panel input[type='range'] {
+  width: 100%;
+  margin: 5px 0 4px;
+}
+
+.vy-lab__metrics {
+  margin-top: 15px;
+  border-top: 1px solid #22303f;
+  padding-top: 10px;
+}
+
+.vy-lab__m {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(34, 48, 63, 0.55);
+}
+
+.vy-lab__m--pair b {
+  flex: 0 0 78px;
+  text-align: right;
+}
+
+.vy-lab__m--head b {
+  color: #8ecbff;
+}
+
+.vy-lab__m span {
+  flex: 1 1 auto;
+  color: #8ba1b8;
+}
+
+.vy-lab__m b {
+  color: #eaf2fa;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.vy-lab__checklist {
+  margin-top: 16px;
+  border-top: 1px solid #22303f;
+  padding-top: 6px;
+}

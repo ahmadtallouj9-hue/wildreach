@@ -11,7 +11,7 @@ function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(msg);
 }
 
-assert(WORLD_GENERATION_VERSION === 5, 'expected generation version 5');
+assert(WORLD_GENERATION_VERSION === 6, 'expected generation version 6');
 
 const world = new WorldGen('landscape-v5', { terrain: 'balanced', caves: false });
 
