@@ -33,7 +33,18 @@ export const TERRAIN_VOXELS_PER_BLOCK = TERRAIN_SUBDIVISIONS ** 3;
  */
 export type TerrainResolutionMode = 'LEGACY' | 'HIGH_RESOLUTION';
 
-export const DEFAULT_TERRAIN_MODE: TerrainResolutionMode = 'HIGH_RESOLUTION';
+/**
+ * Whole blocks only.
+ *
+ * HIGH_RESOLUTION raises each column's top face by a fraction of a block and
+ * closes the resulting gaps with skirt quads, so surface blocks stop being
+ * cubes: tops sit at fractional heights and sides stretch into slivers and
+ * wedges. Once the atlas went flat there was no texture left to disguise it,
+ * and the terrain read as arbitrary shapes rather than blocks. Collision and
+ * placement derive from the same split, so this keeps them agreeing with what
+ * is drawn.
+ */
+export const DEFAULT_TERRAIN_MODE: TerrainResolutionMode = 'LEGACY';
 
 /** Number of distinct sub-block surface steps (0..TERRAIN_SUBDIVISIONS-1). */
 export const SURFACE_STEPS = TERRAIN_SUBDIVISIONS;
