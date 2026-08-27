@@ -38,47 +38,14 @@ export function quantizeToCell(height: number, r: number): number {
   return Math.round(height / r) * r;
 }
 
-export type SurfaceMaterial = 0 | 1 | 2 | 3 | 4 | 5;
-export const MATERIAL = {
-  Grass: 0 as SurfaceMaterial,
-  Dirt: 1 as SurfaceMaterial,
-  Rock: 2 as SurfaceMaterial,
-  Sand: 3 as SurfaceMaterial,
-  Snow: 4 as SurfaceMaterial,
-  Water: 5 as SurfaceMaterial,
-};
+import { MATERIAL, materialForBlock, type SurfaceMaterial } from '../materialPalette';
 
-/** Original VYTHERA palette. Not derived from any reference artwork. */
-export const MATERIAL_COLORS: Record<SurfaceMaterial, [number, number, number]> = {
-  0: [0.36, 0.55, 0.24],
-  1: [0.44, 0.33, 0.21],
-  2: [0.47, 0.46, 0.44],
-  3: [0.79, 0.72, 0.49],
-  4: [0.92, 0.93, 0.95],
-  5: [0.16, 0.44, 0.52],
-};
-
-/** Map a world block id onto the preview's small surface palette. */
-export function materialForBlock(block: number): SurfaceMaterial {
-  switch (block) {
-    case Block.Sand:
-      return MATERIAL.Sand;
-    case Block.Snow:
-    case Block.Ice:
-      return MATERIAL.Snow;
-    case Block.Stone:
-    case Block.Gravel:
-    case Block.DarkStone:
-      return MATERIAL.Rock;
-    case Block.Dirt:
-    case Block.Clay:
-      return MATERIAL.Dirt;
-    case Block.Water:
-      return MATERIAL.Water;
-    default:
-      return MATERIAL.Grass;
-  }
-}
+export {
+  MATERIAL,
+  MATERIAL_COLORS,
+  materialForBlock,
+  type SurfaceMaterial,
+} from '../materialPalette';
 
 export interface Tile {
   /** Quantized surface height per cell, row-major (z * n + x). */

@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import { Block } from '../world/blocks';
+import {
+  LEAF_COLOR,
+  MATERIAL,
+  MATERIAL_COLORS,
+  WOOD_COLOR,
+  materialBytes,
+} from '../world/materialPalette';
 
 /** 32px tiles — readable detail without noisy shimmer. */
 export const TILE = 32;
@@ -114,6 +121,76 @@ function paint(
       data[i + 1] = g;
       data[i + 2] = b;
       data[i + 3] = a;
+    }
+  }
+}
+
+/**
+ * Tiles whose colour is dictated by the shared palette, so a grass block in the
+ * world is the exact green the Custom World preview showed. Grass sides use the
+ * top colour too: the preview has no per-face banding, so neither does the game.
+ */
+const PALETTE_TILES: ReadonlyArray<readonly [number, [number, number, number]]> = [
+  [Tex.GrassTop, MATERIAL_COLORS[MATERIAL.Grass]],
+  [Tex.GrassSide, MATERIAL_COLORS[MATERIAL.Grass]],
+  [Tex.Moss, MATERIAL_COLORS[MATERIAL.Grass]],
+  [Tex.Dirt, MATERIAL_COLORS[MATERIAL.Dirt]],
+  [Tex.Stone, MATERIAL_COLORS[MATERIAL.Rock]],
+  [Tex.Sand, MATERIAL_COLORS[MATERIAL.Sand]],
+  [Tex.Snow, MATERIAL_COLORS[MATERIAL.Snow]],
+  [Tex.Water, MATERIAL_COLORS[MATERIAL.Water]],
+  [Tex.WoodSide, WOOD_COLOR],
+  [Tex.WoodTop, WOOD_COLOR],
+  [Tex.Leaves, LEAF_COLOR],
+];
+
+/**
+ * Collapse every tile to a single flat colour, matching the untextured look of
+ * the Custom World preview.
+ *
+ * Alpha is deliberately left untouched. The cutout materials key off it, so
+ * leaves keep their ragged silhouette and torch flames keep their shape even
+ * though their colour goes flat. Tiles outside the shared palette (crystal,
+ * ruin, lava and friends) average their own pixels instead, which keeps them
+ * telling apart from stone rather than collapsing into one grey.
+ */
+export function flattenTiles(data: Uint8ClampedArray): void {
+  const fixed = new Map<number, [number, number, number]>(
+    PALETTE_TILES.map(([tile, color]) => [tile, materialBytes(color)]),
+  );
+
+  for (let tile = 0; tile < ATLAS_GRID * ATLAS_GRID; tile++) {
+    const ox = (tile % ATLAS_GRID) * TILE;
+    const oy = Math.floor(tile / ATLAS_GRID) * TILE;
+
+    let flat = fixed.get(tile);
+    if (!flat) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let n = 0;
+      for (let y = 0; y < TILE; y++) {
+        for (let x = 0; x < TILE; x++) {
+          const i = ((oy + y) * ATLAS_PX + (ox + x)) * 4;
+          // Transparent pixels carry no colour worth averaging.
+          if (data[i + 3]! < 8) continue;
+          r += data[i]!;
+          g += data[i + 1]!;
+          b += data[i + 2]!;
+          n++;
+        }
+      }
+      if (n === 0) continue;
+      flat = [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+    }
+
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const i = ((oy + y) * ATLAS_PX + (ox + x)) * 4;
+        data[i] = flat[0];
+        data[i + 1] = flat[1];
+        data[i + 2] = flat[2];
+      }
     }
   }
 }
@@ -289,6 +366,8 @@ export function createTextureAtlas(): THREE.CanvasTexture {
     if (crack) return rgb(255, 200 + n * 20, 60 + hot * 30);
     return rgb(220 + n * 25, 58 + hot * 45, 10 + n * 8);
   });
+
+  flattenTiles(d);
 
   ctx.putImageData(img, 0, 0);
   const tex = new THREE.CanvasTexture(canvas);
