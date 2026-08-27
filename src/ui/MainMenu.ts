@@ -206,6 +206,7 @@ export class MainMenu {
             <button type="button" class="vy-btn vy-btn--primary" data-action="new-game">New Game</button>
             <button type="button" class="vy-btn" data-action="continue-world">Continue</button>
             <button type="button" class="vy-btn" data-action="worlds">Worlds</button>
+            <button type="button" class="vy-btn" data-action="custom-world">Custom World</button>
             <button type="button" class="vy-btn" data-action="multiplayer">Multiplayer</button>
             <button type="button" class="vy-btn" data-action="customize">Character</button>
             <button type="button" class="vy-btn" data-action="mod">MOD Studio</button>
@@ -655,6 +656,12 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
     });
     go('continue-world', () => this.continueLastWorld());
     go('worlds', () => this.openWorldPanel());
+    // The style editor is its own page, so it needs a real navigation rather
+    // than a panel swap. Worlds it creates are saved and then started from
+    // Worlds here, which is why it also needs a way back.
+    go('custom-world', () => {
+      window.location.href = 'customworld.html';
+    });
     go('settings', () => this.showPanel('settings'));
     go('customize', () => this.showPanel('customize'));
     go('mod', () => this.showPanel('mod'));

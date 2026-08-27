@@ -263,6 +263,20 @@
   font-size: 11.5px;
   line-height: 1.4;
 }
+/* The notice stack ignores pointer events, so an actionable notice opts back in. */
+.vy-cw__notice-action {
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: #6fd3a0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.vy-cw__notice-action:hover {
+  color: #8ff0bd;
+}
 .vy-cw__notice--bad {
   border-color: #7d3b3b;
   background: rgba(42, 16, 16, 0.92);

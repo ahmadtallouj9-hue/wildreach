@@ -544,6 +544,11 @@ export class CustomWorldEditor {
     });
 
     bar.append(
+      // Created worlds are started from the main menu, so leaving must not
+      // require typing a URL.
+      action('Back to menu', () => {
+        window.location.href = 'index.html';
+      }),
       undo,
       redo,
       action('Randomize style', () => {
@@ -626,16 +631,37 @@ export class CustomWorldEditor {
       style,
     });
     saveLastWorld(seed);
-    this.notify(`World "${style.name}" is ready. Start it from the main menu.`, 'info');
+    this.notify(`World "${style.name}" is ready.`, 'info', {
+      label: 'Open it in Worlds',
+      run: () => {
+        window.location.href = 'index.html#worlds';
+      },
+    });
   }
 
-  private notify(message: string, kind: 'info' | 'error'): void {
+  private notify(
+    message: string,
+    kind: 'info' | 'error',
+    /** Optional follow-up, so a notice can lead somewhere instead of just telling. */
+    action?: { label: string; run: () => void },
+  ): void {
     const line = document.createElement('p');
     line.className = kind === 'error' ? 'vy-cw__notice vy-cw__notice--bad' : 'vy-cw__notice';
     line.textContent = message;
+
+    if (action) {
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'vy-cw__notice-action';
+      link.textContent = action.label;
+      link.onclick = action.run;
+      line.append(' ', link);
+    }
+
     this.notices.prepend(line);
     while (this.notices.childElementCount > 4) this.notices.lastElementChild?.remove();
-    window.setTimeout(() => line.remove(), 8000);
+    // A notice offering a route stays until it is used; a plain one expires.
+    if (!action) window.setTimeout(() => line.remove(), 8000);
   }
 }
 

@@ -141,3 +141,9 @@ if (shared) {
   saveLastWorld(shared.seed);
 }
 menu.show();
+
+// The Custom World editor is a separate page, so it hands the player back here
+// with a hash saying where they were heading. Without it, creating a world
+// there ends on a screen with no route to the world you just made. This has to
+// run after show(), which resets the menu to the home panel.
+if (window.location.hash === '#worlds') menu.openPanel('world');
