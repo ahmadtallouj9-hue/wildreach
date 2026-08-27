@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { TerrainField, cellsPerBlock, type TerrainResolution } from './TerrainField';
 import { meshTile } from './SurfaceMesher';
 import type { TerrainCache } from './TerrainCache';
+import { yieldToBrowser } from './scheduler';
 import { PreviewSky } from './PreviewSky';
 import {
   EMPTY_VEGETATION,
@@ -217,6 +218,7 @@ export class TerrainView {
     // both keep the frame budget the interface needs to stay responsive.
     const SLICE_MS = 12;
     let sliceStart = performance.now();
+    let lastPaint = performance.now();
 
     for (let i = 0; i < queue.length; i++) {
       const { x0, z0 } = queue[i]!;
@@ -252,7 +254,7 @@ export class TerrainView {
 
       if (performance.now() - sliceStart >= SLICE_MS || i === queue.length - 1) {
         onProgress(i + 1, queue.length);
-        await new Promise((res) => requestAnimationFrame(() => res(null)));
+        lastPaint = await yieldToBrowser(lastPaint);
         if (token.cancelled) {
           // Only the abandoned work is thrown away; whatever is on screen
           // stays there.

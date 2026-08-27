@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { forEachPlant, type PlantKind, type PlantSite } from '../gen/VegetationPlacement';
 import type { TerrainField } from './TerrainField';
 import { vegetationBands, type VegetationBands } from './previewQuality';
+import { yieldToBrowser } from './scheduler';
 
 /** Used when a caller does not supply bands, e.g. tests and the lab. */
 const DEFAULT_BANDS: VegetationBands = vegetationBands('balanced', 'panorama');
@@ -190,6 +191,7 @@ export async function buildVegetation(
   // it now yields on elapsed time like the terrain builder does.
   const SLICE_MS = 12;
   let sliceStart = performance.now();
+  let lastPaint = performance.now();
 
   for (let strip = 0; strip < strips; strip++) {
     const z0 = minZ + strip * bandHeight;
@@ -236,7 +238,7 @@ export async function buildVegetation(
 
     if (performance.now() - sliceStart >= SLICE_MS || strip === strips - 1) {
       onProgress(strip + 1, strips);
-      await new Promise((res) => requestAnimationFrame(() => res(null)));
+      lastPaint = await yieldToBrowser(lastPaint);
       if (token.cancelled) return null;
       sliceStart = performance.now();
     }

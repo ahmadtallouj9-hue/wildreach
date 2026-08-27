@@ -31,7 +31,14 @@ export interface QualityProfile {
   label: string;
   /** Shown under the selector; must stay honest about cost. */
   note: string;
-  /** Square preview extent in world blocks. */
+  /**
+   * Square preview extent in world blocks.
+   *
+   * The same for every quality level, deliberately. Quality decides how much
+   * detail is spent on the landscape, not which landscape is shown — if the
+   * extent changed, the chosen region and camera poses would move with it and
+   * switching quality would reframe the shot instead of just sharpening it.
+   */
   regionBlocks: number;
   /** Tiles whose centre is beyond this from the eye are not built at all. */
   terrainRadius: number;
@@ -51,8 +58,8 @@ const PROFILES: Record<PreviewQuality, QualityProfile> = {
   fast: {
     id: 'fast',
     label: 'Fast',
-    note: 'Smallest area, quickest rebuilds. Best while dragging sliders.',
-    regionBlocks: 256,
+      note: 'Least distant detail, quickest rebuilds. Best while dragging sliders.',
+      regionBlocks: 512,
     terrainRadius: 380,
     lodFalloff: 260,
     progressive: true,

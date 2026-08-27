@@ -232,6 +232,14 @@ test('quality levels are ordered from cheapest to most detailed', () => {
   }
 });
 
+test('every quality level previews the same region', () => {
+  // Quality must not reframe the shot. A different extent would move the
+  // chosen region and the camera poses with it, so switching quality would
+  // show a different place rather than the same place in more detail.
+  const extents = new Set(PREVIEW_QUALITIES.map((q) => qualityProfile(q).regionBlocks));
+  assert.equal(extents.size, 1, `quality levels disagree on region size: ${[...extents]}`);
+});
+
 test('the default quality is balanced, not the most expensive one', () => {
   assert.equal(DEFAULT_QUALITY, 'balanced');
   assert.ok(qualityProfile('ultra').lodFalloff > qualityProfile(DEFAULT_QUALITY).lodFalloff);
