@@ -136,18 +136,51 @@ test('wood and leaves match the colours the preview draws trees with', () => {
   assert.deepEqual([leaf[0], leaf[1], leaf[2]], materialBytes(LEAF_COLOR));
 });
 
-test('cutout shapes survive flattening because alpha is untouched', () => {
+/** A hole through the middle, the way leaves and torch flames are drawn. */
+const holed = (x: number, y: number) => (x > 10 && x < 20 && y > 10 && y < 20 ? 0 : 255);
+
+test('a torch keeps its cutout silhouette', () => {
   const data = blankAtlas();
-  // A hole through the middle, the way leaves and torch flames are drawn.
-  const holed = (x: number, y: number) => (x > 10 && x < 20 && y > 10 && y < 20 ? 0 : 255);
+  paintNoise(data, Tex.Torch, [230, 140, 40], holed);
+
+  const before = tilePixels(data, Tex.Torch).map((p) => p[3]);
+  flattenTiles(data);
+  const after = tilePixels(data, Tex.Torch).map((p) => p[3]);
+
+  assert.deepEqual(after, before, 'flattening changed the torch silhouette');
+  assert.ok(after.some((a) => a === 0), 'the test tile should have had holes');
+});
+
+test('blocks drawn by the solid pass come out fully opaque', () => {
+  // Moss is an opaque block, but its texture used to punch alpha-0 holes. The
+  // solid shader ignores alpha, so those pixels rendered as black speckle.
+  const data = blankAtlas();
+  paintNoise(data, Tex.Moss, [40, 110, 50], holed);
   paintNoise(data, Tex.Leaves, [40, 110, 40], holed);
 
-  const before = tilePixels(data, Tex.Leaves).map((p) => p[3]);
   flattenTiles(data);
-  const after = tilePixels(data, Tex.Leaves).map((p) => p[3]);
 
-  assert.deepEqual(after, before, 'flattening changed the cutout silhouette');
-  assert.ok(after.some((a) => a === 0), 'the test tile should have had holes');
+  for (const tile of [Tex.Moss, Tex.Leaves]) {
+    for (const p of tilePixels(data, tile)) {
+      assert.equal(p[3], 255, `tile ${tile} still has a transparent pixel`);
+    }
+  }
+});
+
+test('no tile the solid pass draws contains a black pixel', () => {
+  const data = blankAtlas();
+  // Every tile that reaches the solid shader, painted with holes to be sure.
+  const solidTiles = [Tex.GrassTop, Tex.GrassSide, Tex.Dirt, Tex.Stone, Tex.Sand, Tex.Snow, Tex.Moss];
+  for (const tile of solidTiles) paintNoise(data, tile, [60, 120, 60], holed);
+
+  flattenTiles(data);
+
+  for (const tile of solidTiles) {
+    for (const p of tilePixels(data, tile)) {
+      const black = p[0] < 10 && p[1] < 10 && p[2] < 10;
+      assert.ok(!black, `tile ${tile} would render a black speckle`);
+    }
+  }
 });
 
 test('blocks outside the palette keep their own identity', () => {

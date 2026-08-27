@@ -145,14 +145,24 @@ const PALETTE_TILES: ReadonlyArray<readonly [number, [number, number, number]]> 
 ];
 
 /**
+ * Tiles allowed to keep transparent pixels.
+ *
+ * Everything else is forced fully opaque, because a 2D canvas stores colour
+ * premultiplied: any pixel written with alpha 0 reads back as pure black. The
+ * solid terrain shader ignores alpha entirely, so those pixels used to surface
+ * as black speckle on moss, and mipmaps dragged the same black into foliage
+ * seen from a distance. Torches genuinely need their cutout, and water drives
+ * its own alpha through the water shader.
+ */
+const KEEPS_ALPHA: ReadonlySet<number> = new Set([Tex.Torch, Tex.Water]);
+
+/**
  * Collapse every tile to a single flat colour, matching the untextured look of
  * the Custom World preview.
  *
- * Alpha is deliberately left untouched. The cutout materials key off it, so
- * leaves keep their ragged silhouette and torch flames keep their shape even
- * though their colour goes flat. Tiles outside the shared palette (crystal,
- * ruin, lava and friends) average their own pixels instead, which keeps them
- * telling apart from stone rather than collapsing into one grey.
+ * Tiles outside the shared palette (crystal, ruin, lava and friends) average
+ * their own pixels instead, which keeps them telling apart from stone rather
+ * than collapsing into one grey.
  */
 export function flattenTiles(data: Uint8ClampedArray): void {
   const fixed = new Map<number, [number, number, number]>(
@@ -184,12 +194,14 @@ export function flattenTiles(data: Uint8ClampedArray): void {
       flat = [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
     }
 
+    const opaque = !KEEPS_ALPHA.has(tile);
     for (let y = 0; y < TILE; y++) {
       for (let x = 0; x < TILE; x++) {
         const i = ((oy + y) * ATLAS_PX + (ox + x)) * 4;
         data[i] = flat[0];
         data[i + 1] = flat[1];
         data[i + 2] = flat[2];
+        if (opaque) data[i + 3] = 255;
       }
     }
   }
