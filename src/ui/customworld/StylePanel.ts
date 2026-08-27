@@ -11,6 +11,7 @@ import {
   RESOLUTION_LABELS,
   SKY_STYLES,
   TERRAIN_RESOLUTIONS,
+  WEATHER_STYLES,
   readParam,
   type LandscapeStyle,
   type LockState,
@@ -39,6 +40,7 @@ export interface StylePanelHandlers {
   onVegetationPreset: (id: string) => void;
   onSky: (id: string) => void;
   onCloud: (id: string) => void;
+  onWeather: (id: string) => void;
   onSeed: (seed: string) => void;
   onRandomSeed: () => void;
   onLockToggle: (group: StyleGroup, locked: boolean) => void;
@@ -255,6 +257,14 @@ export class StylePanel {
         CLOUD_STYLES.map((id) => ({ id, label: capitalize(id) })),
         this.style.atmosphere.cloudStyle,
         (id) => this.handlers.onCloud(id),
+      ),
+    );
+    wrap.append(label('Weather'));
+    wrap.append(
+      segmented(
+        WEATHER_STYLES.map((id) => ({ id, label: capitalize(id) })),
+        this.style.atmosphere.weather,
+        (id) => this.handlers.onWeather(id),
       ),
     );
     return wrap;

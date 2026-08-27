@@ -191,6 +191,9 @@ export class VoxelMenuLayer {
     this.camera = new THREE.PerspectiveCamera(shot.fov, 1, 0.1, 480);
 
     this.sky = new Sky(this.scene);
+    // The pixel-art sky renders behind this canvas, so the dome would just
+    // occlude it. Keep the Sky system for sun direction and fog colour.
+    this.sky.setDomeVisible(false);
     this.sky.setTimeOfDay(shot.time);
     this.sky.cloudCover = loadSettings().clouds;
 

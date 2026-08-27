@@ -69,7 +69,7 @@ export class ChunkPipeline {
     this.terrain = new TerrainShape(this.seed, this.options.terrain, this.options.tuning);
     this.caves = new CaveGenerator(this.seed, this.options.caves);
     this.ores = new OreGenerator(this.seed);
-    this.vegetation = new VegetationGenerator(this.seed);
+    this.vegetation = new VegetationGenerator(this.seed, this.options.tuning.vegetation);
     this.structures = new StructureGenerator(this.seed);
   }
 
@@ -240,6 +240,7 @@ export class ChunkPipeline {
       (x, z) => this.getHeight(x, z),
       (x, z) => this.getBiome(x, z),
       (x, z) => this.sampleColumn(x, z).climate,
+      this.options.tuning.seaLevel,
     );
 
     this.cache.clear();

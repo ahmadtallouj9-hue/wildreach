@@ -8,6 +8,14 @@
 import * as THREE from 'three';
 import { TerrainField, cellsPerBlock, type TerrainResolution, type Tile } from './TerrainField';
 import { meshTile } from './SurfaceMesher';
+import { PreviewSky } from './PreviewSky';
+import {
+  EMPTY_VEGETATION,
+  buildVegetation,
+  disposeVegetation,
+  type VegetationMetrics,
+} from './VegetationView';
+import type { VytheraWorldStyle } from '../style/WorldStyle';
 
 export interface ViewMetrics {
   resolution: TerrainResolution;
@@ -35,23 +43,74 @@ export class TerrainView {
   readonly canvas: HTMLCanvasElement;
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
+  readonly sky: PreviewSky;
   private group = new THREE.Group();
+  private vegGroup: THREE.Group | null = null;
+  private waterMesh: THREE.Mesh | null = null;
+  // Lambert rather than unlit: the preview has a real sun, so time of day and
+  // weather actually shade the land.
   // Double-sided: skirt quads are emitted from whichever cell owns the step, so
   // their winding is not consistently outward and culling would punch holes.
-  private material = new THREE.MeshBasicMaterial({
+  private material = new THREE.MeshLambertMaterial({
     vertexColors: true,
     side: THREE.DoubleSide,
   });
   metrics: ViewMetrics | null = null;
+  vegetationMetrics: VegetationMetrics = EMPTY_VEGETATION;
 
   constructor(className: string) {
     this.canvas = document.createElement('canvas');
     this.canvas.className = className;
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+    // preserveDrawingBuffer lets the editor grab a style thumbnail from the
+    // live preview instead of re-rendering the scene offscreen.
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas,
+      antialias: true,
+      preserveDrawingBuffer: true,
+    });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0x000000, 0);
     this.scene.add(this.group);
-    this.scene.fog = new THREE.Fog(0x9fc4e0, 220, 1000);
+    this.sky = new PreviewSky(this.scene);
+  }
+
+  /** Apply a style's sky, lighting and weather. Never touches terrain. */
+  applyAtmosphere(style: VytheraWorldStyle): void {
+    this.sky.apply(style);
+  }
+
+  /** Advance sky animation. */
+  tick(dt: number, eye: THREE.Vector3): void {
+    this.sky.update(dt, eye);
+  }
+
+  /**
+   * Rebuild only the vegetation layer, leaving terrain geometry in place.
+   * This is what makes a plant-density edit cheap.
+   */
+  async rebuildVegetation(
+    field: TerrainField,
+    origin: { x: number; z: number },
+    regionBlocks: number,
+    anchor: THREE.Vector3,
+    onProgress: (done: number, total: number) => void,
+    token: { cancelled: boolean } = { cancelled: false },
+  ): Promise<VegetationMetrics | null> {
+    const result = await buildVegetation(field, origin, regionBlocks, anchor, onProgress, token);
+    if (!result || token.cancelled) return null;
+    this.clearVegetation();
+    this.vegGroup = result.group;
+    this.scene.add(result.group);
+    this.vegetationMetrics = result.metrics;
+    return result.metrics;
+  }
+
+  private clearVegetation(): void {
+    if (!this.vegGroup) return;
+    this.scene.remove(this.vegGroup);
+    disposeVegetation(this.vegGroup);
+    this.vegGroup = null;
+    this.vegetationMetrics = EMPTY_VEGETATION;
   }
 
   setSize(w: number, h: number): void {
@@ -126,6 +185,8 @@ export class TerrainView {
       const tile: Tile = field.buildTile(x0, z0, TILE_BLOCKS, r, step);
       const t1 = performance.now();
       const { geometry, stats } = meshTile(tile);
+      // Lambert shading needs normals; the mesher only emits position/colour.
+      geometry.computeVertexNormals();
       const t2 = performance.now();
 
       genMs += t1 - t0;
@@ -155,7 +216,7 @@ export class TerrainView {
       }
     }
 
-    this.addWater(origin, regionBlocks, field.seaLevel);
+    this.setSeaLevel(origin, regionBlocks, field.seaLevel);
 
     const { collisionMs, collisionQueries } = measureCollision(field, origin, regionBlocks);
 
@@ -180,23 +241,35 @@ export class TerrainView {
     return this.metrics;
   }
 
-  private addWater(
-    origin: { x: number; z: number },
-    regionBlocks: number,
-    seaLevel: number,
-  ): void {
-    const geo = new THREE.PlaneGeometry(regionBlocks * 2, regionBlocks * 2);
-    geo.rotateX(-Math.PI / 2);
-    const mesh = new THREE.Mesh(
-      geo,
-      new THREE.MeshBasicMaterial({ color: 0x2f7f92, transparent: true, opacity: 0.82 }),
+  /**
+   * Sea plane at the style's sea level. Kept outside the tile group so moving
+   * sea level alone does not require remeshing terrain.
+   */
+  setSeaLevel(origin: { x: number; z: number }, regionBlocks: number, seaLevel: number): void {
+    if (!this.waterMesh) {
+      const geo = new THREE.PlaneGeometry(regionBlocks * 3, regionBlocks * 3);
+      geo.rotateX(-Math.PI / 2);
+      this.waterMesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshLambertMaterial({
+          color: 0x2f7f92,
+          transparent: true,
+          opacity: 0.82,
+        }),
+      );
+      this.scene.add(this.waterMesh);
+    }
+    this.waterMesh.position.set(
+      origin.x + regionBlocks / 2,
+      seaLevel,
+      origin.z + regionBlocks / 2,
     );
-    mesh.position.set(origin.x + regionBlocks / 2, seaLevel, origin.z + regionBlocks / 2);
-    this.group.add(mesh);
   }
 
   dispose(): void {
     this.clear();
+    this.clearVegetation();
+    this.sky.dispose();
     this.material.dispose();
     this.renderer.dispose();
     this.canvas.remove();

@@ -18,6 +18,7 @@ import {
   PARAM_SPECS,
   SKY_STYLES,
   TERRAIN_RESOLUTIONS,
+  WEATHER_STYLES,
   WORLD_STYLE_FORMAT,
   clampToSpec,
   createDefaultStyle,
@@ -28,6 +29,7 @@ import {
   type StyleGroup,
   type TerrainResolution,
   type VytheraWorldStyle,
+  type WeatherStyle,
 } from './WorldStyle';
 
 /** Refuse to even parse anything larger; a style is a few kilobytes of numbers. */
@@ -158,6 +160,7 @@ export function sanitizeStyle(input: unknown, warnings: string[] = []): VytheraW
     CLOUD_STYLES,
     'natural',
   );
+  style.atmosphere.weather = pickEnum<WeatherStyle>(atmosphere.weather, WEATHER_STYLES, 'clear');
 
   return style;
 }

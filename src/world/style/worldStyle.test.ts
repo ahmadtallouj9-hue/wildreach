@@ -27,9 +27,16 @@ import { WORLD_GENERATION_VERSION } from '../gen/version';
 test('a default style produces exactly neutral tuning', () => {
   const tuning = tuningFromStyle(createDefaultStyle());
   for (const key of Object.keys(NEUTRAL_TUNING) as (keyof typeof NEUTRAL_TUNING)[]) {
+    const actual = tuning[key];
+    const expected = NEUTRAL_TUNING[key];
+    if (typeof expected === 'object') {
+      // Vegetation is a nested group of multipliers; compare it field by field.
+      assert.deepStrictEqual(actual, expected, `${key} is not neutral`);
+      continue;
+    }
     assert.ok(
-      Math.abs(tuning[key] - NEUTRAL_TUNING[key]) < 1e-9,
-      `${key}: ${tuning[key]} != ${NEUTRAL_TUNING[key]}`,
+      Math.abs((actual as number) - (expected as number)) < 1e-9,
+      `${key}: ${actual} != ${expected}`,
     );
   }
 });

@@ -1,25 +1,40 @@
-import { Block, CHUNK_HEIGHT, CHUNK_SIZE, SEA_LEVEL } from '../blocks';
+import { Block, CHUNK_HEIGHT, CHUNK_SIZE } from '../blocks';
 import { BiomeId } from '../Biomes';
-import { BIOME_GEN } from './BiomeTable';
-import { treeChanceAt } from './BiomeBlend';
-import { blockToChunk, worldToLocalX, worldToLocalZ } from './WorldCoords';
+import {
+  NEUTRAL_VEGETATION,
+  SITE_STEP,
+  forEachPlant,
+  vegHash,
+  type PlantSite,
+  type TreeKind,
+  type VegetationTuning,
+} from './VegetationPlacement';
 import type { WorldSeed } from './SeedSystem';
 import type { ColumnInfo } from '../ColumnInfo';
 import type { ClimateSample } from './Climate';
 
-const TREE_MARGIN = 2;
-
-type TreeKind = NonNullable<(typeof BIOME_GEN)[BiomeId.Plains]['treeKind']>;
+/**
+ * Margin in blocks around a chunk whose plants can still reach inside it.
+ * Sized for the widest canopy plus the lattice jitter.
+ */
+const TREE_MARGIN = SITE_STEP + 6;
 
 /**
- * Vegetation + trees with feature ownership so canopy crossing chunk borders
- * is order-independent: origin chunk owns the feature; neighbors stamp local parts.
+ * Stamps vegetation blocks into a chunk.
+ *
+ * Placement decisions come entirely from VegetationPlacement, which the Custom
+ * World preview also uses; this class only turns those decisions into blocks.
+ * The lattice is global rather than chunk-relative, so a canopy straddling a
+ * chunk border is evaluated identically by both neighbours and cannot be
+ * half-stamped.
  */
 export class VegetationGenerator {
   private salt: number;
+  private veg: VegetationTuning;
 
-  constructor(seed: WorldSeed) {
+  constructor(seed: WorldSeed, vegetation: VegetationTuning = NEUTRAL_VEGETATION) {
     this.salt = seed.derive('trees');
+    this.veg = vegetation;
   }
 
   decorate(
@@ -30,105 +45,105 @@ export class VegetationGenerator {
     heightAt: (wx: number, wz: number) => number,
     biomeAt: (wx: number, wz: number) => BiomeId,
     climateAt?: (wx: number, wz: number) => ClimateSample,
+    seaLevelOverride?: number,
   ): void {
     const ox = cx * CHUNK_SIZE;
     const oz = cz * CHUNK_SIZE;
+    const seaLevel = seaLevelOverride ?? 48;
 
-    for (let wz = oz - TREE_MARGIN; wz < oz + CHUNK_SIZE + TREE_MARGIN; wz += 3) {
-      for (let wx = ox - TREE_MARGIN; wx < ox + CHUNK_SIZE + TREE_MARGIN; wx += 3) {
-        const jx = wx + Math.floor(hash(wx, wz, this.salt + 3) * 2);
-        const jz = wz + Math.floor(hash(wx + 5, wz + 7, this.salt + 5) * 2);
-        const owner = blockToChunk(jx, jz);
-        const r = hash(jx, jz, this.salt);
-        const biome = biomeAt(jx, jz);
-        const def = BIOME_GEN[biome];
-        const climate = climateAt?.(jx, jz);
-        if (!def || def.treeKind === 'none') {
-          if (owner.cx === cx && owner.cz === cz) {
-            this.tryGrass(jx, jz, voxels, cx, cz, columns, def?.grassChance ?? 0, r);
-          }
-          continue;
-        }
-
-        const h = heightAt(jx, jz);
-        const passTree =
-          climate != null
-            ? treeChanceAt(def.treeChance, climate, h, SEA_LEVEL, r)
-            : r < def.treeChance;
-
-        if (!passTree) {
-          if (owner.cx === cx && owner.cz === cz) {
-            this.tryGrass(jx, jz, voxels, cx, cz, columns, def.grassChance, r);
-          }
-          continue;
-        }
-
-        if (h <= SEA_LEVEL) continue;
-        if (biome === BiomeId.Ocean || biome === BiomeId.DeepOcean) continue;
-
-        const trunk = treeHeight(def.treeKind, jx, jz, this.salt);
-        placeTree(voxels, cx, cz, jx, h + 1, jz, def.treeKind, trunk);
-
-        if (biome === BiomeId.Mountains || biome === BiomeId.SnowyMountains) {
-          if (r < 0.04 && h > SEA_LEVEL + 16) {
-            placeBoulder(voxels, cx, cz, jx, h + 1, jz, hash(jx + 1, jz, this.salt));
-          }
-        }
-      }
-    }
+    forEachPlant(
+      ox,
+      oz,
+      CHUNK_SIZE,
+      this.salt,
+      TREE_MARGIN,
+      (x, z) => {
+        const climate = climateAt?.(x, z);
+        if (!climate) return null;
+        const height = heightAt(x, z);
+        // A one-block baseline keeps the grade comparable with the preview,
+        // which measures slope the same way.
+        const slope = Math.max(
+          Math.abs(heightAt(x + 1, z) - height),
+          Math.abs(heightAt(x, z + 1) - height),
+        );
+        return {
+          biome: biomeAt(x, z),
+          climate,
+          height,
+          slope,
+          seaLevel,
+          veg: this.veg,
+        };
+      },
+      (site) => this.stamp(site, voxels, cx, cz, columns, heightAt),
+    );
   }
 
-  private tryGrass(
-    wx: number,
-    wz: number,
+  private stamp(
+    site: PlantSite,
     voxels: Uint8Array,
     cx: number,
     cz: number,
     columns: ColumnInfo[],
-    chance: number,
-    r: number,
+    heightAt: (wx: number, wz: number) => number,
   ): void {
-    if (chance <= 0 || r >= chance + 0.02) return;
-    const lx = worldToLocalX(wx);
-    const lz = worldToLocalZ(wz);
-    if (lx < 0 || lz < 0 || lx >= CHUNK_SIZE || lz >= CHUNK_SIZE) return;
-    // only when this world cell is inside the chunk we're filling
+    const h = Math.floor(heightAt(site.x, site.z));
+    const y = h + 1;
+    switch (site.kind) {
+      case 'tree':
+        placeTree(voxels, cx, cz, site.x, y, site.z, site.treeKind, site.size);
+        return;
+      case 'rock':
+        placeBoulder(voxels, cx, cz, site.x, y, site.z, site.roll);
+        return;
+      case 'bush':
+        placeBush(voxels, cx, cz, site.x, y, site.z);
+        return;
+      case 'grass':
+      case 'flower':
+        // No dedicated flower block exists yet, so both kinds render in-world
+        // as ground cover; the preview draws them apart.
+        this.putCover(voxels, cx, cz, site.x, site.z, columns);
+        return;
+    }
+  }
+
+  private putCover(
+    voxels: Uint8Array,
+    cx: number,
+    cz: number,
+    wx: number,
+    wz: number,
+    columns: ColumnInfo[],
+  ): void {
     const ox = cx * CHUNK_SIZE;
     const oz = cz * CHUNK_SIZE;
     if (wx < ox || wx >= ox + CHUNK_SIZE || wz < oz || wz >= oz + CHUNK_SIZE) return;
-    const col = columns[lz * CHUNK_SIZE + lx];
-    if (!col || col.height <= SEA_LEVEL) return;
-    const top = getLocal(voxels, lx, col.height, lz);
+    const col = columns[(wz - oz) * CHUNK_SIZE + (wx - ox)];
+    if (!col) return;
+    const top = getLocal(voxels, wx - ox, col.height, wz - oz);
     if (top !== Block.Grass && top !== Block.Moss) return;
     setWorld(voxels, cx, cz, wx, col.height + 1, wz, Block.Moss);
   }
 }
 
-function hash(x: number, z: number, salt: number): number {
-  let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ (salt | 0);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-function treeHeight(kind: TreeKind, wx: number, wz: number, salt: number): number {
-  const r = hash(wx * 3, wz * 5, salt + 9);
-  switch (kind) {
-    case 'oak':
-      return 4 + Math.floor(r * 3);
-    case 'birch':
-      return 5 + Math.floor(r * 4);
-    case 'canopy':
-      return 5 + Math.floor(r * 5);
-    case 'pine':
-      return 7 + Math.floor(r * 5);
-    case 'jungle':
-      return 8 + Math.floor(r * 6);
-    case 'willow':
-      return 5 + Math.floor(r * 2);
-    case 'cactus':
-      return 3 + Math.floor(r * 3);
-    default:
-      return 4;
+function placeBush(
+  voxels: Uint8Array,
+  cx: number,
+  cz: number,
+  wx: number,
+  y: number,
+  wz: number,
+): void {
+  putLeaf(voxels, cx, cz, wx, y, wz);
+  for (const [dx, dz] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const) {
+    if (vegHash(wx + dx, wz + dz, 77) < 0.55) putLeaf(voxels, cx, cz, wx + dx, y, wz + dz);
   }
 }
 
@@ -164,7 +179,7 @@ function placeTree(
     for (let dx = -2; dx <= 2; dx++) {
       for (let dz = -2; dz <= 2; dz++) {
         if (Math.abs(dx) + Math.abs(dz) < 2) continue;
-        const hang = 2 + Math.floor(hash(wx + dx, wz + dz, 3) * 2);
+        const hang = 2 + Math.floor(vegHash(wx + dx, wz + dz, 3) * 2);
         for (let i = 0; i < hang; i++) putLeaf(voxels, cx, cz, wx + dx, y + trunk - 1 - i, wz + dz);
       }
     }

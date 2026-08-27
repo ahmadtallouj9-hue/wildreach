@@ -8,6 +8,10 @@
 import { ClimateSampler, type ClimateSample } from '../gen/Climate';
 import { TerrainShape, type TerrainType } from '../gen/TerrainShape';
 import { WorldSeed } from '../gen/SeedSystem';
+import { BIOME_GEN, selectBiome } from '../gen/BiomeTable';
+import { BiomeId } from '../Biomes';
+import { Block } from '../blocks';
+import type { VegetationTuning } from '../gen/VegetationPlacement';
 import { NEUTRAL_TUNING, tuningFromStyle, type TerrainTuning } from '../style/styleTuning';
 import type { VytheraWorldStyle } from '../style/WorldStyle';
 
@@ -53,6 +57,28 @@ export const MATERIAL_COLORS: Record<SurfaceMaterial, [number, number, number]> 
   4: [0.92, 0.93, 0.95],
   5: [0.16, 0.44, 0.52],
 };
+
+/** Map a world block id onto the preview's small surface palette. */
+export function materialForBlock(block: number): SurfaceMaterial {
+  switch (block) {
+    case Block.Sand:
+      return MATERIAL.Sand;
+    case Block.Snow:
+    case Block.Ice:
+      return MATERIAL.Snow;
+    case Block.Stone:
+    case Block.Gravel:
+    case Block.DarkStone:
+      return MATERIAL.Rock;
+    case Block.Dirt:
+    case Block.Clay:
+      return MATERIAL.Dirt;
+    case Block.Water:
+      return MATERIAL.Water;
+    default:
+      return MATERIAL.Grass;
+  }
+}
 
 export interface Tile {
   /** Quantized surface height per cell, row-major (z * n + x). */
@@ -105,6 +131,10 @@ export class TerrainField {
   /** Sea level for this field, which a world style can move. */
   readonly seaLevel: number;
   readonly snowLine: number;
+  /** Vegetation densities, shared with real chunk generation. */
+  readonly vegetation: VegetationTuning;
+  /** Same salt the chunk generator derives, so plants land in the same spots. */
+  readonly vegetationSalt: number;
 
   constructor(
     seedSource: string,
@@ -117,6 +147,26 @@ export class TerrainField {
     this.shape = new TerrainShape(this.seed, terrain, tuning);
     this.seaLevel = tuning.seaLevel;
     this.snowLine = tuning.snowLine;
+    this.vegetation = tuning.vegetation;
+    this.vegetationSalt = this.seed.derive('trees');
+  }
+
+  /** Climate at a world position, on the same lattice the generator uses. */
+  sampleClimate(wx: number, wz: number): ClimateSample {
+    return this.climateAt(Math.floor(wx), Math.floor(wz));
+  }
+
+  /** Biome via the canonical selector, so preview and world agree. */
+  biomeAt(wx: number, wz: number): BiomeId {
+    return selectBiome(this.sampleClimate(wx, wz), this.heightAt(wx, wz));
+  }
+
+  /** Grade over a one-block baseline, measured as chunk generation does. */
+  slopeAt(wx: number, wz: number, h = this.heightAt(wx, wz)): number {
+    return Math.max(
+      Math.abs(this.heightAt(wx + 1, wz) - h),
+      Math.abs(this.heightAt(wx, wz + 1) - h),
+    );
   }
 
   /** Build a field directly from a world style, seed included. */
@@ -224,6 +274,7 @@ export class TerrainField {
     // the same thing at every resolution.
     const span = Math.max(1, Math.round(1 / cell));
     for (let j = 0; j < n; j++) {
+      const lz = j * cell;
       for (let i = 0; i < n; i++) {
         const idx = j * n + i;
         const h = raw[idx]!;
@@ -231,7 +282,8 @@ export class TerrainField {
         const hz = raw[Math.min(n - 1, j + span) * n + i]!;
         const run = span * cell;
         const slope = Math.max(Math.abs(hx - h), Math.abs(hz - h)) / run;
-        materials[idx] = this.materialFor(h, slope);
+        const biome = selectBiome(sampleGrid(i * cell, lz), h);
+        materials[idx] = this.materialFor(h, slope, biome);
       }
     }
 
@@ -239,15 +291,21 @@ export class TerrainField {
   }
 
   /**
-   * Slope is measured in world units risen per world unit travelled, so the
-   * thresholds mean the same thing at every resolution.
+   * Surface material for a cell.
+   *
+   * Biome choice comes from the canonical selector, and the biome's own surface
+   * block decides the base material, so a desert previews as sand and a taiga
+   * as snow exactly as the generated world would. Height and grade then apply
+   * the same overrides chunk generation applies: shoreline sand, snow above the
+   * style's snow line, and bare rock where the ground is too steep to hold soil.
    */
-  private materialFor(h: number, slope: number): SurfaceMaterial {
+  private materialFor(h: number, slope: number, biome: BiomeId): SurfaceMaterial {
     if (h <= this.seaLevel + 0.5) return MATERIAL.Sand;
     if (h > this.snowLine) return MATERIAL.Snow;
     if (slope > 1.4) return MATERIAL.Rock;
-    if (slope > 0.7) return MATERIAL.Dirt;
-    return MATERIAL.Grass;
+    const base = materialForBlock(BIOME_GEN[biome]?.surface ?? Block.Grass);
+    if (slope > 0.7) return base === MATERIAL.Snow ? MATERIAL.Rock : MATERIAL.Dirt;
+    return base;
   }
 
   /** Theoretical surface cell count for a square region at this resolution. */

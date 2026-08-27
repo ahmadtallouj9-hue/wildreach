@@ -31,6 +31,8 @@ import {
   type VytheraWorldStyle,
 } from '../../world/style/WorldStyle';
 import { tuningFromStyle } from '../../world/style/styleTuning';
+import { SKY_STYLE_TIME } from '../../world/preview/atmosphere';
+import { scopeForGroup, widestScope, type RebuildScope } from './rebuildScope';
 import {
   applyLandscapePreset,
   applyVegetationPreset,
@@ -55,6 +57,9 @@ import './customworld.css';
 const PREVIEW_BLOCKS = 512;
 /** Slider drags settle before an expensive rebuild starts. */
 const REBUILD_DELAY_MS = 280;
+
+/** Hour each sky preset implies, so picking "Dusk" actually looks like dusk. */
+const SKY_PRESET_TIME = SKY_STYLE_TIME;
 
 export class CustomWorldEditor {
   readonly root = document.createElement('div');
@@ -88,6 +93,12 @@ export class CustomWorldEditor {
   private rebuildTimer = 0;
   private buildToken = { cancelled: false };
   private disposed = false;
+  /**
+   * Heaviest scope requested since the last rebuild ran. Starts at the
+   * cheapest: the initial build is kicked off directly by mount(), so nothing
+   * is pending until the player edits something.
+   */
+  private pendingScope: RebuildScope = 'sky';
 
   constructor(initial?: VytheraWorldStyle) {
     const style = initial ?? ensureDefaultStyle();
@@ -104,9 +115,11 @@ export class CustomWorldEditor {
       onParam: (spec, value) => this.editParam(spec, value),
       onResolution: (r) => this.setResolution(r),
       onLandscape: (id) => this.setLandscape(id),
-      onVegetationPreset: (id) => this.commit(applyVegetationPreset(this.style, id), 'veg-preset'),
+      onVegetationPreset: (id) =>
+        this.commit(applyVegetationPreset(this.style, id), 'veg-preset', 'vegetation'),
       onSky: (id) => this.setAtmosphere('skyStyle', id),
       onCloud: (id) => this.setAtmosphere('cloudStyle', id),
+      onWeather: (id) => this.setAtmosphere('weather', id),
       onSeed: (seed) => this.setSeed(seed),
       onRandomSeed: () => this.setSeed(randomSeed()),
       onLockToggle: (group, locked) => this.setLock(group, locked),
@@ -150,10 +163,10 @@ export class CustomWorldEditor {
 
   // --- Editing ---
 
-  private commit(next: VytheraWorldStyle, tag: string): void {
+  private commit(next: VytheraWorldStyle, tag: string, scope: RebuildScope = 'terrain'): void {
     this.history.push(next, tag);
     this.syncUi();
-    this.scheduleRebuild();
+    this.scheduleRebuild(scope);
   }
 
   private editParam(spec: ParamSpec, value: number): void {
@@ -161,7 +174,7 @@ export class CustomWorldEditor {
     // panel is synced without re-rendering so the dragged control survives.
     this.history.push(writeParam(this.style, spec, value), `${spec.group}.${spec.key}`);
     this.panel.sync(this.style);
-    this.scheduleRebuild();
+    this.scheduleRebuild(scopeForGroup(spec.group));
   }
 
   private setResolution(r: TerrainResolution): void {
@@ -174,10 +187,15 @@ export class CustomWorldEditor {
     this.commit(applyLandscapePreset(this.style, id, this.locks), 'landscape');
   }
 
-  private setAtmosphere(key: 'skyStyle' | 'cloudStyle', value: string): void {
+  private setAtmosphere(key: 'skyStyle' | 'cloudStyle' | 'weather', value: string): void {
     const next = cloneStyle(this.style);
     (next.atmosphere as unknown as Record<string, string>)[key] = value;
-    this.commit(next, `atmosphere.${key}`);
+    // A sky preset also sets the hour, so the time slider follows the choice.
+    if (key === 'skyStyle') {
+      const preset = SKY_PRESET_TIME[value];
+      if (preset !== undefined) next.atmosphere.timeOfDay = preset;
+    }
+    this.commit(next, `atmosphere.${key}`, 'sky');
   }
 
   private setSeed(seed: string): void {
@@ -205,59 +223,122 @@ export class CustomWorldEditor {
 
   // --- Preview ---
 
-  private scheduleRebuild(): void {
+  private scheduleRebuild(scope: RebuildScope = 'terrain'): void {
+    this.pendingScope = widestScope(this.pendingScope, scope);
+
+    // Atmosphere is cheap enough to apply on the spot, so the sky tracks the
+    // slider live instead of waiting for the debounce.
+    if (this.pendingScope === 'sky') {
+      this.view.applyAtmosphere(this.style);
+      this.setStatus('Updating atmosphere');
+    }
+
     window.clearTimeout(this.rebuildTimer);
-    this.rebuildTimer = window.setTimeout(() => void this.rebuild(false), REBUILD_DELAY_MS);
+    this.rebuildTimer = window.setTimeout(() => {
+      const scoped = this.pendingScope;
+      this.pendingScope = 'sky';
+      void this.rebuild(false, scoped);
+    }, REBUILD_DELAY_MS);
+  }
+
+  private setStatus(text: string): void {
+    this.status.textContent = text;
   }
 
   /**
    * Regenerate the bounded preview. `relocate` re-scans for a scenic region,
    * which is only needed when the seed or landform changes the world outright;
    * otherwise the camera stays put so parameter edits are directly comparable.
+   *
+   * `scope` decides how much is thrown away: sky-only edits never touch
+   * geometry, and vegetation edits reuse the terrain mesh already on screen.
    */
-  private async rebuild(relocate: boolean): Promise<void> {
+  private async rebuild(relocate: boolean, scope: RebuildScope = 'terrain'): Promise<void> {
     if (this.disposed) return;
     this.buildToken.cancelled = true;
     const token = { cancelled: false };
     this.buildToken = token;
 
     const style = cloneStyle(this.style);
+
+    // Atmosphere always re-applies: it is a handful of uniforms.
+    this.view.applyAtmosphere(style);
+
+    if (scope === 'sky') {
+      // Nothing was regenerated, so keep reporting what is actually on screen
+      // rather than replacing real figures with a bare "Ready".
+      this.setStatus(this.summary());
+      return;
+    }
+
+    // The field is rebuilt for both terrain and vegetation edits because it
+    // carries the plant densities as well as the landform. Constructing one is
+    // cheap — it only creates samplers — and the expensive terrain remesh below
+    // is still skipped unless the landform itself changed.
     const field = new TerrainField(style.seed, 'balanced', tuningFromStyle(style));
     this.field = field;
 
-    this.status.textContent = 'Generating preview...';
-
-    if (relocate || !this.region) {
-      this.region = findRegion(field, PREVIEW_BLOCKS);
-    }
+    if (relocate || !this.region) this.region = findRegion(field, PREVIEW_BLOCKS);
     this.poses = buildPoses(field, this.region, PREVIEW_BLOCKS);
 
     if (this.previewView === 'map') {
       this.renderMap();
-      this.status.textContent = '';
+      this.setStatus('Ready');
       return;
     }
 
     const pose = this.poses[this.previewView as ViewName];
     this.applyPose(pose);
 
-    const metrics = await this.view.build(
+    if (scope === 'terrain') {
+      this.setStatus('Building terrain');
+      const metrics = await this.view.build(
+        field,
+        this.region.origin,
+        PREVIEW_BLOCKS,
+        style.terrainVoxelSize,
+        pose.eye,
+        (done, total) => {
+          if (!token.cancelled) this.setStatus(`Building terrain ${done}/${total}`);
+        },
+        token,
+      );
+      if (token.cancelled || this.disposed || !metrics) return;
+
+      this.setStatus('Updating water');
+      this.view.setSeaLevel(this.region.origin, PREVIEW_BLOCKS, field.seaLevel);
+    }
+
+    this.setStatus('Placing vegetation');
+    const veg = await this.view.rebuildVegetation(
       field,
       this.region.origin,
       PREVIEW_BLOCKS,
-      style.terrainVoxelSize,
       pose.eye,
       (done, total) => {
-        if (!token.cancelled) this.status.textContent = `Generating ${done}/${total}`;
+        if (!token.cancelled) this.setStatus(`Placing vegetation ${done}/${total}`);
       },
       token,
     );
-
     if (token.cancelled || this.disposed) return;
-    this.status.textContent = metrics
-      ? `${metrics.triangles.toLocaleString()} triangles · ${(metrics.genMs + metrics.meshMs).toFixed(0)} ms`
-      : '';
+
+    if (!veg) return;
+    this.setStatus(this.summary());
     this.renderMap();
+  }
+
+  /** Honest one-line readout of what was actually built. */
+  private summary(): string {
+    const m = this.view.metrics;
+    const v = this.view.vegetationMetrics;
+    const parts: string[] = [];
+    if (m) {
+      parts.push(`${m.triangles.toLocaleString()} triangles`);
+      parts.push(`terrain ${(m.genMs + m.meshMs).toFixed(0)} ms`);
+    }
+    parts.push(`${v.total.toLocaleString()} plants`);
+    parts.push(`vegetation ${(v.placeMs + v.buildMs).toFixed(0)} ms`);
+    return `Ready · ${parts.join(' · ')}`;
   }
 
   private renderMap(): void {
@@ -288,6 +369,7 @@ export class CustomWorldEditor {
     this.lastFrame = now;
     if (this.previewView === 'map') return;
     this.controls.update(dt);
+    this.view.tick(dt, this.camera.position);
     this.view.render(this.camera);
   };
 
@@ -335,13 +417,37 @@ export class CustomWorldEditor {
     const saved = saveStyle(next);
     this.history.replace(saved);
 
-    const thumb = this.map.toThumbnail();
+    const thumb = this.captureThumbnail() ?? this.map.toThumbnail();
     if (thumb) setThumbnail(saved.id, thumb);
 
     this.library.refresh();
     this.library.setActive(saved.id);
     this.syncUi();
     this.notify(`Saved "${saved.name}".`, 'info');
+  }
+
+  /**
+   * Grab the live 3D preview for the style library, so a saved style is
+   * recognisable by its landscape, forest, water and sky rather than by a bare
+   * heightfield. Falls back to the map when the 3D view has nothing drawn yet.
+   */
+  private captureThumbnail(): string | null {
+    if (this.previewView === 'map' || !this.view.metrics) return null;
+    try {
+      this.view.render(this.camera);
+      const source = this.view.canvas;
+      const w = 320;
+      const h = Math.max(1, Math.round((source.height / source.width) * w));
+      const scaled = document.createElement('canvas');
+      scaled.width = w;
+      scaled.height = h;
+      const ctx = scaled.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(source, 0, 0, w, h);
+      return scaled.toDataURL('image/jpeg', 0.7);
+    } catch {
+      return null;
+    }
   }
 
   private load(style: VytheraWorldStyle): void {

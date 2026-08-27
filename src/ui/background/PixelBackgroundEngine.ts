@@ -277,15 +277,8 @@ export class PixelBackgroundEngine {
       }
     }
     if (skyOnly) {
-      const horizon = Math.floor(this.ih * 0.54);
-      ctx.clearRect(0, horizon, this.iw, this.ih - horizon);
-      const fade = ctx.createLinearGradient(0, horizon - 8, 0, horizon + 6);
-      fade.addColorStop(0, 'rgba(0,0,0,0)');
-      fade.addColorStop(1, 'rgba(0,0,0,1)');
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.fillStyle = fade;
-      ctx.fillRect(0, horizon - 8, this.iw, 14);
-      ctx.globalCompositeOperation = 'source-over';
+      // Full-frame backdrop: the voxel terrain canvas composites on top, so
+      // there is nothing to cut away at the horizon.
       if (this.layers.atmosphere) this.drawAtmosphere(ctx, phase);
       return;
     }
@@ -304,7 +297,7 @@ export class PixelBackgroundEngine {
     const bands = 12;
     for (let i = 0; i < bands; i++) {
       const f = i / (bands - 1);
-      const y0 = Math.floor((f * this.ih) / bands) * (this.ih / bands);
+      const y0 = Math.floor((i / bands) * this.ih);
       const y1 = Math.floor(((i + 1) / bands) * this.ih);
       let c: string;
       if (f < 0.45) c = colors.top;

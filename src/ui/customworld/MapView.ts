@@ -6,11 +6,34 @@
  * of the coastline and where mountains sit is far clearer from above than from
  * any ground camera.
  */
+import { BiomeId } from '../../world/Biomes';
+import { selectBiome } from '../../world/gen/BiomeTable';
 import type { TerrainField } from '../../world/preview/TerrainField';
 import type { VytheraWorldStyle } from '../../world/style/WorldStyle';
 
 /** Map samples are coarse on purpose: this runs on every parameter change. */
 const MAP_SAMPLES = 192;
+
+/** Legible top-down colour per biome. Distinct hues matter more than realism. */
+const BIOME_MAP_COLORS: Partial<Record<BiomeId, [number, number, number]>> = {
+  [BiomeId.Ocean]: [52, 104, 146],
+  [BiomeId.DeepOcean]: [32, 74, 116],
+  [BiomeId.Beach]: [214, 198, 142],
+  [BiomeId.River]: [78, 132, 168],
+  [BiomeId.Plains]: [138, 172, 92],
+  [BiomeId.Forest]: [74, 126, 66],
+  [BiomeId.DenseForest]: [52, 100, 52],
+  [BiomeId.BirchForest]: [122, 158, 88],
+  [BiomeId.Desert]: [222, 200, 138],
+  [BiomeId.Savanna]: [186, 178, 96],
+  [BiomeId.Jungle]: [56, 122, 58],
+  [BiomeId.Wetlands]: [86, 118, 84],
+  [BiomeId.Taiga]: [86, 122, 100],
+  [BiomeId.SnowyTaiga]: [166, 190, 186],
+  [BiomeId.Mountains]: [132, 128, 120],
+  [BiomeId.SnowyMountains]: [216, 224, 230],
+  [BiomeId.Tundra]: [196, 204, 200],
+};
 
 export class MapView {
   readonly canvas = document.createElement('canvas');
@@ -75,24 +98,20 @@ export class MapView {
           g = 240;
           b = 246;
         } else {
+          // Land is coloured by its actual biome, chosen with the same
+          // selector world generation uses, so the map reads as a biome map
+          // rather than a height ramp. Elevation then shades within the biome.
+          const wx = origin.x + i * step;
+          const wz = origin.z + j * step;
+          const biome = selectBiome(field.sampleClimate(wx, wz), h);
+          const [br, bg, bb] = BIOME_MAP_COLORS[biome] ?? [110, 140, 80];
           const t = Math.min(1, (h - sea) / land);
-          // Beach → grass → forest → rock, tinted by vegetation density.
-          const veg = Math.min(1.5, style.vegetation.treeDensity);
-          if (t < 0.04) {
-            r = 202;
-            g = 186;
-            b = 132;
-          } else if (t < 0.55) {
-            const k = t / 0.55;
-            r = 108 - k * 40 - veg * 12;
-            g = 150 - k * 24 + veg * 10;
-            b = 74 - k * 20;
-          } else {
-            const k = (t - 0.55) / 0.45;
-            r = 108 + k * 40;
-            g = 106 + k * 34;
-            b = 96 + k * 34;
-          }
+          // Denser planting reads as deeper green on forested ground.
+          const veg = Math.min(1.5, style.vegetation.treeDensity) - 1;
+          const lift = 0.86 + t * 0.3;
+          r = br * lift - veg * 10;
+          g = bg * lift + veg * 8;
+          b = bb * lift - veg * 6;
         }
 
         const o = idx * 4;

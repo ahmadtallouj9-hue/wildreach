@@ -210,6 +210,15 @@ export class Sky {
     this.scene.add(this.dome);
   }
 
+  /**
+   * Hide the sky dome while keeping sun direction and fog driven by this
+   * system. Used by the menu background, where a pixel-art sky sits behind
+   * a transparent voxel render instead.
+   */
+  setDomeVisible(visible: boolean): void {
+    this.dome.visible = visible;
+  }
+
   setTimeOfDay(t: number): void {
     this.timeOfDay = ((t % 1) + 1) % 1;
   }

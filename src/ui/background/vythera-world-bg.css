@@ -32,15 +32,15 @@
 }
 
 .vy-hybrid-bg__terrain {
-  z-index: 0;
+  z-index: 1;
 }
 
+/* Full-frame backdrop; the voxel terrain canvas composites over it. */
 .vy-hybrid-bg__sky {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 0;
   pointer-events: none;
-  clip-path: inset(0 0 38% 0);
 }
 
 .vy-hybrid-bg__sky .vy-pixel-bg__canvas {

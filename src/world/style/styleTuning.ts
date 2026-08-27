@@ -7,6 +7,7 @@
  * lets styles be introduced without invalidating existing saves.
  */
 import { SEA_LEVEL } from '../blocks';
+import { NEUTRAL_VEGETATION, type VegetationTuning } from '../gen/VegetationPlacement';
 import type { VytheraWorldStyle } from './WorldStyle';
 
 export interface TerrainTuning {
@@ -38,6 +39,9 @@ export interface TerrainTuning {
   temperatureOffset: number;
   moistureOffset: number;
   biomeVariation: number;
+
+  /** Vegetation densities, consumed by the shared placement rules. */
+  vegetation: VegetationTuning;
 }
 
 export const NEUTRAL_TUNING: TerrainTuning = {
@@ -65,6 +69,7 @@ export const NEUTRAL_TUNING: TerrainTuning = {
   temperatureOffset: 0,
   moistureOffset: 0,
   biomeVariation: 1,
+  vegetation: NEUTRAL_VEGETATION,
 };
 
 /** Guard against a zero scale collapsing a frequency to infinity. */
@@ -73,7 +78,7 @@ function inverse(scale: number): number {
 }
 
 export function tuningFromStyle(style: VytheraWorldStyle): TerrainTuning {
-  const { terrain, water, biome } = style;
+  const { terrain, water, biome, vegetation } = style;
   return {
     macroFreq: inverse(terrain.macroScale),
     regionalFreq: inverse(terrain.regionalScale),
@@ -102,5 +107,14 @@ export function tuningFromStyle(style: VytheraWorldStyle): TerrainTuning {
     temperatureOffset: biome.temperature,
     moistureOffset: biome.moisture,
     biomeVariation: biome.variation,
+
+    vegetation: {
+      treeDensity: vegetation.treeDensity,
+      grassDensity: vegetation.grassDensity,
+      flowerDensity: vegetation.flowerDensity,
+      rockDensity: vegetation.rockDensity,
+      bushDensity: vegetation.bushDensity,
+      variation: vegetation.variation ?? 1,
+    },
   };
 }

@@ -39,6 +39,7 @@ export type LandscapeStyle =
 
 export type SkyStyle = 'clear' | 'cloudy' | 'stormy' | 'dawn' | 'dusk';
 export type CloudStyle = 'sparse' | 'natural' | 'heavy';
+export type WeatherStyle = 'clear' | 'cloudy' | 'fog' | 'rain' | 'snow';
 
 export interface WorldStyleTerrain {
   macroScale: number;
@@ -80,12 +81,23 @@ export interface WorldStyleVegetation {
   flowerDensity: number;
   rockDensity: number;
   bushDensity: number;
+  /** Spread of tree size/shape within a species. 0 makes a plantation. */
+  variation: number;
 }
 
 export interface WorldStyleAtmosphere {
   fogDistance: number;
+  /** 0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 = sunset. */
+  timeOfDay: number;
+  /** Compass bearing of the sun in turns, so shadows can be aimed. */
+  sunBearing: number;
+  ambientIntensity: number;
+  cloudDensity: number;
+  cloudSize: number;
+  cloudSpeed: number;
   skyStyle: SkyStyle;
   cloudStyle: CloudStyle;
+  weather: WeatherStyle;
 }
 
 export interface VytheraWorldStyle {
@@ -183,13 +195,21 @@ export const PARAM_SPECS: ParamSpec[] = [
   { group: 'vegetation', key: 'flowerDensity', label: 'Flowers', min: 0, max: 3, step: 0.05, default: 1 },
   { group: 'vegetation', key: 'rockDensity', label: 'Rocks', min: 0, max: 3, step: 0.05, default: 1 },
   { group: 'vegetation', key: 'bushDensity', label: 'Bushes', min: 0, max: 3, step: 0.05, default: 1 },
+  { group: 'vegetation', key: 'variation', label: 'Plant variation', min: 0, max: 2, step: 0.05, default: 1, hint: 'Spread of plant sizes. 0 makes every tree identical.' },
 
   // --- Atmosphere ---
+  { group: 'atmosphere', key: 'timeOfDay', label: 'Time of day', min: 0, max: 1, step: 0.01, default: 0.32, basic: true, hint: '0 midnight, 0.25 sunrise, 0.5 noon, 0.75 sunset.' },
+  { group: 'atmosphere', key: 'cloudDensity', label: 'Cloud density', min: 0, max: 2, step: 0.05, default: 1, basic: true, hint: 'How much of the sky the clouds cover.' },
+  { group: 'atmosphere', key: 'cloudSize', label: 'Cloud size', min: 0.3, max: 3, step: 0.05, default: 1 },
+  { group: 'atmosphere', key: 'cloudSpeed', label: 'Cloud speed', min: 0, max: 3, step: 0.05, default: 1 },
+  { group: 'atmosphere', key: 'ambientIntensity', label: 'Ambient light', min: 0.2, max: 2, step: 0.05, default: 1, hint: 'Fill light in shadowed areas.' },
+  { group: 'atmosphere', key: 'sunBearing', label: 'Sun direction', min: 0, max: 1, step: 0.01, default: 0.15, hint: 'Compass bearing the sun rises from.' },
   { group: 'atmosphere', key: 'fogDistance', label: 'Fog distance', min: 60, max: 1200, step: 10, default: 640, unit: 'blocks' },
 ];
 
 export const SKY_STYLES: SkyStyle[] = ['clear', 'cloudy', 'stormy', 'dawn', 'dusk'];
 export const CLOUD_STYLES: CloudStyle[] = ['sparse', 'natural', 'heavy'];
+export const WEATHER_STYLES: WeatherStyle[] = ['clear', 'cloudy', 'fog', 'rain', 'snow'];
 
 export const LANDSCAPE_STYLES: { id: LandscapeStyle; label: string }[] = [
   { id: 'rolling', label: 'Rolling' },
@@ -229,9 +249,13 @@ export function createDefaultStyle(overrides: Partial<VytheraWorldStyle> = {}): 
     biome: defaultsFor('biome') as unknown as WorldStyleBiome,
     vegetation: defaultsFor('vegetation') as unknown as WorldStyleVegetation,
     atmosphere: {
-      ...(defaultsFor('atmosphere') as unknown as { fogDistance: number }),
+      ...(defaultsFor('atmosphere') as unknown as Omit<
+        WorldStyleAtmosphere,
+        'skyStyle' | 'cloudStyle' | 'weather'
+      >),
       skyStyle: 'clear',
       cloudStyle: 'natural',
+      weather: 'clear',
     },
     generationVersion: WORLD_GENERATION_VERSION,
     formatVersion: WORLD_STYLE_FORMAT,
