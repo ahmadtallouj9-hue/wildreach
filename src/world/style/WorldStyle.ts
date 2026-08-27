@@ -121,7 +121,31 @@ export interface VytheraWorldStyle {
   formatVersion: number;
   createdAt: number;
   updatedAt: number;
+  /**
+   * How this style came to exist. Optional so every style saved before the
+   * field existed still loads unchanged.
+   */
+  origin?: StyleOrigin;
 }
+
+/**
+ * Provenance of a style.
+ *
+ * 'vision' is reserved for the planned reference-image pipeline. Recording it
+ * lets the library show where a style came from without the loader having to
+ * guess, and gives that feature somewhere to write without a format change.
+ */
+export type StyleOrigin = {
+  kind: 'manual' | 'preset' | 'imported' | 'randomized' | 'vision';
+  /** Free-form, e.g. the preset name or a short description of the source. */
+  label?: string;
+  /**
+   * Colours sampled from the source, as '#rrggbb'. The preview does not read
+   * these yet; they exist so an image-derived style can carry its palette
+   * forward instead of losing it on save.
+   */
+  palette?: string[];
+};
 
 export type StyleGroup = 'terrain' | 'water' | 'biome' | 'vegetation' | 'atmosphere';
 

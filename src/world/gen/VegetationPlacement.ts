@@ -209,7 +209,11 @@ export function forEachPlant(
   salt: number,
   margin: number,
   context: (x: number, z: number) => PlantContext | null,
-  visit: (site: PlantSite) => void,
+  /**
+   * The context is handed back alongside the site so callers can reuse the
+   * terrain height it already sampled instead of querying the field again.
+   */
+  visit: (site: PlantSite, ctx: PlantContext) => void,
 ): void {
   const start = Math.floor((x0 - margin) / SITE_STEP) * SITE_STEP;
   const startZ = Math.floor((z0 - margin) / SITE_STEP) * SITE_STEP;
@@ -219,7 +223,7 @@ export function forEachPlant(
       const ctx = context(x, z);
       if (!ctx) continue;
       const site = plantAt(gx, gz, salt, ctx);
-      if (site) visit(site);
+      if (site) visit(site, ctx);
     }
   }
 }

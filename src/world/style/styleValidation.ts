@@ -78,6 +78,35 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
     : fallback;
 }
 
+const ORIGIN_KINDS = ['manual', 'preset', 'imported', 'randomized', 'vision'] as const;
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * Rebuild the optional provenance block, or return null if there isn't a
+ * usable one. Colours must be plain six-digit hex and the label is length
+ * capped, so nothing here can carry a payload into the library UI.
+ */
+function sanitizeOrigin(input: unknown): VytheraWorldStyle['origin'] | null {
+  if (typeof input !== 'object' || input === null) return null;
+  const raw = input as Record<string, unknown>;
+  const kind = ORIGIN_KINDS.includes(raw.kind as never)
+    ? (raw.kind as (typeof ORIGIN_KINDS)[number])
+    : null;
+  if (!kind) return null;
+
+  const out: NonNullable<VytheraWorldStyle['origin']> = { kind };
+  if (typeof raw.label === 'string' && raw.label.trim()) {
+    out.label = raw.label.trim().slice(0, 120);
+  }
+  if (Array.isArray(raw.palette)) {
+    const palette = raw.palette
+      .filter((c): c is string => typeof c === 'string' && HEX_COLOR.test(c))
+      .slice(0, 16);
+    if (palette.length) out.palette = palette;
+  }
+  return out;
+}
+
 /**
  * Rebuild a valid style from arbitrary input. Never throws: anything
  * unrecognised falls back to the default for that field and is reported as a
@@ -129,6 +158,12 @@ export function sanitizeStyle(input: unknown, warnings: string[] = []): VytheraW
     createdAt: Math.floor(safeNumber(raw.createdAt, Date.now())),
     updatedAt: Math.floor(safeNumber(raw.updatedAt, Date.now())),
   };
+
+  // Provenance is optional and purely descriptive, but it still arrives from
+  // untrusted files, so it is rebuilt field by field rather than copied. A
+  // style saved before this existed simply has no origin, which is valid.
+  const origin = sanitizeOrigin(raw.origin);
+  if (origin) style.origin = origin;
 
   const requestedSize = safeNumber(raw.terrainVoxelSize, 0.25);
   style.terrainVoxelSize = (TERRAIN_RESOLUTIONS as readonly number[]).includes(requestedSize)

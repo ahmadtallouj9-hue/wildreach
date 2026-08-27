@@ -21,6 +21,13 @@ import {
   type VytheraWorldStyle,
 } from '../../world/style/WorldStyle';
 import { VEGETATION_PRESETS } from '../../world/style/stylePresets';
+import {
+  DEFAULT_QUALITY,
+  PREVIEW_QUALITIES,
+  qualityProfile,
+  resolutionWarning,
+  type PreviewQuality,
+} from '../../world/preview/previewQuality';
 
 export type EditorMode = 'basic' | 'advanced';
 export type PreviewView = 'panorama' | 'hilltop' | 'ground' | 'map';
@@ -46,6 +53,7 @@ export interface StylePanelHandlers {
   onLockToggle: (group: StyleGroup, locked: boolean) => void;
   onMode: (mode: EditorMode) => void;
   onView: (view: PreviewView) => void;
+  onQuality: (quality: PreviewQuality) => void;
 }
 
 export class StylePanel {
@@ -54,14 +62,17 @@ export class StylePanel {
   private mode: EditorMode = 'basic';
   private style: VytheraWorldStyle;
   private locks: LockState;
+  private quality: PreviewQuality;
 
   constructor(
     style: VytheraWorldStyle,
     locks: LockState,
     private handlers: StylePanelHandlers,
+    quality: PreviewQuality = DEFAULT_QUALITY,
   ) {
     this.style = style;
     this.locks = locks;
+    this.quality = quality;
     this.root.className = 'vy-cw__panel';
     this.body.className = 'vy-cw__body';
     this.root.append(this.header(), this.body);
@@ -117,7 +128,36 @@ export class StylePanel {
       (id) => this.handlers.onView(id as PreviewView),
     );
 
-    head.append(title, sub, label('Editor'), modes, label('Preview'), views);
+    // Quality is a preview setting, never part of the style. It is placed with
+    // the other preview controls, and its note states the cost plainly rather
+    // than implying every level is free.
+    const qualityNote = document.createElement('p');
+    qualityNote.className = 'vy-cw__note';
+    qualityNote.textContent = qualityProfile(this.quality).note;
+
+    const quality = segmented(
+      PREVIEW_QUALITIES.map((id) => ({ id, label: qualityProfile(id).label })),
+      this.quality,
+      (id) => {
+        this.quality = id as PreviewQuality;
+        // The header is built once, so the note is updated in place rather
+        // than through a full re-render, which would drop the selector.
+        qualityNote.textContent = qualityProfile(this.quality).note;
+        this.handlers.onQuality(this.quality);
+      },
+    );
+
+    head.append(
+      title,
+      sub,
+      label('Editor'),
+      modes,
+      label('Preview'),
+      views,
+      label('Preview quality'),
+      quality,
+      qualityNote,
+    );
     return head;
   }
 
@@ -230,6 +270,15 @@ export class StylePanel {
     note.className = meta.costly ? 'vy-cw__note vy-cw__note--warn' : 'vy-cw__note';
     note.textContent = meta.costly ? `Heavier setting. ${meta.note}` : meta.note;
     wrap.append(note);
+
+    // Ultra stays selectable; it just says what it will cost first.
+    const warning = resolutionWarning(this.style.terrainVoxelSize, this.quality);
+    if (warning) {
+      const warn = document.createElement('p');
+      warn.className = 'vy-cw__note vy-cw__note--warn';
+      warn.textContent = warning;
+      wrap.append(warn);
+    }
     return wrap;
   }
 

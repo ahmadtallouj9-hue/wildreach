@@ -17,6 +17,10 @@
 import * as THREE from 'three';
 import { forEachPlant, type PlantKind, type PlantSite } from '../gen/VegetationPlacement';
 import type { TerrainField } from './TerrainField';
+import { vegetationBands, type VegetationBands } from './previewQuality';
+
+/** Used when a caller does not supply bands, e.g. tests and the lab. */
+const DEFAULT_BANDS: VegetationBands = vegetationBands('balanced', 'panorama');
 
 export interface VegetationMetrics {
   trees: number;
@@ -25,6 +29,10 @@ export interface VegetationMetrics {
   flowers: number;
   rocks: number;
   total: number;
+  /** Plants drawn at each detail level, for honest LOD reporting. */
+  near: number;
+  medium: number;
+  far: number;
   /** Time spent deciding placement, i.e. sampling terrain and climate. */
   placeMs: number;
   /** Time spent building instanced meshes. */
@@ -39,28 +47,52 @@ export const EMPTY_VEGETATION: VegetationMetrics = {
   flowers: 0,
   rocks: 0,
   total: 0,
+  near: 0,
+  medium: 0,
+  far: 0,
   placeMs: 0,
   buildMs: 0,
   drawCalls: 0,
 };
 
 /**
- * Ground cover is only legible close to the eye, so it is placed in a tight
- * radius while trees, bushes and rocks fill the wider scene. This is a
- * rendering budget, not a change to the rules: the same site would still hold
- * the same plant if the radius were larger.
+ * Detail level for one plant, chosen by its distance from the eye.
+ *
+ * This is a rendering budget, not a change to the rules: a plant that drops to
+ * a cheaper level is the same plant, on the same spot, that the generated world
+ * will contain. Only how many triangles it costs changes.
  */
-const TREE_RADIUS = 300;
-const COVER_RADIUS = 110;
+export type VegetationLod = 0 | 1 | 2;
+export const LOD_NEAR: VegetationLod = 0;
+export const LOD_MEDIUM: VegetationLod = 1;
+export const LOD_FAR: VegetationLod = 2;
 
 /** Hard ceilings so a density of 3 cannot exhaust memory on a weak machine. */
-const LIMITS: Record<PlantKind, number> = {
+const BASE_LIMITS: Record<PlantKind, number> = {
   tree: 9000,
   bush: 9000,
   grass: 26000,
   flower: 14000,
   rock: 9000,
 };
+
+/**
+ * Pick a detail level, or null to cull.
+ *
+ * Ground cover has its own shorter reach because a grass tuft is a few pixels
+ * tall by the time a tree is still clearly readable.
+ */
+export function lodForDistance(
+  d: number,
+  bands: VegetationBands,
+  cover: boolean,
+): VegetationLod | null {
+  if (cover) return d <= bands.cover ? LOD_NEAR : null;
+  if (d <= bands.near) return LOD_NEAR;
+  if (d <= bands.medium) return LOD_MEDIUM;
+  if (d <= bands.far) return LOD_FAR;
+  return null;
+}
 
 const TRUNK_COLOR = new THREE.Color(0.29, 0.19, 0.11);
 const LEAF_COLORS: Record<string, THREE.Color> = {
@@ -82,10 +114,28 @@ const FLOWER_COLORS = [
 interface Bucket {
   sites: PlantSite[];
   heights: number[];
+  lods: VegetationLod[];
 }
 
 function bucket(): Bucket {
-  return { sites: [], heights: [] };
+  return { sites: [], heights: [], lods: [] };
+}
+
+/** Split a bucket into one sub-bucket per detail level. */
+function byLod(b: Bucket): Map<VegetationLod, Bucket> {
+  const out = new Map<VegetationLod, Bucket>();
+  for (let i = 0; i < b.sites.length; i++) {
+    const lod = b.lods[i]!;
+    let sub = out.get(lod);
+    if (!sub) {
+      sub = bucket();
+      out.set(lod, sub);
+    }
+    sub.sites.push(b.sites[i]!);
+    sub.heights.push(b.heights[i]!);
+    sub.lods.push(lod);
+  }
+  return out;
 }
 
 /**
@@ -101,6 +151,8 @@ export async function buildVegetation(
   anchor: THREE.Vector3,
   onProgress: (done: number, total: number) => void,
   token: { cancelled: boolean } = { cancelled: false },
+  bands: VegetationBands | undefined = DEFAULT_BANDS,
+  budget = 1,
 ): Promise<{ group: THREE.Group; metrics: VegetationMetrics } | null> {
   const group = new THREE.Group();
   const t0 = performance.now();
@@ -113,18 +165,34 @@ export async function buildVegetation(
     rock: bucket(),
   };
 
+  const limits: Record<PlantKind, number> = {
+    tree: Math.round(BASE_LIMITS.tree * budget),
+    bush: Math.round(BASE_LIMITS.bush * budget),
+    grass: Math.round(BASE_LIMITS.grass * budget),
+    flower: Math.round(BASE_LIMITS.flower * budget),
+    rock: Math.round(BASE_LIMITS.rock * budget),
+  };
+
   // Restrict the lattice walk to the area that can actually be seen, clamped
   // to the preview region so plants never float outside the terrain.
-  const minX = Math.max(origin.x, anchor.x - TREE_RADIUS);
-  const maxX = Math.min(origin.x + blocks, anchor.x + TREE_RADIUS);
-  const minZ = Math.max(origin.z, anchor.z - TREE_RADIUS);
-  const maxZ = Math.min(origin.z + blocks, anchor.z + TREE_RADIUS);
+  const reach = bands.far;
+  const minX = Math.max(origin.x, anchor.x - reach);
+  const maxX = Math.min(origin.x + blocks, anchor.x + reach);
+  const minZ = Math.max(origin.z, anchor.z - reach);
+  const maxZ = Math.min(origin.z + blocks, anchor.z + reach);
 
   const bandHeight = 48;
-  const bands = Math.max(1, Math.ceil((maxZ - minZ) / bandHeight));
+  const strips = Math.max(1, Math.ceil((maxZ - minZ) / bandHeight));
 
-  for (let band = 0; band < bands; band++) {
-    const z0 = minZ + band * bandHeight;
+  // Deciding where plants go is cheap — tens of milliseconds for a whole
+  // region. Yielding after every strip regardless meant the pass was dominated
+  // by waiting for frames, which are slow precisely when the scene is heavy, so
+  // it now yields on elapsed time like the terrain builder does.
+  const SLICE_MS = 12;
+  let sliceStart = performance.now();
+
+  for (let strip = 0; strip < strips; strip++) {
+    const z0 = minZ + strip * bandHeight;
     const zEnd = Math.min(maxZ, z0 + bandHeight);
     if (zEnd <= z0) continue;
 
@@ -136,8 +204,7 @@ export async function buildVegetation(
       0,
       (x, z) => {
         if (z < z0 || z >= zEnd) return null;
-        const d = Math.hypot(x - anchor.x, z - anchor.z);
-        if (d > TREE_RADIUS) return null;
+        if (Math.hypot(x - anchor.x, z - anchor.z) > reach) return null;
         const height = field.heightAt(x, z);
         if (height <= field.seaLevel) return null;
         return {
@@ -149,19 +216,30 @@ export async function buildVegetation(
           veg: field.vegetation,
         };
       },
-      (site) => {
-        const isCover = site.kind === 'grass' || site.kind === 'flower';
-        if (isCover && Math.hypot(site.x - anchor.x, site.z - anchor.z) > COVER_RADIUS) return;
+      (site, ctx) => {
+        const cover = site.kind === 'grass' || site.kind === 'flower';
+        const d = Math.hypot(site.x - anchor.x, site.z - anchor.z);
+        let lod = lodForDistance(d, bands, cover);
+        if (lod === null) return;
+        // Bushes and rocks are small enough that a billboard at extreme range
+        // reads as visual noise, so they stop at the medium band.
+        if ((site.kind === 'bush' || site.kind === 'rock') && lod === LOD_FAR) return;
         const b = buckets[site.kind];
-        if (b.sites.length >= LIMITS[site.kind]) return;
+        if (b.sites.length >= limits[site.kind]) return;
         b.sites.push(site);
-        b.heights.push(field.heightAt(site.x, site.z));
+        // ctx.height is already the surface height at this exact jittered
+        // position, so the old second heightAt call per plant is gone.
+        b.heights.push(ctx.height);
+        b.lods.push(lod);
       },
     );
 
-    onProgress(band + 1, bands);
-    await new Promise((res) => requestAnimationFrame(() => res(null)));
-    if (token.cancelled) return null;
+    if (performance.now() - sliceStart >= SLICE_MS || strip === strips - 1) {
+      onProgress(strip + 1, strips);
+      await new Promise((res) => requestAnimationFrame(() => res(null)));
+      if (token.cancelled) return null;
+      sliceStart = performance.now();
+    }
   }
 
   const placeMs = performance.now() - t0;
@@ -180,18 +258,27 @@ export async function buildVegetation(
     if ((o as THREE.InstancedMesh).isInstancedMesh) drawCalls++;
   });
 
+  let near = 0;
+  let medium = 0;
+  let far = 0;
+  for (const b of Object.values(buckets)) {
+    for (const lod of b.lods) {
+      if (lod === LOD_NEAR) near++;
+      else if (lod === LOD_MEDIUM) medium++;
+      else far++;
+    }
+  }
+
   const metrics: VegetationMetrics = {
     trees: buckets.tree.sites.length,
     bushes: buckets.bush.sites.length,
     grass: buckets.grass.sites.length,
     flowers: buckets.flower.sites.length,
     rocks: buckets.rock.sites.length,
-    total:
-      buckets.tree.sites.length +
-      buckets.bush.sites.length +
-      buckets.grass.sites.length +
-      buckets.flower.sites.length +
-      buckets.rock.sites.length,
+    total: near + medium + far,
+    near,
+    medium,
+    far,
     placeMs,
     buildMs,
     drawCalls,
@@ -242,69 +329,106 @@ function setInstance(
   mesh.setColorAt(i, color);
 }
 
-function addTrees(group: THREE.Group, b: Bucket): void {
+/**
+ * Trees, built once per detail level.
+ *
+ * Near trees get a trunk and a shaped crown. Medium trees drop the trunk and
+ * use a coarser crown, which at that range is indistinguishable but costs a
+ * third of the triangles. Far trees become a crossed billboard tinted by
+ * species, so a distant forest still reads as a forest — and as the right kind
+ * of forest — for four triangles a tree.
+ */
+function addTrees(group: THREE.Group, all: Bucket): void {
+  if (!all.sites.length) return;
+
+  for (const [lod, b] of byLod(all)) {
+    if (lod === LOD_FAR) {
+      addTreeImpostors(group, b);
+      continue;
+    }
+
+    const detailed = lod === LOD_NEAR;
+
+    if (detailed) {
+      const trunks = instanced(new THREE.BoxGeometry(1, 1, 1), b.sites.length);
+      for (let i = 0; i < b.sites.length; i++) {
+        const s = b.sites[i]!;
+        const h = b.heights[i]!;
+        const trunkH = s.size;
+        const width = s.treeKind === 'jungle' || s.treeKind === 'canopy' ? 0.9 : 0.65;
+        setInstance(
+          trunks, i, s.x + 0.5, h + trunkH / 2, s.z + 0.5,
+          width, trunkH, width, 0, TRUNK_COLOR,
+        );
+      }
+      trunks.instanceMatrix.needsUpdate = true;
+      group.add(trunks);
+    }
+
+    const bySpecies = new Map<string, { sites: PlantSite[]; heights: number[] }>();
+    for (let i = 0; i < b.sites.length; i++) {
+      const s = b.sites[i]!;
+      let list = bySpecies.get(s.treeKind);
+      if (!list) {
+        list = { sites: [], heights: [] };
+        bySpecies.set(s.treeKind, list);
+      }
+      list.sites.push(s);
+      list.heights.push(b.heights[i]!);
+    }
+
+    for (const [kind, list] of bySpecies) {
+      const conifer = kind === 'pine';
+      const geo = conifer
+        ? new THREE.ConeGeometry(1, 1, detailed ? 7 : 5)
+        : new THREE.IcosahedronGeometry(0.5, 0);
+      const mesh = instanced(geo, list.sites.length);
+      const base = LEAF_COLORS[kind] ?? LEAF_COLORS.oak!;
+
+      for (let i = 0; i < list.sites.length; i++) {
+        const s = list.sites[i]!;
+        const h = list.heights[i]!;
+        // Shade each crown slightly by its own roll so a forest is not a
+        // single flat green.
+        const tint = base.clone().multiplyScalar(0.82 + s.roll * 0.36);
+        if (kind === 'cactus') {
+          setInstance(mesh, i, s.x + 0.5, h + s.size * 0.5, s.z + 0.5, 0.9, s.size, 0.9, 0, tint);
+          continue;
+        }
+        const crownR = conifer ? 2.1 : kind === 'jungle' ? 4 : kind === 'canopy' ? 3.4 : 2.6;
+        const crownH = conifer ? s.size * 1.15 : crownR * 1.5;
+        // Without a trunk the crown is dropped to sit where the canopy mass
+        // was, so the silhouette does not jump as a tree crosses the band.
+        const cy = conifer
+          ? h + s.size * 0.55 + crownH / 2
+          : h + (detailed ? s.size : s.size * 0.72) + crownH * 0.22;
+        setInstance(
+          mesh, i, s.x + 0.5, cy, s.z + 0.5,
+          crownR * 2, crownH, crownR * 2, s.roll * Math.PI, tint,
+        );
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      group.add(mesh);
+    }
+  }
+}
+
+/** Distant trees: one crossed billboard each, still tinted by species. */
+function addTreeImpostors(group: THREE.Group, b: Bucket): void {
   if (!b.sites.length) return;
-
-  // Trunks share one box; the canopy geometry differs per species silhouette,
-  // so conifers read as cones and broadleaves as rounded crowns even at a
-  // distance, which is most of what makes a forest legible from a hilltop.
-  const trunks = instanced(new THREE.BoxGeometry(1, 1, 1), b.sites.length);
-  const bySpecies = new Map<string, { sites: PlantSite[]; heights: number[] }>();
-
+  const mesh = instanced(coverGeometry(), b.sites.length, true);
   for (let i = 0; i < b.sites.length; i++) {
     const s = b.sites[i]!;
     const h = b.heights[i]!;
-    const trunkH = s.size;
-    const width = s.treeKind === 'jungle' || s.treeKind === 'canopy' ? 0.9 : 0.65;
-    setInstance(trunks, i, s.x + 0.5, h + trunkH / 2, s.z + 0.5, width, trunkH, width, 0, TRUNK_COLOR);
-    let list = bySpecies.get(s.treeKind);
-    if (!list) {
-      list = { sites: [], heights: [] };
-      bySpecies.set(s.treeKind, list);
-    }
-    list.sites.push(s);
-    list.heights.push(h);
+    const base = LEAF_COLORS[s.treeKind] ?? LEAF_COLORS.oak!;
+    const tint = base.clone().multiplyScalar(0.8 + s.roll * 0.3);
+    const conifer = s.treeKind === 'pine';
+    const width = conifer ? 3.6 : s.treeKind === 'jungle' ? 7 : 5;
+    const tall = s.size + (conifer ? s.size * 0.9 : 3.4);
+    setInstance(mesh, i, s.x + 0.5, h, s.z + 0.5, width, tall, width, s.roll * Math.PI, tint);
   }
-  trunks.instanceMatrix.needsUpdate = true;
-  group.add(trunks);
-
-  for (const [kind, list] of bySpecies) {
-    const conifer = kind === 'pine';
-    const geo = conifer
-      ? new THREE.ConeGeometry(1, 1, 7)
-      : new THREE.IcosahedronGeometry(0.5, 0);
-    const mesh = instanced(geo, list.sites.length);
-    const base = LEAF_COLORS[kind] ?? LEAF_COLORS.oak!;
-
-    for (let i = 0; i < list.sites.length; i++) {
-      const s = list.sites[i]!;
-      const h = list.heights[i]!;
-      // Shade each crown slightly by its own roll so a forest is not a
-      // single flat green.
-      const tint = base.clone().multiplyScalar(0.82 + s.roll * 0.36);
-      if (kind === 'cactus') {
-        setInstance(mesh, i, s.x + 0.5, h + s.size * 0.5, s.z + 0.5, 0.9, s.size, 0.9, 0, tint);
-        continue;
-      }
-      const crownR = conifer ? 2.1 : kind === 'jungle' ? 4 : kind === 'canopy' ? 3.4 : 2.6;
-      const crownH = conifer ? s.size * 1.15 : crownR * 1.5;
-      const cy = conifer ? h + s.size * 0.55 + crownH / 2 : h + s.size + crownH * 0.22;
-      setInstance(
-        mesh,
-        i,
-        s.x + 0.5,
-        cy,
-        s.z + 0.5,
-        crownR * 2,
-        crownH,
-        crownR * 2,
-        s.roll * Math.PI,
-        tint,
-      );
-    }
-    mesh.instanceMatrix.needsUpdate = true;
-    group.add(mesh);
-  }
+  mesh.instanceMatrix.needsUpdate = true;
+  group.add(mesh);
 }
 
 function addBushes(group: THREE.Group, b: Bucket): void {

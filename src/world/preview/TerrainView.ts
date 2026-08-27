@@ -6,8 +6,9 @@
  * Developer tooling only.
  */
 import * as THREE from 'three';
-import { TerrainField, cellsPerBlock, type TerrainResolution, type Tile } from './TerrainField';
+import { TerrainField, cellsPerBlock, type TerrainResolution } from './TerrainField';
 import { meshTile } from './SurfaceMesher';
+import type { TerrainCache } from './TerrainCache';
 import { PreviewSky } from './PreviewSky';
 import {
   EMPTY_VEGETATION,
@@ -15,6 +16,7 @@ import {
   disposeVegetation,
   type VegetationMetrics,
 } from './VegetationView';
+import type { VegetationBands } from './previewQuality';
 import type { VytheraWorldStyle } from '../style/WorldStyle';
 
 export interface ViewMetrics {
@@ -38,6 +40,22 @@ export interface ViewMetrics {
 }
 
 const TILE_BLOCKS = 32;
+
+export interface BuildOptions {
+  /** Tiles further than this from the eye are skipped entirely. */
+  radius?: number;
+  /** Distance over which one LOD step of coarsening is applied. */
+  lodFalloff?: number;
+  /**
+   * Floor on cell size. The progressive first pass sets this to roughly one
+   * block so a whole landscape appears immediately, then the real pass runs
+   * with no floor and replaces it.
+   */
+  minCell?: number;
+  cache?: TerrainCache | null;
+  /** Resolution-lab benchmark only; off in the editor. */
+  measureCollisionCost?: boolean;
+}
 
 export class TerrainView {
   readonly canvas: HTMLCanvasElement;
@@ -95,8 +113,19 @@ export class TerrainView {
     anchor: THREE.Vector3,
     onProgress: (done: number, total: number) => void,
     token: { cancelled: boolean } = { cancelled: false },
+    bands?: VegetationBands,
+    budget = 1,
   ): Promise<VegetationMetrics | null> {
-    const result = await buildVegetation(field, origin, regionBlocks, anchor, onProgress, token);
+    const result = await buildVegetation(
+      field,
+      origin,
+      regionBlocks,
+      anchor,
+      onProgress,
+      token,
+      bands,
+      budget,
+    );
     if (!result || token.cancelled) return null;
     this.clearVegetation();
     this.vegGroup = result.group;
@@ -123,16 +152,12 @@ export class TerrainView {
   }
 
   private clear(): void {
-    for (const child of [...this.group.children]) {
-      this.group.remove(child);
-      const mesh = child as THREE.Mesh;
-      mesh.geometry?.dispose();
-    }
+    disposeGroup(this.group);
   }
 
   /**
-   * Rebuild at a resolution, yielding between tile batches so the caller can
-   * paint real progress instead of freezing the tab.
+   * Rebuild at a resolution, yielding on a time budget so the caller can paint
+   * real progress instead of freezing the tab.
    */
   async build(
     field: TerrainField,
@@ -143,8 +168,18 @@ export class TerrainView {
     onProgress: (done: number, total: number) => void,
     /** Set cancelled to abandon an obsolete build between tile batches. */
     token: { cancelled: boolean } = { cancelled: false },
+    options: BuildOptions = {},
   ): Promise<ViewMetrics | null> {
-    this.clear();
+    const radius = options.radius ?? 1000;
+    const falloff = options.lodFalloff ?? 900;
+    const minCell = options.minCell ?? 0;
+    const cache = options.cache ?? null;
+
+    // Assembled off to the side and swapped in at the end. Clearing first would
+    // blank the preview for the whole build, which also defeats the coarse pass
+    // of a progressive rebuild: its job is to stay on screen while the detailed
+    // pass is still working.
+    const next = new THREE.Group();
 
     // Selection and LOD are anchored to the view preset's eye, never the live
     // camera: the tile set for a given view is then identical across
@@ -157,7 +192,7 @@ export class TerrainView {
         const z0 = origin.z + tz * TILE_BLOCKS;
         const cx = x0 + TILE_BLOCKS / 2;
         const cz = z0 + TILE_BLOCKS / 2;
-        if (Math.hypot(cx - anchor.x, cz - anchor.z) > 1000) continue;
+        if (Math.hypot(cx - anchor.x, cz - anchor.z) > radius) continue;
         queue.push({ x0, z0 });
       }
     }
@@ -177,16 +212,25 @@ export class TerrainView {
     let hfBytes = 0;
     let geoBytes = 0;
 
+    // Yield on elapsed time rather than a fixed tile count: a coarse pass gets
+    // through many tiles per slice while a 0.125 pass yields after one, and
+    // both keep the frame budget the interface needs to stay responsive.
+    const SLICE_MS = 12;
+    let sliceStart = performance.now();
+
     for (let i = 0; i < queue.length; i++) {
       const { x0, z0 } = queue[i]!;
-      const step = lodFor(x0 + TILE_BLOCKS / 2, z0 + TILE_BLOCKS / 2, anchor, r);
+      const step = lodFor(x0 + TILE_BLOCKS / 2, z0 + TILE_BLOCKS / 2, anchor, r, falloff, minCell);
 
       const t0 = performance.now();
-      const tile: Tile = field.buildTile(x0, z0, TILE_BLOCKS, r, step);
+      let tile = cache?.get(x0, z0, step) ?? null;
+      if (!tile) {
+        tile = field.buildTile(x0, z0, TILE_BLOCKS, r, step);
+        cache?.put(x0, z0, step, tile);
+      }
       const t1 = performance.now();
+      // meshTile already computes normals for the geometry it returns.
       const { geometry, stats } = meshTile(tile);
-      // Lambert shading needs normals; the mesher only emits position/colour.
-      geometry.computeVertexNormals();
       const t2 = performance.now();
 
       genMs += t1 - t0;
@@ -204,21 +248,34 @@ export class TerrainView {
       const index = geometry.getIndex();
       if (index) geoBytes += index.array.byteLength;
 
-      this.group.add(new THREE.Mesh(geometry, this.material));
+      next.add(new THREE.Mesh(geometry, this.material));
 
-      if (i % 8 === 7 || i === queue.length - 1) {
+      if (performance.now() - sliceStart >= SLICE_MS || i === queue.length - 1) {
         onProgress(i + 1, queue.length);
         await new Promise((res) => requestAnimationFrame(() => res(null)));
         if (token.cancelled) {
-          this.clear();
+          // Only the abandoned work is thrown away; whatever is on screen
+          // stays there.
+          disposeGroup(next);
           return null;
         }
+        sliceStart = performance.now();
       }
     }
 
+    this.clear();
+    this.scene.remove(this.group);
+    this.group = next;
+    this.scene.add(this.group);
+
     this.setSeaLevel(origin, regionBlocks, field.seaLevel);
 
-    const { collisionMs, collisionQueries } = measureCollision(field, origin, regionBlocks);
+    // The collision probe is a resolution-lab benchmark, not something the
+    // editor needs. It costs 10k height queries per rebuild, so it stays off
+    // unless a caller explicitly asks to measure it.
+    const { collisionMs, collisionQueries } = options.measureCollisionCost
+      ? measureCollision(field, origin, regionBlocks)
+      : { collisionMs: 0, collisionQueries: 0 };
 
     this.metrics = {
       resolution: r,
@@ -276,18 +333,33 @@ export class TerrainView {
   }
 }
 
+/** Release the geometry a terrain group owns. Materials are shared, so stay. */
+function disposeGroup(group: THREE.Group): void {
+  for (const child of [...group.children]) {
+    group.remove(child);
+    (child as THREE.Mesh).geometry?.dispose();
+  }
+}
+
 /**
  * Distance-proportional LOD. Never coarser than the selected resolution in the
  * near field, so each resolution stays visually distinct where it matters.
+ *
+ * `falloff` is the distance over which one doubling of cell size is earned; a
+ * smaller value sheds detail sooner and is the main terrain cost lever the
+ * quality levels pull. `minCell` floors the cell size for the coarse pass of a
+ * progressive build.
  */
 export function lodFor(
   cx: number,
   cz: number,
   eye: THREE.Vector3,
   r: TerrainResolution,
+  falloff = 900,
+  minCell = 0,
 ): number {
   const d = Math.hypot(cx - eye.x, cz - eye.z);
-  const targetCell = Math.max(r, d / 900);
+  const targetCell = Math.max(r, minCell, d / Math.max(1, falloff));
   return 2 ** Math.floor(Math.log2(Math.max(1, targetCell / r)));
 }
 

@@ -33,6 +33,14 @@ import {
 import { tuningFromStyle } from '../../world/style/styleTuning';
 import { SKY_STYLE_TIME } from '../../world/preview/atmosphere';
 import { scopeForGroup, widestScope, type RebuildScope } from './rebuildScope';
+import { TerrainCache, terrainCacheKey } from '../../world/preview/TerrainCache';
+import {
+  qualityProfile,
+  terrainBudget,
+  vegetationBands,
+  type PreviewQuality,
+} from '../../world/preview/previewQuality';
+import { loadPreviewQuality, savePreviewQuality } from './previewSettings';
 import {
   applyLandscapePreset,
   applyVegetationPreset,
@@ -53,10 +61,17 @@ import { loadWorldSettings, saveWorldSettings } from '../worldSettings';
 import { saveLastWorld } from '../worldNames';
 import './customworld.css';
 
-/** Bounded preview area in world blocks — enough to judge the landscape. */
-const PREVIEW_BLOCKS = 512;
 /** Slider drags settle before an expensive rebuild starts. */
 const REBUILD_DELAY_MS = 280;
+
+/**
+ * Cell size the progressive first pass floors to.
+ *
+ * One block is coarse enough to sweep the whole region in a few hundred
+ * milliseconds and detailed enough to show the real landform, so the creator
+ * sees the shape of their edit immediately and the fine pass only refines it.
+ */
+const COARSE_CELL = 1;
 
 /** Hour each sky preset implies, so picking "Dusk" actually looks like dusk. */
 const SKY_PRESET_TIME = SKY_STYLE_TIME;
@@ -88,11 +103,24 @@ export class CustomWorldEditor {
   private previewView: PreviewView = 'panorama';
   private field: TerrainField | null = null;
   private region: RegionInfo | null = null;
+  private regionBlocks = qualityProfile(loadPreviewQuality()).regionBlocks;
   private poses: Record<ViewName, Pose> | null = null;
 
   private rebuildTimer = 0;
   private buildToken = { cancelled: false };
   private disposed = false;
+
+  private quality: PreviewQuality = loadPreviewQuality();
+  private cache = new TerrainCache();
+  /**
+   * Set when the 3D preview no longer reflects the current style — most often
+   * because an edit landed while the map was showing. Switching back to a 3D
+   * view then rebuilds instead of displaying stale terrain.
+   */
+  private previewStale = false;
+  /** True while a terrain or vegetation pass is running. */
+  private building = false;
+  private buildFrame = 0;
   /**
    * Heaviest scope requested since the last rebuild ran. Starts at the
    * cheapest: the initial build is kicked off directly by mount(), so nothing
@@ -125,7 +153,8 @@ export class CustomWorldEditor {
       onLockToggle: (group, locked) => this.setLock(group, locked),
       onMode: () => undefined,
       onView: (view) => this.setView(view),
-    });
+      onQuality: (q) => this.setQuality(q),
+    }, this.quality);
 
     this.library = new StyleLibrary({
       onOpen: (s) => this.load(s),
@@ -213,8 +242,23 @@ export class CustomWorldEditor {
     this.previewView = view;
     const isMap = view === 'map';
     this.stage.classList.toggle('is-map', isMap);
-    if (isMap) this.renderMap();
-    else if (this.poses) this.applyPose(this.poses[view as ViewName]);
+    if (isMap) {
+      this.renderMap();
+      return;
+    }
+    if (this.poses) this.applyPose(this.poses[view as ViewName]);
+    // Each 3D view has its own detail budget, and the map path skips 3D work
+    // entirely, so switching into a 3D view always rebuilds it.
+    this.scheduleRebuild('terrain');
+  }
+
+  private setQuality(q: PreviewQuality): void {
+    this.quality = q;
+    savePreviewQuality(q);
+    // Quality changes what is drawn, never what the style says, so the style
+    // and its history are deliberately untouched here.
+    this.panel.update(this.style, this.locks);
+    this.scheduleRebuild('terrain');
   }
 
   private syncUi(): void {
@@ -231,6 +275,11 @@ export class CustomWorldEditor {
     if (this.pendingScope === 'sky') {
       this.view.applyAtmosphere(this.style);
       this.setStatus('Updating atmosphere');
+    } else {
+      // Abandon any build still running for a style the creator has already
+      // moved past. Without this, dragging a slider lets superseded passes
+      // keep consuming frames while the newest one waits behind them.
+      this.buildToken.cancelled = true;
     }
 
     window.clearTimeout(this.rebuildTimer);
@@ -258,8 +307,27 @@ export class CustomWorldEditor {
     this.buildToken.cancelled = true;
     const token = { cancelled: false };
     this.buildToken = token;
+    try {
+      await this.rebuildInner(relocate, scope, token);
+    } finally {
+      // Only the newest build owns the flag; a superseded one must not clear it
+      // while its replacement is still running.
+      if (this.buildToken === token) this.building = false;
+    }
+  }
+
+  private async rebuildInner(
+    relocate: boolean,
+    scope: RebuildScope,
+    token: { cancelled: boolean },
+  ): Promise<void> {
+    this.building = scope !== 'sky';
 
     const style = cloneStyle(this.style);
+
+    // Counters describe this rebuild only, so the status line reports the work
+    // this edit actually saved rather than a running total.
+    this.cache.resetCounters();
 
     // Atmosphere always re-applies: it is a handful of uniforms.
     this.view.applyAtmosphere(style);
@@ -278,47 +346,112 @@ export class CustomWorldEditor {
     const field = new TerrainField(style.seed, 'balanced', tuningFromStyle(style));
     this.field = field;
 
-    if (relocate || !this.region) this.region = findRegion(field, PREVIEW_BLOCKS);
-    this.poses = buildPoses(field, this.region, PREVIEW_BLOCKS);
+    const view = this.previewView === 'map' ? 'panorama' : (this.previewView as ViewName);
+    const budget = terrainBudget(this.quality, view);
+    const blocks = budget.regionBlocks;
+
+    // A different region size changes which tiles exist, so poses and region
+    // are recomputed whenever the extent moves as well as on an explicit
+    // relocate.
+    if (relocate || !this.region || this.regionBlocks !== blocks) {
+      this.region = findRegion(field, blocks);
+      this.regionBlocks = blocks;
+    }
+    this.poses = buildPoses(field, this.region, blocks);
 
     if (this.previewView === 'map') {
       this.renderMap();
-      this.setStatus('Ready');
+      // The 3D scene was not touched, so remember it needs rebuilding before
+      // it is shown again.
+      this.previewStale = true;
+      this.setStatus('Ready · map');
       return;
     }
 
-    const pose = this.poses[this.previewView as ViewName];
+    const pose = this.poses[view];
     this.applyPose(pose);
 
-    if (scope === 'terrain') {
-      this.setStatus('Building terrain');
+    // A terrain rebuild is unavoidable when the terrain identity changed, and
+    // also when the last thing drawn was the map or a different view budget.
+    const terrainChanged = this.cache.setStyle(terrainCacheKey(style));
+    const needsTerrain = scope === 'terrain' || terrainChanged || this.previewStale;
+
+    if (needsTerrain) {
+      const bands = vegetationBands(this.quality, view);
+      const budgetScale = qualityProfile(this.quality).vegetationBudget;
+
+      // Progressive: a coarse sweep lands almost immediately so the creator
+      // can read their edit, then the real pass replaces it. Skipped when the
+      // chosen resolution is already coarse, where it would just be the same
+      // build run twice.
+      const wantsCoarse = budget.progressive && style.terrainVoxelSize <= 0.25;
+      if (wantsCoarse) {
+        this.setStatus('Building terrain (coarse)');
+        const rough = await this.view.build(
+          field, this.region.origin, blocks, style.terrainVoxelSize, pose.eye,
+          () => undefined,
+          token,
+          {
+            radius: budget.radius,
+            lodFalloff: budget.lodFalloff,
+            minCell: COARSE_CELL,
+            cache: this.cache,
+          },
+        );
+        if (token.cancelled || this.disposed) return;
+        if (rough) {
+          // Show the coarse landscape with its water and a cheap vegetation
+          // pass rather than an empty scene while the fine pass runs.
+          this.view.setSeaLevel(this.region.origin, blocks, field.seaLevel);
+          this.setStatus('Refining terrain');
+        }
+      }
+
+      this.setStatus(wantsCoarse ? 'Refining terrain' : 'Building terrain');
       const metrics = await this.view.build(
-        field,
-        this.region.origin,
-        PREVIEW_BLOCKS,
-        style.terrainVoxelSize,
-        pose.eye,
+        field, this.region.origin, blocks, style.terrainVoxelSize, pose.eye,
         (done, total) => {
-          if (!token.cancelled) this.setStatus(`Building terrain ${done}/${total}`);
+          if (!token.cancelled) {
+            this.setStatus(`${wantsCoarse ? 'Refining' : 'Building'} terrain ${done}/${total}`);
+          }
         },
         token,
+        { radius: budget.radius, lodFalloff: budget.lodFalloff, cache: this.cache },
       );
       if (token.cancelled || this.disposed || !metrics) return;
 
       this.setStatus('Updating water');
-      this.view.setSeaLevel(this.region.origin, PREVIEW_BLOCKS, field.seaLevel);
+      this.view.setSeaLevel(this.region.origin, blocks, field.seaLevel);
+      this.previewStale = false;
+
+      this.setStatus('Placing vegetation');
+      const veg = await this.view.rebuildVegetation(
+        field, this.region.origin, blocks, pose.eye,
+        (done, total) => {
+          if (!token.cancelled) this.setStatus(`Placing vegetation ${done}/${total}`);
+        },
+        token,
+        bands,
+        budgetScale,
+      );
+      if (token.cancelled || this.disposed || !veg) return;
+      this.setStatus(this.summary());
+      this.renderMap();
+      return;
     }
 
     this.setStatus('Placing vegetation');
     const veg = await this.view.rebuildVegetation(
       field,
       this.region.origin,
-      PREVIEW_BLOCKS,
+      blocks,
       pose.eye,
       (done, total) => {
         if (!token.cancelled) this.setStatus(`Placing vegetation ${done}/${total}`);
       },
       token,
+      vegetationBands(this.quality, view),
+      qualityProfile(this.quality).vegetationBudget,
     );
     if (token.cancelled || this.disposed) return;
 
@@ -337,13 +470,22 @@ export class CustomWorldEditor {
       parts.push(`terrain ${(m.genMs + m.meshMs).toFixed(0)} ms`);
     }
     parts.push(`${v.total.toLocaleString()} plants`);
+    // Distinguishing the bands keeps the count honest: a plant drawn as a
+    // billboard is still placed, but it is not drawn in full.
+    if (v.medium + v.far > 0) {
+      parts.push(`LOD ${v.near.toLocaleString()}/${v.medium.toLocaleString()}/${v.far.toLocaleString()}`);
+    }
     parts.push(`vegetation ${(v.placeMs + v.buildMs).toFixed(0)} ms`);
+    const cache = this.cache.stats();
+    if (cache.hits > 0) {
+      parts.push(`${cache.hits} cached tiles`);
+    }
     return `Ready · ${parts.join(' · ')}`;
   }
 
   private renderMap(): void {
     if (!this.field || !this.region) return;
-    this.map.render(this.field, this.region.origin, PREVIEW_BLOCKS, this.style);
+    this.map.render(this.field, this.region.origin, this.regionBlocks, this.style);
   }
 
   private applyPose(pose: Pose): void {
@@ -370,6 +512,13 @@ export class CustomWorldEditor {
     if (this.previewView === 'map') return;
     this.controls.update(dt);
     this.view.tick(dt, this.camera.position);
+
+    // A build yields through requestAnimationFrame, so every frame drawn while
+    // one is running is a frame the build waits on. The scene cannot change
+    // mid-build anyway — the new geometry is swapped in at the end — so it is
+    // drawn at a reduced rate to keep the camera and progress alive without
+    // making each yield cost a full render of the old scene.
+    if (this.building && ++this.buildFrame % 4 !== 0) return;
     this.view.render(this.camera);
   };
 
