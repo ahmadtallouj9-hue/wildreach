@@ -6,6 +6,7 @@
  * would move a single block does.
  */
 import { PARAM_SPECS, type VytheraWorldStyle } from './WorldStyle';
+import { DEFAULT_WORLD_VOXEL_SIZE } from '../worldScale';
 
 export const DEFAULT_STYLE_HASH = 'default';
 
@@ -17,6 +18,16 @@ export function styleFingerprint(style: VytheraWorldStyle | null | undefined): s
     String(style.terrainVoxelSize),
     String(style.generationVersion),
   ];
+
+  // Block size changes the physical world, so it has to change identity: two
+  // styles alike but for their scale are different worlds and must not share a
+  // multiplayer room. It is appended only when it differs from stock, so every
+  // style written before world scale existed keeps the fingerprint it already
+  // had and existing rooms and caches are not invalidated.
+  const worldVoxelSize = style.worldScale?.worldVoxelSize ?? DEFAULT_WORLD_VOXEL_SIZE;
+  if (worldVoxelSize !== DEFAULT_WORLD_VOXEL_SIZE) {
+    parts.push(`scale=${worldVoxelSize}`);
+  }
   for (const spec of PARAM_SPECS) {
     const value = (style[spec.group] as unknown as Record<string, number>)[spec.key] ?? spec.default;
     parts.push(`${spec.group}.${spec.key}=${value.toFixed(4)}`);

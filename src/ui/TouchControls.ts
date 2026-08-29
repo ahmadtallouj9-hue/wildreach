@@ -10,6 +10,8 @@ export type TouchControlHandlers = {
   onMap?: () => void;
   onChat?: () => void;
   onMenu?: () => void;
+  onHotbarPrev?: () => void;
+  onHotbarNext?: () => void;
 };
 
 export class TouchControls {
@@ -22,6 +24,7 @@ export class TouchControls {
   private lookMoved = false;
   private knobEl: HTMLElement;
   private handlers: TouchControlHandlers;
+  private breakHoldTimer: ReturnType<typeof setInterval> | null = null;
 
   /** True while Move HUD editor is open — ignore gameplay input. */
   private layoutEditMode = false;
@@ -39,6 +42,10 @@ export class TouchControls {
         <button type="button" class="touch-util-btn" data-action="menu" aria-label="Menu">☰</button>
       </div>
       <div class="touch-look-zone" aria-hidden="true"></div>
+      <div class="touch-hotbar-nav" aria-label="Hotbar">
+        <button type="button" class="touch-hotbar-btn" data-action="hotbar-prev" aria-label="Previous hotbar">‹</button>
+        <button type="button" class="touch-hotbar-btn" data-action="hotbar-next" aria-label="Next hotbar">›</button>
+      </div>
       <div class="touch-dock">
         <div class="touch-stick-wrap">
           <div class="touch-stick-base" aria-hidden="true"></div>
@@ -51,7 +58,7 @@ export class TouchControls {
           <button type="button" class="touch-action-btn touch-action-pack" data-action="pack" aria-label="Inventory">☰</button>
         </div>
       </div>
-      <p class="touch-hint" aria-hidden="true">Drag to look · tap to break</p>
+      <p class="touch-hint" aria-hidden="true">Drag to look · tap/hold to break · + to place</p>
     `;
 
     this.knobEl = this.root.querySelector('.touch-stick-knob')!;
@@ -65,7 +72,10 @@ export class TouchControls {
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
     this.root.hidden = !enabled && !this.layoutEditMode;
-    if (!enabled) this.resetStick();
+    if (!enabled) {
+      this.resetStick();
+      this.stopBreakHold();
+    }
   }
 
   /** Keep controls visible but ignore stick/look/buttons (Move HUD mode). */
@@ -75,11 +85,25 @@ export class TouchControls {
     if (on) {
       this.root.hidden = false;
       this.resetStick();
+      this.stopBreakHold();
     }
   }
 
   private gameplayLive(): boolean {
     return this.enabled && !this.layoutEditMode;
+  }
+
+  private startBreakHold(): void {
+    this.stopBreakHold();
+    this.handlers.onBreak?.();
+    this.breakHoldTimer = setInterval(() => this.handlers.onBreak?.(), 220);
+  }
+
+  private stopBreakHold(): void {
+    if (this.breakHoldTimer) {
+      clearInterval(this.breakHoldTimer);
+      this.breakHoldTimer = null;
+    }
   }
 
   private bind(): void {
@@ -142,7 +166,10 @@ export class TouchControls {
         this.lookLast.y = sample.clientY;
       }
       if (Math.abs(dx) + Math.abs(dy) < 0.35) return;
-      if (Math.abs(dx) + Math.abs(dy) > 2) this.lookMoved = true;
+      if (Math.abs(dx) + Math.abs(dy) > 2) {
+        this.lookMoved = true;
+        this.stopBreakHold();
+      }
       this.handlers.onLook?.(dx, dy);
     };
 
@@ -150,9 +177,19 @@ export class TouchControls {
       const e = evt as PointerEvent;
       if (e.pointerId !== this.lookPointerId) return;
       this.lookPointerId = null;
+      this.stopBreakHold();
       if (!this.lookMoved) this.handlers.onBreak?.();
     };
-    lookZone.addEventListener('pointerdown', onLookDown);
+
+    // Long-press on look zone = continuous break.
+    lookZone.addEventListener('pointerdown', (evt) => {
+      onLookDown(evt);
+      const e = evt as PointerEvent;
+      if (!this.gameplayLive() || e.pointerType === 'mouse') return;
+      window.setTimeout(() => {
+        if (this.lookPointerId === e.pointerId && !this.lookMoved) this.startBreakHold();
+      }, 280);
+    });
     lookZone.addEventListener('pointermove', onLookMove);
     lookZone.addEventListener('pointerup', endLook);
     lookZone.addEventListener('pointercancel', endLook);
@@ -212,6 +249,17 @@ export class TouchControls {
     this.root.querySelector('[data-action="menu"]')!.addEventListener('click', (e) => {
       e.preventDefault();
       this.handlers.onMenu?.();
+    });
+
+    this.root.querySelector('[data-action="hotbar-prev"]')!.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!this.gameplayLive()) return;
+      this.handlers.onHotbarPrev?.();
+    });
+    this.root.querySelector('[data-action="hotbar-next"]')!.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!this.gameplayLive()) return;
+      this.handlers.onHotbarNext?.();
     });
   }
 

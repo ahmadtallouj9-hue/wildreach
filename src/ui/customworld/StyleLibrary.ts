@@ -66,21 +66,34 @@ export class StyleLibrary {
       tabs.append(btn);
     }
 
-    const importBtn = document.createElement('button');
+    const importPill = document.createElement('label');
+    importPill.className = 'vy-file-pill';
+    const importBtn = document.createElement('span');
+    importBtn.className = 'vy-file-pill__btn';
     importBtn.textContent = 'Import style';
-    importBtn.onclick = () => this.pickFile();
-
-    head.append(title, tabs, importBtn);
-    return head;
-  }
-
-  private pickFile(): void {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.vyworld,application/json';
+    input.hidden = true;
+    const nameEl = document.createElement('span');
+    nameEl.className = 'vy-file-pill__name';
+    nameEl.hidden = true;
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'vy-file-pill__clear';
+    clearBtn.hidden = true;
+    clearBtn.title = 'Clear file';
+    clearBtn.setAttribute('aria-label', 'Clear file');
+    clearBtn.textContent = '✕';
+
+    importPill.append(importBtn, input, nameEl, clearBtn);
+
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      nameEl.textContent = file.name;
+      nameEl.hidden = false;
+      clearBtn.hidden = false;
       const result = await importStyleFromFile(file);
       if (!result.ok || !result.style) {
         this.handlers.onNotice(result.errors.join(' ') || 'Import failed.', 'error');
@@ -91,7 +104,18 @@ export class StyleLibrary {
       this.refresh();
       this.handlers.onOpen(result.style);
     };
-    input.click();
+
+    clearBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      input.value = '';
+      nameEl.textContent = '';
+      nameEl.hidden = true;
+      clearBtn.hidden = true;
+    };
+
+    head.append(title, tabs, importPill);
+    return head;
   }
 
   refresh(): void {

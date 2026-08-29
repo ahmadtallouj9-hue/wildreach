@@ -72,16 +72,22 @@ export function setInstalled(mod: InstalledMod): void {
   writeStore(KEYS.library, store);
 }
 
-export function removeInstalled(modId: string): void {
-  const store = read<LibraryStore>(KEYS.library, { mods: {} });
-  delete store.mods[modId];
-  writeStore(KEYS.library, store);
-}
-
 export function setInstalledEnabled(modId: string, enabled: boolean): void {
   const cur = getInstalled(modId);
   if (!cur) return;
   setInstalled({ ...cur, enabled });
+  import('../modding/ModSystem').then(({ ModManager }) => {
+    ModManager.get().setModEnabled(modId, enabled);
+  });
+}
+
+export function removeInstalled(modId: string): void {
+  const store = read<LibraryStore>(KEYS.library, { mods: {} });
+  delete store.mods[modId];
+  writeStore(KEYS.library, store);
+  import('../modding/ModSystem').then(({ ModManager }) => {
+    ModManager.get().deleteMod(modId);
+  });
 }
 
 export function listCatalog(): CatalogEntry[] {

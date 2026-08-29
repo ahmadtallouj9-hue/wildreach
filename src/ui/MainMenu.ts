@@ -26,10 +26,18 @@ import {
   type HairStyle,
   type HatStyle,
   type Profile,
-  type Settings,
-  type SleeveStyle,
+    type Settings,
+    type SleeveStyle,
+  type TexturePack,
   type ViewMode,
 } from './prefs';
+import {
+  loadGfxPrefs,
+  saveGfxPrefs,
+  getPresetConfig,
+  type GfxPrefs,
+  type GfxPreset,
+} from '../render/gfxPrefs';
 import { SkinEditor } from './SkinEditor';
 import { ProfilePreview3D } from './ProfilePreview3D';
 import { decodeSkin, encodeSkin } from '../player/SkinAtlas';
@@ -57,7 +65,7 @@ import { replaceSeedInUrl, buildShareUrl, publicPlayUrl } from './shareUrl';
 import { SocialClient } from '../net/SocialClient';
 import { bindUiSounds, uiSound } from './uiSound';
 import { FriendsPanel } from './FriendsPanel';
-import { MainMenuSky, type VytheraBgContext } from './MainMenuSky';
+import { MainMenuSky } from './MainMenuSky';
 import { WorldPreviewCanvas, terrainPreviewTag } from './background/WorldPreviewCanvas';
 import { loadBgPrefs, saveBgPrefs, type BgAnimationLevel, type BgQuality, type VytheraBgMode } from './background/backgroundPrefs';
 import './background/vythera-world-bg.css';
@@ -78,26 +86,42 @@ export type MenuAction =
   | { type: 'play'; seed: string }
   | { type: 'resume' }
   | { type: 'edit-hud' }
-  | { type: 'prefs'; profile: Profile; settings: Settings; skinPixels?: Uint8ClampedArray };
+  | {
+      type: 'prefs';
+      profile: Profile;
+      settings: Settings;
+      skinPixels?: Uint8ClampedArray;
+      gfxPrefs?: GfxPrefs;
+    };
 
 type Panel = 'home' | 'settings' | 'customize' | 'multiplayer' | 'world' | 'mod' | 'hub' | 'ai'
-
-function panelToBgContext(panel: Panel): VytheraBgContext {
-  switch (panel) {
-    case 'world': return 'world';
-    case 'hub': return 'hub';
-    case 'mod': return 'studio';
-    case 'settings': return 'settings';
-    case 'ai': return 'ai';
-    case 'customize': return 'customize';
-    case 'multiplayer': return 'multiplayer';
-    default: return 'home';
-  }
-}
 
 function randomSeed(): string {
   return Math.random().toString(36).slice(2, 10);
 }
+
+/** Compact gold line icons for the home CREATE stack (visual-only). */
+function homeIcon(paths: string): string {
+  return `<svg class="vy-home__svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
+const iconGlobe = homeIcon(
+  '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.8 3.8 5.8 3.8 9s-1.3 6.2-3.8 9c-2.5-2.8-3.8-5.8-3.8-9S9.5 5.8 12 3z"/>',
+);
+const iconPerson = homeIcon(
+  '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.5c1.4-3.2 3.6-4.8 6.5-4.8s5.1 1.6 6.5 4.8"/>',
+);
+const iconCube = homeIcon(
+  '<path d="M12 3.5 20 8v8l-8 4.5L4 16V8l8-4.5z"/><path d="M12 12.2 20 8M12 12.2 4 8M12 12.2V20.5"/>',
+);
+const iconHub = homeIcon(
+  '<circle cx="12" cy="12" r="2.2"/><circle cx="5" cy="7" r="1.6"/><circle cx="19" cy="7" r="1.6"/><circle cx="5" cy="17" r="1.6"/><circle cx="19" cy="17" r="1.6"/><path d="M10.2 10.8 6.4 8.2M13.8 10.8l3.8-2.6M10.2 13.2 6.4 15.8M13.8 13.2l3.8 2.6"/>',
+);
+const iconSpark = homeIcon(
+  '<path d="M12 3.5 13.6 9.2 19.5 12 13.6 14.8 12 20.5 10.4 14.8 4.5 12l5.9-2.8L12 3.5z"/>',
+);
+const iconGear = homeIcon(
+  '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M5.6 18.4l1.6-1.6M16.8 7.2l1.6-1.6"/>',
+);
 
 function readSeedFromUrl(): string {
   const fromUrl = new URLSearchParams(window.location.search).get('seed');
@@ -142,6 +166,7 @@ export class MainMenu {
   private hasSession = false;
   private profile: Profile = loadProfile();
   private settings: Settings = loadSettings();
+  private gfxPrefs: GfxPrefs = loadGfxPrefs();
   private skinEditor: SkinEditor | null = null;
   private heroPreview: ProfilePreview3D | null = null;
   private homePreview: ProfilePreview3D | null = null;
@@ -165,8 +190,8 @@ export class MainMenu {
     this.root.innerHTML = this.buildHtml();
     this.worldSeedInput = this.root.querySelector('.world-seed-input')!;
 
-    const skyHost = this.root.querySelector('.vy-menu__sky');
-    if (skyHost) this.menuSky.mount(skyHost as HTMLElement);
+    // Title screen uses a static mockup plate (menu-bg.jpg) — no live chunk world.
+    // Real 3D starts only after New World / Continue / Worlds (Game mount).
     const previewHost = this.root.querySelector('.world-preview-canvas-host');
     if (previewHost) {
       this.worldPreview = new WorldPreviewCanvas();
@@ -186,43 +211,95 @@ export class MainMenu {
     bindUiSounds(this.root);
     this.ensureHomePreview();
     this.syncHomePreview();
+    this.syncContinueRow();
   }
 
   private buildHtml(): string {
     return `
-      <div class="vy-menu__sky" aria-hidden="true"></div>
+      <div class="vy-menu__sky" aria-hidden="true">
+        <img
+          class="vy-menu__hero-bg"
+          src="/menu-bg.jpg?v=${Date.now()}"
+          alt=""
+          decoding="async"
+          fetchpriority="high"
+        />
+      </div>
 
       <div class="vy-menu__stage vy-home" data-panel="home">
         <header class="vy-home__brand">
           <h1 class="vy-home__title">VYTHERA</h1>
-          <div class="vy-home__rule" aria-hidden="true">
-            <span class="vy-home__rule-line"></span>
-            <span class="vy-dot"></span>
-            <span class="vy-home__rule-line"></span>
+          <div class="vy-home__ornament" aria-hidden="true">
+            <span class="vy-home__ornament-line"></span>
+            <span class="vy-home__ornament-gem"></span>
+            <span class="vy-home__ornament-line"></span>
           </div>
+          <p class="vy-home__tagline"><span class="vy-home__tagline-dash" aria-hidden="true"></span>A world to wander<span class="vy-home__tagline-dash" aria-hidden="true"></span></p>
         </header>
         <div class="vy-home__body">
-          <nav class="vy-home__nav" aria-label="Main menu">
-            <button type="button" class="vy-btn vy-btn--primary" data-action="new-game">New Game</button>
-            <button type="button" class="vy-btn" data-action="continue-world">Continue</button>
-            <button type="button" class="vy-btn" data-action="worlds">Worlds</button>
-            <button type="button" class="vy-btn" data-action="custom-world">Custom World</button>
-            <button type="button" class="vy-btn" data-action="multiplayer">Multiplayer</button>
-            <button type="button" class="vy-btn" data-action="customize">Character</button>
-            <button type="button" class="vy-btn" data-action="mod">MOD Studio</button>
-            <button type="button" class="vy-btn" data-action="hub">MOD Hub</button>
-            <button type="button" class="vy-btn" data-action="ai">AI Studio</button>
-            <button type="button" class="vy-btn" data-action="settings">Settings</button>
-          </nav>
+          <div class="vy-home__panel">
+            <nav class="vy-home__nav" aria-label="Main menu">
+              <button type="button" class="vy-home__row vy-home__row--hero is-selected" data-action="new-game">
+                <span class="vy-home__row-mark" aria-hidden="true"></span>
+                <span class="vy-home__row-label">New World</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--outline" data-action="continue-world" data-continue>
+                <span class="vy-home__row-label">Continue</span>
+                <span class="vy-home__row-cap" data-continue-cap>No world yet</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--outline" data-action="worlds">
+                <span class="vy-home__row-label">Worlds</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--outline" data-action="multiplayer">
+                <span class="vy-home__row-label">Multiplayer</span>
+              </button>
+
+              <div class="vy-home__divider" role="separator" aria-label="Create">
+                <span class="vy-home__divider-gem" aria-hidden="true"></span>
+                <span>Create</span>
+                <span class="vy-home__divider-gem" aria-hidden="true"></span>
+              </div>
+
+              <button type="button" class="vy-home__row vy-home__row--quiet" data-action="custom-world">
+                <span class="vy-home__row-icon" aria-hidden="true">${iconGlobe}</span>
+                <span class="vy-home__row-label">Custom World</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--quiet vy-home__row--character" data-action="customize">
+                <span class="vy-home__row-icon" aria-hidden="true">${iconPerson}</span>
+                <span class="vy-home__row-label">Character</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--quiet" data-action="mod">
+                <span class="vy-home__row-icon" aria-hidden="true">${iconCube}</span>
+                <span class="vy-home__row-label">Mod Studio</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--quiet" data-action="hub">
+                <span class="vy-home__row-icon" aria-hidden="true">${iconHub}</span>
+                <span class="vy-home__row-label">Mod Hub</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--quiet" data-action="ai">
+                <span class="vy-home__row-icon" aria-hidden="true">${iconSpark}</span>
+                <span class="vy-home__row-label">AI Studio</span>
+              </button>
+              <button type="button" class="vy-home__row vy-home__row--quiet" data-action="settings">
+                <span class="vy-home__row-icon" aria-hidden="true">${iconGear}</span>
+                <span class="vy-home__row-label">Settings</span>
+              </button>
+            </nav>
+          </div>
+
           <aside class="vy-home__player">
-            <span class="vy-home__player-name">Wanderer</span>
-            <div class="vy-home__viewport" aria-hidden="true"></div>
-            <button type="button" class="vy-btn vy-btn--ghost" data-action="customize">Profile</button>
+            <button type="button" class="vy-home__player-card" data-action="customize" aria-label="Customize character">
+              <span class="vy-home__player-kicker">Wanderer</span>
+              <span class="vy-home__player-name visually-hidden">Wanderer</span>
+              <div class="vy-home__viewport" aria-hidden="true"></div>
+              <span class="vy-home__player-cta">Customize</span>
+            </button>
           </aside>
         </div>
         <footer class="vy-home__footer">
-          <span>Local session</span>
-          <span class="vy-chip" title="Local AI"><span class="vy-dot" data-ai-dot data-state="off"></span> Local AI</span>
+          <span class="vy-chip vy-home__status"><span class="vy-dot" data-state="on" aria-hidden="true"></span> Local session</span>
+          <span class="vy-chip vy-home__status" title="Local AI"><span class="vy-dot" data-ai-dot data-state="on"></span> Local AI</span>
+          <span class="vy-chip vy-home__status" title="Texture credits">GoodVibes textures by Acaitart (CC-BY)</span>
         </footer>
       </div>
 
@@ -238,14 +315,20 @@ export class MainMenu {
               .map(
                 (c, i) =>
                   `<button type="button" class="vy-seg__btn${i === 0 ? ' is-active' : ''}" data-settings-cat="${c}">${
-                    c === 'accessibility' ? 'Access' : c[0]!.toUpperCase() + c.slice(1)
+                    c === 'graphics' ? 'Video' : c === 'accessibility' ? 'Access' : c[0]!.toUpperCase() + c.slice(1)
                   }</button>`,
               )
               .join('')}
           </nav>
           <div data-settings-pane="general">
-            ${fieldRange('Mouse sensitivity', 'sens-range', 'sens-val', 0.35, 2.5, 0.05)}
+            ${fieldRange('Look sensitivity', 'sens-range', 'sens-val', 0.01, 0.20, 0.01)}
             ${fieldRange('Field of view', 'fov-range', 'fov-val', 55, 100, 1)}
+            <div class="vy-field"><span>Texture pack</span>
+              ${seg('texture-pack', [
+                ['default', 'Default'],
+                ['goodvibes', 'GoodVibes'],
+              ])}
+            </div>
             <div class="vy-field"><span>Person view</span>
               ${seg('view', [
                 ['first', 'First'],
@@ -255,6 +338,21 @@ export class MainMenu {
             </div>
           </div>
           <div data-settings-pane="graphics" hidden>
+            <div class="vy-field"><span>Quality preset</span>
+              ${seg('gfx-preset', [
+                ['very-low', 'Very Low'],
+                ['low', 'Low'],
+                ['medium', 'Medium'],
+                ['high', 'High'],
+                ['max', 'Max'],
+              ])}
+            </div>
+            <div class="vy-field"><span>Texture pack</span>
+              ${seg('texture-pack', [
+                ['default', 'Default'],
+                ['goodvibes', 'GoodVibes'],
+              ])}
+            </div>
             ${fieldRange('Render distance', 'dist-range', 'dist-val', 3, 8, 1)}
             ${fieldRange('Brightness', 'bright-range', 'bright-val', 0.6, 1.4, 0.05)}
             ${fieldRange('Clouds', 'cloud-range', 'cloud-val', 0, 1, 0.05)}
@@ -292,6 +390,7 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
             <label class="vy-field"><span><input type="checkbox" class="show-fps-check" /> Show FPS</span></label>
           </div>
           <div data-settings-pane="controls" hidden>
+            ${fieldRange('Look sensitivity', 'sens-range', 'sens-val', 0.01, 0.20, 0.01)}
             <label class="vy-field"><span><input type="checkbox" class="invert-y-check" /> Invert Y look</span></label>
             <div class="vy-field"><span>Touch &amp; HUD layout</span>
               <button type="button" class="vy-btn" data-action="edit-hud">Move HUD</button>
@@ -374,9 +473,14 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
             <div style="overflow:auto;max-height:78vh;padding-right:4px">
               <section class="vy-panel" style="padding:12px;margin-bottom:12px">
                 <h3 style="margin:0 0 8px;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase">Skin presets</h3>
-                <label class="vy-btn vy-btn--primary skin-upload-main" style="display:inline-block;margin-bottom:8px">
-                  Upload skin<input type="file" class="skin-upload-input" accept="image/png" hidden />
-                </label>
+                <div style="margin-bottom:10px">
+                  <label class="vy-file-pill skin-upload-main">
+                    <span class="vy-file-pill__btn vy-btn--primary">Upload skin</span>
+                    <input type="file" class="skin-upload-input" accept="image/png" hidden />
+                    <span class="vy-file-pill__name" hidden></span>
+                    <button type="button" class="vy-file-pill__clear" hidden title="Clear file" aria-label="Clear file">✕</button>
+                  </label>
+                </div>
                 <div class="skin-preset-grid skins-preset-grid" role="list"></div>
               </section>
               <section class="vy-panel" style="padding:12px;margin-bottom:12px">
@@ -747,23 +851,47 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
     this.root.hidden = true;
   }
 
-  /** Keep cinematic world bg visible under the translucent loading overlay. */
+  /** Hide menu chrome under the loading overlay; Game owns the real 3D world. */
   beginWorldEntry(): void {
     this.root.hidden = false;
     this.root.classList.add('vy-menu--world-entry');
     this.root.querySelectorAll<HTMLElement>('.vy-menu__stage').forEach((el) => {
       el.hidden = true;
     });
-    this.menuSky.setContext('loading');
-    this.menuSky.start();
+    this.homePreview?.stop();
+    this.menuSky.stop();
   }
 
   show(opts?: { resumable?: boolean }): void {
     this.hasSession = opts?.resumable ?? this.hasSession;
     this.root.hidden = false;
     this.root.classList.remove('vy-menu--world-entry');
+    this.menuSky.stop();
     this.showPanel('home');
-    requestAnimationFrame(() => this.menuSky.start());
+    this.syncContinueRow();
+  }
+
+  /** Continue button: disabled with caption when no save, otherwise seed / resume hint. */
+  private syncContinueRow(): void {
+    const btn = this.root.querySelector<HTMLButtonElement>('[data-continue]');
+    const cap = this.root.querySelector<HTMLElement>('[data-continue-cap]');
+    if (!btn || !cap) return;
+    const last = loadLastWorld();
+    if (this.hasSession) {
+      btn.disabled = false;
+      const name = last ? worldNameFromSeed(last) : '';
+      cap.textContent = name ? `Resume · ${name}` : 'Resume session';
+      return;
+    }
+    if (last) {
+      btn.disabled = false;
+      const settings = loadWorldSettings(last);
+      const name = (settings.name || '').trim() || worldNameFromSeed(last);
+      cap.textContent = `${name} · ${last}`;
+      return;
+    }
+    btn.disabled = true;
+    cap.textContent = 'No world yet';
   }
 
   get visible(): boolean {
@@ -1057,12 +1185,13 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
       profile: { ...this.profile },
       settings: { ...this.settings },
       skinPixels,
+      gfxPrefs: { ...this.gfxPrefs },
     });
   }
 
   private showPanel(panel: Panel): void {
-    this.menuSky.setContext(panelToBgContext(panel));
-    this.menuSky.start();
+    // Title menu never runs the live voxel backdrop — static menu-bg.jpg only.
+    this.menuSky.stop();
 
     uiSound('menu_transition');
 
@@ -1081,6 +1210,7 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
       this.modStudio?.stop();
       this.ensureHomePreview();
       this.syncHomePreview();
+      this.syncContinueRow();
       requestAnimationFrame(() => {
         this.homePreview?.start();
         this.homePreview?.layout();
@@ -1310,10 +1440,12 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
   private bindSkinUploadUi(): void {
     const input = this.root.querySelector<HTMLInputElement>('.skin-upload-input');
     const label = this.root.querySelector<HTMLLabelElement>('.skin-upload-main');
+    const nameEl = this.root.querySelector<HTMLElement>('.skin-upload-main .vy-file-pill__name');
+    const clearBtn = this.root.querySelector<HTMLButtonElement>('.skin-upload-main .vy-file-pill__clear');
     const stage = this.root.querySelector('.profile-hero-viewport');
     if (!input || !label) return;
 
-    const apply = (result: SkinImportResult): void => {
+    const apply = (result: SkinImportResult, fileName?: string): void => {
       this.ensureSkinEditor();
       this.previewPresetId = CUSTOM_PRESET_ID;
       this.activePresetId = null;
@@ -1329,17 +1461,29 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
             : 'Minecraft skin';
       this.updateCharacterMeta(this.profile.name, tag);
       this.markActivePreset();
+      if (fileName && nameEl) {
+        nameEl.textContent = fileName;
+        nameEl.hidden = false;
+        if (clearBtn) clearBtn.hidden = false;
+      }
     };
 
     label.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('input')) return;
+      if ((e.target as HTMLElement).closest('input, .vy-file-pill__clear')) return;
       input.click();
     });
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      input.value = '';
       if (!file) return;
-      void importSkinFromFile(file).then(apply).catch(() => undefined);
+      void importSkinFromFile(file).then((res) => apply(res, file.name)).catch(() => undefined);
+    });
+
+    clearBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      input.value = '';
+      if (nameEl) { nameEl.textContent = ''; nameEl.hidden = true; }
+      clearBtn.hidden = true;
     });
 
     if (!stage) return;
@@ -1524,6 +1668,34 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
           this.syncViewSeg();
         });
       });
+    this.root
+      .querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-texture-pack]')
+      .forEach((btn) => {
+        btn.addEventListener('click', () => {
+          this.settings.texturePack = (btn.dataset.texturePack as TexturePack) || 'default';
+          this.syncTexturePackSeg();
+        });
+      });
+    this.root
+      .querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-gfx-preset]')
+      .forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const preset = btn.dataset.gfxPreset as GfxPreset;
+          if (!preset) return;
+          this.gfxPrefs = getPresetConfig(preset);
+          saveGfxPrefs(this.gfxPrefs);
+          this.settings.renderDistance = this.gfxPrefs.renderDistance;
+          saveSettings(this.settings);
+          this.syncGfxPresetSeg();
+          const dist = this.root.querySelector<HTMLInputElement>('.dist-range');
+          if (dist) {
+            dist.value = String(this.settings.renderDistance);
+            const distVal = this.root.querySelector('.dist-val');
+            if (distVal) distVal.textContent = dist.value;
+          }
+          this.emitPrefs();
+        });
+      });
     this.root.querySelectorAll<HTMLButtonElement>('[data-settings-cat]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const cat = btn.dataset.settingsCat;
@@ -1580,6 +1752,14 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
     });
   }
 
+  private syncGfxPresetSeg(): void {
+    this.root
+      .querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-gfx-preset]')
+      .forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.gfxPreset === this.gfxPrefs.preset);
+      });
+  }
+
   private syncSettingsUi(): void {
     const sens = this.root.querySelector<HTMLInputElement>('.sens-range')!;
     const fov = this.root.querySelector<HTMLInputElement>('.fov-range')!;
@@ -1602,8 +1782,10 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
     this.root.querySelector('.dist-val')!.textContent = String(this.settings.renderDistance);
     this.root.querySelector('.bright-val')!.textContent = this.settings.brightness.toFixed(2);
     this.root.querySelector('.cloud-val')!.textContent = `${Math.round(this.settings.clouds * 100)}%`;
+    this.syncGfxPresetSeg();
     this.syncBgPrefsUi();
     this.syncViewSeg();
+    this.syncTexturePackSeg();
     this.syncOnlineSettingsUi();
     const editHud = this.root.querySelector<HTMLButtonElement>('[data-action="edit-hud"]');
     const hint = this.root.querySelector<HTMLElement>('.edit-hud-hint');
@@ -1682,6 +1864,15 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
     this.root.querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-view]').forEach((btn) => {
       btn.classList.toggle('is-active', btn.dataset.view === this.settings.viewMode);
     });
+  }
+
+  private syncTexturePackSeg(): void {
+    const pack = this.settings.texturePack || 'default';
+    this.root
+      .querySelectorAll<HTMLButtonElement>('[data-panel="settings"] [data-texture-pack]')
+      .forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.texturePack === pack);
+      });
   }
 
   private syncBgPrefsUi(): void {
@@ -1778,6 +1969,19 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
     this.settings.invertY = invert.checked;
     this.settings.showFps = fps.checked;
     this.settings.underwaterFx = uw.checked;
+    const packBtn = this.root.querySelector<HTMLButtonElement>(
+      '[data-panel="settings"] [data-texture-pack].is-active',
+    );
+    if (packBtn?.dataset.texturePack) {
+      this.settings.texturePack = packBtn.dataset.texturePack === 'goodvibes' ? 'goodvibes' : 'default';
+    }
+    const gfxBtn = this.root.querySelector<HTMLButtonElement>(
+      '[data-panel="settings"] [data-gfx-preset].is-active',
+    );
+    if (gfxBtn?.dataset.gfxPreset) {
+      this.gfxPrefs = getPresetConfig(gfxBtn.dataset.gfxPreset as GfxPreset);
+      saveGfxPrefs(this.gfxPrefs);
+    }
     this.collectOnlineSettingsFromUi();
   }
 

@@ -4,14 +4,29 @@ import type { ChunkManager } from '../world/ChunkManager';
 import { voxelRaycast, type RayHit } from '../world/voxelRaycast';
 import type { Inventory } from './Inventory';
 import type { PlayerController } from './PlayerController';
+import type { PlayerSurvival } from './PlayerSurvival';
+import type { MobManager } from '../mobs/MobManager';
+import {
+  Item,
+  isFood,
+  isTool,
+  toolMiningMultiplier,
+  toolMeleeDamage,
+  toolAttackCooldown,
+} from './items';
+import { ModManager } from '../modding/ModSystem';
 
-/** Kept for Hud/guide references. */
 export const PLACEABLE: { id: number; name: string }[] = [
   { id: Block.Grass, name: 'Grass' },
   { id: Block.Dirt, name: 'Dirt' },
   { id: Block.Stone, name: 'Stone' },
   { id: Block.Sand, name: 'Sand' },
-  { id: Block.Wood, name: 'Wood' },
+  { id: Block.Wood, name: 'Oak Log' },
+  { id: Block.Planks, name: 'Oak Planks' },
+  { id: Block.CraftingTable, name: 'Crafting Table' },
+  { id: Block.Cobblestone, name: 'Cobblestone' },
+  { id: Block.CoalOre, name: 'Coal Ore' },
+  { id: Block.IronOre, name: 'Iron Ore' },
   { id: Block.Leaves, name: 'Leaves' },
   { id: Block.Moss, name: 'Moss' },
   { id: Block.Crystal, name: 'Crystal' },
@@ -23,18 +38,16 @@ export const PLACEABLE: { id: number; name: string }[] = [
   { id: Block.Lava, name: 'Lava' },
 ];
 
-const REACH = 8;
+const REACH = 6.5;
 
 export class BlockInteraction {
   private hit: RayHit | null = null;
   private place: { x: number; y: number; z: number } | null = null;
   private highlight: THREE.LineSegments;
-  /** Flat outline on fluid surface — avoids full-cube wire through neighbors. */
   private fluidHighlight: THREE.LineLoop;
   private cooldown = 0;
   private enabled = true;
-  private onBlockChange: ((x: number, y: number, z: number, block: number) => void) | null =
-    null;
+  private onBlockChange: ((x: number, y: number, z: number, block: number) => void) | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -42,10 +55,12 @@ export class BlockInteraction {
     private player: PlayerController,
     private canvas: HTMLCanvasElement,
     private inventory: Inventory,
+    private survival?: PlayerSurvival,
+    private mobManager?: MobManager,
+    private onOpenCraftingTable?: () => void,
     private onInventoryChange?: () => void,
     onBlockChange?: (x: number, y: number, z: number, block: number) => void,
   ) {
-    // Minecraft-style: wire outline only on the looked-at block (no filled ghost).
     this.highlight = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)),
       new THREE.LineBasicMaterial({
@@ -100,65 +115,83 @@ export class BlockInteraction {
   tryBreak(): void {
     if (!this.enabled || !this.player.aimActive) return;
     this.refresh();
-    this.breakBlock();
+    this.breakOrAttack();
   }
 
   tryPlace(): void {
     if (!this.enabled || !this.player.aimActive) return;
     this.refresh();
-    this.placeBlock();
+    this.placeOrInteract();
   }
 
   private isGamePointer(e: Event): boolean {
     const t = e.target as Element | null;
     if (!t) return true;
     return !t.closest(
-      '#touch-controls, .inv-root, #main-menu, .journal, .map-panel, .click-overlay',
+      '#touch-controls, .inv-root, #main-menu, .journal, .map-panel, .click-overlay, .vy-death-screen',
     );
   }
 
+  private onPointerDown = (e: PointerEvent): void => {
+    if (!this.enabled || !this.isGamePointer(e)) return;
+    if (this.survival?.isDead) return;
+
+    if (e.button === 2) {
+      e.preventDefault();
+      this.refresh();
+      this.placeOrInteract();
+      if (!this.player.touchControlsActive && document.pointerLockElement !== this.canvas) {
+        this.canvas.requestPointerLock();
+      }
+      return;
+    }
+    if (!this.player.aimActive) return;
+    if (e.button === 0) {
+      e.preventDefault();
+      this.refresh();
+      this.breakOrAttack();
+    }
+  };
+
+  private onContextMenu = (e: Event): void => {
+    e.preventDefault();
+  };
+
+  private onWheel = (e: WheelEvent): void => {
+    if (!this.enabled || !this.player.aimActive) return;
+    e.preventDefault();
+    this.inventory.cycleHotbar(e.deltaY > 0 ? 1 : -1);
+    this.onInventoryChange?.();
+  };
+
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (!this.enabled) return;
+    if (this.survival?.isDead) return;
+    if (e.code === 'KeyF') {
+      e.preventDefault();
+      this.refresh();
+      this.placeOrInteract();
+    }
+  };
+
   private bindInput(): void {
-    document.addEventListener('pointerdown', (e) => {
-      if (!this.enabled || !this.isGamePointer(e)) return;
-      if (e.button === 2) {
-        e.preventDefault();
-        this.refresh();
-        this.placeBlock();
-        if (!this.player.touchControlsActive && document.pointerLockElement !== this.canvas) {
-          this.canvas.requestPointerLock();
-        }
-        return;
-      }
-      if (!this.player.aimActive) return;
-      if (e.button === 0) {
-        e.preventDefault();
-        this.refresh();
-        // LMB always breaks — Shift is used for sprint, so Shift+LMB must not place.
-        this.breakBlock();
-      }
-    });
+    document.addEventListener('pointerdown', this.onPointerDown);
+    document.addEventListener('contextmenu', this.onContextMenu);
+    window.addEventListener('wheel', this.onWheel, { passive: false });
+    window.addEventListener('keydown', this.onKeyDown);
+  }
 
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
-
-    window.addEventListener(
-      'wheel',
-      (e) => {
-        if (!this.enabled || !this.player.aimActive) return;
-        e.preventDefault();
-        this.inventory.cycleHotbar(e.deltaY > 0 ? 1 : -1);
-        this.onInventoryChange?.();
-      },
-      { passive: false },
-    );
-
-    window.addEventListener('keydown', (e) => {
-      if (!this.enabled) return;
-      if (e.code === 'KeyF') {
-        e.preventDefault();
-        this.refresh();
-        this.placeBlock();
-      }
-    });
+  dispose(): void {
+    document.removeEventListener('pointerdown', this.onPointerDown);
+    document.removeEventListener('contextmenu', this.onContextMenu);
+    window.removeEventListener('wheel', this.onWheel);
+    window.removeEventListener('keydown', this.onKeyDown);
+    this.scene.remove(this.highlight);
+    this.scene.remove(this.fluidHighlight);
+    this.highlight.geometry.dispose();
+    (this.highlight.material as THREE.Material).dispose();
+    this.fluidHighlight.geometry.dispose();
+    (this.fluidHighlight.material as THREE.Material).dispose();
   }
 
   update(dt: number): void {
@@ -166,7 +199,6 @@ export class BlockInteraction {
     if (this.enabled) this.refresh();
   }
 
-  /** Block under the crosshair, if any. */
   getLookAt(): { id: number; x: number; y: number; z: number } | null {
     if (!this.hit) return null;
     const id = this.chunks.getBlock(this.hit.x, this.hit.y, this.hit.z);
@@ -175,8 +207,6 @@ export class BlockInteraction {
   }
 
   private refresh(): void {
-    // Aim from the player's eyes along look direction — not the camera boom
-    // (third/front cameras sit away from the head).
     const origin = this.player.getAimOrigin();
     const dir = this.player.getAimDirection();
     origin.addScaledVector(dir, 0.05);
@@ -264,34 +294,120 @@ export class BlockInteraction {
     return x <= e.x && e.x < x + 1 && y <= e.y && e.y < y + 1 && z <= e.z && e.z < z + 1;
   }
 
-  private breakBlock(): void {
-    if (this.cooldown > 0 || !this.hit) return;
+  private breakOrAttack(): void {
+    if (this.cooldown > 0) return;
+
+    const origin = this.player.getAimOrigin();
+    const dir = this.player.getAimDirection();
+    const selectedItem = this.inventory.selected;
+    const toolId = selectedItem?.id ?? 0;
+
+    // 1. Check if aim hits a Mob first (Phase D Combat)
+    if (this.mobManager) {
+      const hitMob = this.mobManager.raycastMob(origin, dir, 3.6);
+      if (hitMob) {
+        const dmg = toolMeleeDamage(toolId);
+        const knockback = dir.clone().setY(0.25).normalize();
+        hitMob.takeDamage(dmg, knockback);
+        if (isTool(toolId)) {
+          this.inventory.damageSelected(1);
+        }
+        this.cooldown = toolAttackCooldown(toolId);
+        this.onInventoryChange?.();
+        return;
+      }
+    }
+
+    // 2. Block Breaking
+    if (!this.hit) return;
     if (this.hit.y <= 0) return;
     const broken = this.chunks.getBlock(this.hit.x, this.hit.y, this.hit.z);
     if (broken === Block.Air || broken === Block.Water) return;
+
+    // Compute tool mining speed multiplier
+    const speedMult = toolMiningMultiplier(toolId, broken);
+    const breakDelay = Math.max(0.04, 0.16 / speedMult);
+
     if (this.chunks.setBlock(this.hit.x, this.hit.y, this.hit.z, Block.Air)) {
-      this.inventory.add(broken, 1);
+      // Survival Drops Logic
+      if (broken >= 32) {
+        const drop = ModManager.get().getCustomBlockDrop(broken);
+        this.inventory.add(drop.itemId, drop.count);
+      } else if (broken === Block.Wood) {
+        this.inventory.add(Block.Wood, 1);
+      } else if (broken === Block.Stone) {
+        // Stone drops cobblestone (Minecraft style)
+        this.inventory.add(Block.Cobblestone, 1);
+      } else if (broken === Block.Leaves) {
+        const roll = Math.random();
+        if (roll < 0.12) {
+          this.inventory.add(Item.Apple, 1);
+        } else if (roll < 0.28) {
+          this.inventory.add(Item.Stick, 1);
+        } else {
+          this.inventory.add(Block.Leaves, 1);
+        }
+      } else if (broken === Block.CoalOre) {
+        this.inventory.add(Item.Coal, 1);
+      } else if (broken === Block.IronOre) {
+        this.inventory.add(Block.IronOre, 1);
+      } else {
+        this.inventory.add(broken, 1);
+      }
+
+      if (isTool(toolId)) {
+        this.inventory.damageSelected(1);
+      }
+
       this.onInventoryChange?.();
       this.onBlockChange?.(this.hit.x, this.hit.y, this.hit.z, Block.Air);
-      this.cooldown = 0.05;
+      this.cooldown = breakDelay;
       this.refresh();
     }
   }
 
-  private placeBlock(): void {
-    if (this.cooldown > 0 || !this.place) return;
+  private placeOrInteract(): void {
+    if (this.cooldown > 0) return;
+
+    const selectedItem = this.inventory.selected;
+    const heldId = selectedItem?.id ?? 0;
+
+    // 1. Food Consumption Check (Phase A Eating)
+    if (isFood(heldId) && this.survival && this.survival.canEat(heldId)) {
+      if (this.inventory.consumeSelected(1)) {
+        this.survival.eat(heldId);
+        this.cooldown = 0.35;
+        this.onInventoryChange?.();
+        return;
+      }
+    }
+
+    // 2. Crafting Table Interaction (Phase B)
+    if (this.hit && !this.player.sneaking) {
+      const lookedBlock = this.chunks.getBlock(this.hit.x, this.hit.y, this.hit.z);
+      if (lookedBlock === Block.CraftingTable) {
+        this.onOpenCraftingTable?.();
+        this.cooldown = 0.3;
+        return;
+      }
+    }
+
+    // 3. Block Placement
+    if (!this.place) return;
     const { x, y, z } = this.place;
     if (!this.isEmpty(x, y, z) || this.eyesIn(x, y, z)) return;
-    const block = this.selectedBlock;
-    if (block === Block.Air) return;
+
+    // Only blocks <= 99 can be placed in world (not tool items >= 100)
+    if (heldId <= 0 || heldId >= 100) return;
+
     if (!this.inventory.consumeSelected(1)) return;
-    if (this.chunks.setBlock(x, y, z, block)) {
+    if (this.chunks.setBlock(x, y, z, heldId)) {
       this.onInventoryChange?.();
-      this.onBlockChange?.(x, y, z, block);
-      this.cooldown = 0.05;
+      this.onBlockChange?.(x, y, z, heldId);
+      this.cooldown = 0.08;
       this.refresh();
     } else {
-      this.inventory.add(block, 1);
+      this.inventory.add(heldId, 1);
     }
   }
 }

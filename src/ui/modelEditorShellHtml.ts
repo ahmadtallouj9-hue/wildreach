@@ -63,14 +63,18 @@ export const MODEL_EDITOR_SHELL_HTML = `
             <button type="button" class="voxel-editor-btn" data-char-action="refresh-skin">
               Refresh skin
             </button>
-            <p class="mod-studio-micro">Big shape starters</p>
-            <div class="mod-studio-opgrid mod-studio-starters" role="group" aria-label="Shape starters">
-              <button type="button" class="mod-seg-btn" data-starter="sword" title="Sword">Sword</button>
-              <button type="button" class="mod-seg-btn" data-starter="dragon" title="Dragon">Dragon</button>
-              <button type="button" class="mod-seg-btn" data-starter="animal" title="Animal">Animal</button>
-              <button type="button" class="mod-seg-btn" data-starter="character" title="Humanoid from skin">Character</button>
-            </div>
-            <p class="mod-studio-hint-line">32×32×32 grid — build swords, dragons, animals</p>
+            <details class="mod-studio-more-details" open>
+              <summary class="mod-studio-more-summary">Shape starters</summary>
+              <div class="mod-studio-more-content">
+                <div class="mod-studio-opgrid mod-studio-starters" role="group" aria-label="Shape starters">
+                  <button type="button" class="mod-seg-btn" data-starter="sword" title="Sword">Sword</button>
+                  <button type="button" class="mod-seg-btn" data-starter="dragon" title="Dragon">Dragon</button>
+                  <button type="button" class="mod-seg-btn" data-starter="animal" title="Animal">Animal</button>
+                  <button type="button" class="mod-seg-btn" data-starter="character" title="Humanoid from skin">Character</button>
+                </div>
+                <p class="mod-studio-hint-line">32×32×32 grid — build swords, dragons, animals</p>
+              </div>
+            </details>
           </div>
         </section>
       </aside>

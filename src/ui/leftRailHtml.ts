@@ -71,25 +71,30 @@ export const LEFT_RAIL_HTML = `
     </div>
 
     <div class="mod-studio-shape-ops mod-modeling-only">
-      <p class="mod-studio-micro">Starters</p>
-      <div class="mod-studio-opgrid mod-studio-starters" role="group" aria-label="Shape starters">
-        <button type="button" class="mod-seg-btn" data-starter="sword" title="Sword silhouette">Sword</button>
-        <button type="button" class="mod-seg-btn" data-starter="dragon" title="Dragon silhouette">Dragon</button>
-        <button type="button" class="mod-seg-btn" data-starter="animal" title="Animal silhouette">Animal</button>
-        <button type="button" class="mod-seg-btn" data-starter="character" title="Humanoid colored from your SKIN">Character</button>
-      </div>
-      <p class="mod-studio-hint-line">32×32×32 grid · big builds OK</p>
-      <p class="mod-studio-micro">Shape ops</p>
-      <div class="mod-studio-opgrid">
-        <button type="button" class="mod-seg-btn" data-op="flip-x" title="Flip X">Flip X</button>
-        <button type="button" class="mod-seg-btn" data-op="flip-z" title="Flip Z">Flip Z</button>
-        <button type="button" class="mod-seg-btn" data-op="rot-y" title="Rotate Y">Rot Y</button>
-        <button type="button" class="mod-seg-btn" data-op="floor" title="Floor">Floor</button>
-        <button type="button" class="mod-seg-btn" data-op="dup" title="Duplicate">Dup</button>
-        <button type="button" class="mod-seg-btn" data-op="hollow" title="Hollow">Hollow</button>
-        <button type="button" class="mod-seg-btn" data-op="copy" title="Copy">Copy</button>
-        <button type="button" class="mod-seg-btn" data-op="paste" title="Paste">Paste</button>
-      </div>
+      <details class="mod-studio-more-details" open>
+        <summary class="mod-studio-more-summary">More shape tools</summary>
+        <div class="mod-studio-more-content">
+          <p class="mod-studio-micro">Starters</p>
+          <div class="mod-studio-opgrid mod-studio-starters" role="group" aria-label="Shape starters">
+            <button type="button" class="mod-seg-btn" data-starter="sword" title="Sword silhouette">Sword</button>
+            <button type="button" class="mod-seg-btn" data-starter="dragon" title="Dragon silhouette">Dragon</button>
+            <button type="button" class="mod-seg-btn" data-starter="animal" title="Animal silhouette">Animal</button>
+            <button type="button" class="mod-seg-btn" data-starter="character" title="Humanoid colored from your SKIN">Character</button>
+          </div>
+          <p class="mod-studio-hint-line">32×32×32 grid · big builds OK</p>
+          <p class="mod-studio-micro">Shape ops</p>
+          <div class="mod-studio-opgrid">
+            <button type="button" class="mod-seg-btn" data-op="flip-x" title="Flip X">Flip X</button>
+            <button type="button" class="mod-seg-btn" data-op="flip-z" title="Flip Z">Flip Z</button>
+            <button type="button" class="mod-seg-btn" data-op="rot-y" title="Rotate Y">Rot Y</button>
+            <button type="button" class="mod-seg-btn" data-op="floor" title="Floor">Floor</button>
+            <button type="button" class="mod-seg-btn" data-op="dup" title="Duplicate">Dup</button>
+            <button type="button" class="mod-seg-btn" data-op="hollow" title="Hollow">Hollow</button>
+            <button type="button" class="mod-seg-btn" data-op="copy" title="Copy">Copy</button>
+            <button type="button" class="mod-seg-btn" data-op="paste" title="Paste">Paste</button>
+          </div>
+        </div>
+      </details>
     </div>
 
     <div class="mod-studio-hidden-ops" aria-hidden="true">

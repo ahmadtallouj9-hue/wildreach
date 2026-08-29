@@ -32,3 +32,8 @@ models/vythera-jobs/
 
 # Developer-only terrain reference images (third-party, never published)
 public/dev-reference/
+.aider*
+.claude-flow/
+data/
+mobile-viewport.png
+

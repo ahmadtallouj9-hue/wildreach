@@ -22,6 +22,11 @@ export const enum Block {
   DarkStone = 15,
   Torch = 16,
   Lava = 17,
+  Planks = 18,
+  CraftingTable = 19,
+  Cobblestone = 20,
+  CoalOre = 21,
+  IronOre = 22,
 }
 
 export const BLOCK_COLORS: Record<number, [number, number, number]> = {
@@ -42,6 +47,11 @@ export const BLOCK_COLORS: Record<number, [number, number, number]> = {
   [Block.DarkStone]: [0.22, 0.24, 0.28],
   [Block.Torch]: [0.95, 0.72, 0.28],
   [Block.Lava]: [0.92, 0.32, 0.08],
+  [Block.Planks]: [0.72, 0.54, 0.34],
+  [Block.CraftingTable]: [0.65, 0.45, 0.28],
+  [Block.Cobblestone]: [0.48, 0.48, 0.48],
+  [Block.CoalOre]: [0.35, 0.35, 0.35],
+  [Block.IronOre]: [0.58, 0.52, 0.46],
 };
 
 export function isSolid(block: number): boolean {

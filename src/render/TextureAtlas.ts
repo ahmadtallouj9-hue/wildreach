@@ -7,6 +7,9 @@ import {
   WOOD_COLOR,
   materialBytes,
 } from '../world/materialPalette';
+import type { TexturePack } from '../ui/prefs';
+
+export type { TexturePack };
 
 /** 32px tiles — readable detail without noisy shimmer. */
 export const TILE = 32;
@@ -33,7 +36,44 @@ export const Tex = {
   DarkStone: 16,
   Torch: 17,
   Lava: 18,
+  Planks: 19,
+  CraftingTableTop: 20,
+  CraftingTableSide: 21,
+  CraftingTableFront: 22,
+  Cobblestone: 23,
+  CoalOre: 24,
+  IronOre: 25,
 } as const;
+
+/** Map our atlas tiles to GoodVibes PNG texture filenames. */
+export const GOODVIBES_TEXTURE_MAP: Record<number, string> = {
+  [Tex.GrassTop]: '/textures/goodvibes/block/grass_block_top.png',
+  [Tex.GrassSide]: '/textures/goodvibes/block/grass_block_side.png',
+  [Tex.Dirt]: '/textures/goodvibes/block/dirt.png',
+  [Tex.Stone]: '/textures/goodvibes/block/stone.png',
+  [Tex.Sand]: '/textures/goodvibes/block/sand.png',
+  [Tex.Water]: '/textures/goodvibes/block/water_still.png',
+  [Tex.WoodSide]: '/textures/goodvibes/block/oak_log.png',
+  [Tex.WoodTop]: '/textures/goodvibes/block/oak_log_top.png',
+  [Tex.Leaves]: '/textures/goodvibes/block/oak_leaves.png',
+  [Tex.Snow]: '/textures/goodvibes/block/snow.png',
+  [Tex.Clay]: '/textures/goodvibes/block/clay.png',
+  [Tex.Crystal]: '/textures/goodvibes/block/prismarine.png',
+  [Tex.Ruin]: '/textures/goodvibes/block/stone_bricks.png',
+  [Tex.Moss]: '/textures/goodvibes/block/mossy_cobblestone.png',
+  [Tex.Gravel]: '/textures/goodvibes/block/gravel.png',
+  [Tex.Ice]: '/textures/goodvibes/block/ice.png',
+  [Tex.DarkStone]: '/textures/goodvibes/block/obsidian.png',
+  [Tex.Torch]: '/textures/goodvibes/block/torch.png',
+  [Tex.Lava]: '/textures/goodvibes/block/lava_still.png',
+  [Tex.Planks]: '/textures/goodvibes/block/oak_planks.png',
+  [Tex.CraftingTableTop]: '/textures/goodvibes/block/crafting_table_top.png',
+  [Tex.CraftingTableSide]: '/textures/goodvibes/block/crafting_table_side.png',
+  [Tex.CraftingTableFront]: '/textures/goodvibes/block/crafting_table_front.png',
+  [Tex.Cobblestone]: '/textures/goodvibes/block/cobblestone.png',
+  [Tex.CoalOre]: '/textures/goodvibes/block/coal_ore.png',
+  [Tex.IronOre]: '/textures/goodvibes/block/iron_ore.png',
+};
 
 /** face: 0=+Y 1=-Y 2=+Z 3=-Z 4=+X 5=-X */
 export function faceTexture(block: number, face: number): number {
@@ -74,7 +114,24 @@ export function faceTexture(block: number, face: number): number {
       return Tex.Torch;
     case Block.Lava:
       return Tex.Lava;
+    case Block.Planks:
+      return Tex.Planks;
+    case Block.CraftingTable:
+      if (face === 0) return Tex.CraftingTableTop;
+      if (face === 1) return Tex.Planks;
+      if (face === 2 || face === 4) return Tex.CraftingTableFront;
+      return Tex.CraftingTableSide;
+    case Block.Cobblestone:
+      return Tex.Cobblestone;
+    case Block.CoalOre:
+      return Tex.CoalOre;
+    case Block.IronOre:
+      return Tex.IronOre;
     default:
+      if (block >= 32 && block < 64) {
+        // Dynamic custom mod blocks mapped to atlas slots 26..57
+        return block - 6; // 32 -> 26
+      }
       return Tex.Stone;
   }
 }
@@ -207,13 +264,7 @@ export function flattenTiles(data: Uint8ClampedArray): void {
   }
 }
 
-export function createTextureAtlas(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = ATLAS_PX;
-  canvas.height = ATLAS_PX;
-  const ctx = canvas.getContext('2d')!;
-  const img = ctx.createImageData(ATLAS_PX, ATLAS_PX);
-  const d = img.data;
+export function paintBaseAtlas(d: Uint8ClampedArray): void {
   const mid = (TILE - 1) * 0.5;
 
   // Soft turf — subtle blades, no flowers / sparkle.
@@ -379,16 +430,174 @@ export function createTextureAtlas(): THREE.CanvasTexture {
     return rgb(220 + n * 25, 58 + hot * 45, 10 + n * 8);
   });
 
-  flattenTiles(d);
+  paint(d, Tex.Planks, (x, y) => {
+    const plankIdx = Math.floor(y / 8);
+    const isPlankBorder = y % 8 === 0;
+    const isVerticalSeam = (x + plankIdx * 11) % 16 === 0;
+    if (isPlankBorder || isVerticalSeam) return rgb(140, 100, 60);
+    const n = h21(x, y);
+    return rgb(190 + n * 20, 140 + n * 18, 90 + n * 12);
+  });
 
-  ctx.putImageData(img, 0, 0);
+  paint(d, Tex.CraftingTableTop, (x, y) => {
+    const isBorder = x < 2 || x >= 30 || y < 2 || y >= 30;
+    if (isBorder) return rgb(120, 75, 45);
+    const grid = (x % 14 === 0) || (y % 14 === 0);
+    if (grid) return rgb(100, 60, 35);
+    const n = h21(x, y);
+    return rgb(175 + n * 20, 120 + n * 15, 75 + n * 10);
+  });
+
+  paint(d, Tex.CraftingTableSide, (x, y) => {
+    const isBorder = x < 2 || x >= 30 || y < 2 || y >= 30;
+    if (isBorder) return rgb(120, 75, 45);
+    const n = h21(x, y);
+    return rgb(165 + n * 18, 115 + n * 14, 70 + n * 10);
+  });
+
+  paint(d, Tex.CraftingTableFront, (x, y) => {
+    const isBorder = x < 2 || x >= 30 || y < 2 || y >= 30;
+    if (isBorder) return rgb(120, 75, 45);
+    // Draw small tool shape in center
+    if (x >= 12 && x <= 20 && y >= 10 && y <= 22) return rgb(80, 85, 95);
+    const n = h21(x, y);
+    return rgb(165 + n * 18, 115 + n * 14, 70 + n * 10);
+  });
+
+  paint(d, Tex.Cobblestone, (x, y) => {
+    const n = h21(x, y);
+    const rock = ((x ^ y) * 3) % 7 === 0;
+    if (rock) return rgb(90 + n * 15, 90 + n * 15, 95 + n * 15);
+    return rgb(120 + n * 25, 120 + n * 25, 125 + n * 25);
+  });
+
+  paint(d, Tex.CoalOre, (x, y) => {
+    const n = h21(x, y);
+    const ore = ((x * 7 + y * 13) % 29 < 7);
+    if (ore) return rgb(25 + n * 15, 25 + n * 15, 30 + n * 15);
+    return rgb(120 + n * 20, 125 + n * 20, 130 + n * 20);
+  });
+
+  paint(d, Tex.IronOre, (x, y) => {
+    const n = h21(x, y);
+    const ore = ((x * 11 + y * 17) % 31 < 8);
+    if (ore) return rgb(215 + n * 20, 165 + n * 20, 130 + n * 20);
+    return rgb(120 + n * 20, 125 + n * 20, 130 + n * 20);
+  });
+}
+
+/**
+ * Apply texture pack to an existing CanvasTexture.
+ * If pack is 'default', flattens tiles to the palette untextured look.
+ * If pack is 'goodvibes', paints GoodVibes PNG textures with graceful fallback.
+ */
+export function applyTexturePackToAtlas(
+  tex: THREE.CanvasTexture,
+  pack: TexturePack = 'default',
+  onComplete?: () => void,
+): void {
+  const canvas = (tex.image as HTMLCanvasElement) || (tex.source?.data as HTMLCanvasElement);
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(ATLAS_PX, ATLAS_PX);
+  const d = img.data;
+  paintBaseAtlas(d);
+
+  if (pack === 'default') {
+    flattenTiles(d);
+    ctx.putImageData(img, 0, 0);
+    tex.needsUpdate = true;
+    onComplete?.();
+    return;
+  }
+
+  if (pack === 'goodvibes') {
+    // Put base image data as fallback first
+    ctx.putImageData(img, 0, 0);
+    tex.needsUpdate = true;
+
+    if (typeof Image === 'undefined') {
+      onComplete?.();
+      return;
+    }
+
+    const entries = Object.entries(GOODVIBES_TEXTURE_MAP);
+    let remaining = entries.length;
+
+    const checkDone = () => {
+      remaining--;
+      tex.needsUpdate = true;
+      if (remaining <= 0) {
+        onComplete?.();
+      }
+    };
+
+    for (const [tileStr, url] of entries) {
+      const tile = Number(tileStr);
+      const ox = (tile % ATLAS_GRID) * TILE;
+      const oy = Math.floor(tile / ATLAS_GRID) * TILE;
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = () => {
+        ctx.clearRect(ox, oy, TILE, TILE);
+        ctx.drawImage(image, ox, oy, TILE, TILE);
+        checkDone();
+      };
+      image.onerror = () => {
+        checkDone();
+      };
+      image.src = url;
+    }
+  }
+}
+
+export function updateCustomBlockTextureInAtlas(
+  tex: THREE.CanvasTexture,
+  blockId: number,
+  color: [number, number, number],
+  textureDataUrl?: string,
+): void {
+  const canvas = (tex.image as HTMLCanvasElement) || (tex.source?.data as HTMLCanvasElement);
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d')!;
+  const tile = blockId - 6; // slot in atlas
+  if (tile < 0 || tile >= ATLAS_GRID * ATLAS_GRID) return;
+
+  const ox = (tile % ATLAS_GRID) * TILE;
+  const oy = Math.floor(tile / ATLAS_GRID) * TILE;
+
+  if (textureDataUrl && typeof Image !== 'undefined') {
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(ox, oy, TILE, TILE);
+      ctx.drawImage(img, ox, oy, TILE, TILE);
+      tex.needsUpdate = true;
+    };
+    img.src = textureDataUrl;
+  } else {
+    // Fill block with custom color and subtle grid shading
+    ctx.fillStyle = `rgb(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)})`;
+    ctx.fillRect(ox, oy, TILE, TILE);
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.strokeRect(ox + 0.5, oy + 0.5, TILE - 1, TILE - 1);
+    tex.needsUpdate = true;
+  }
+}
+
+export function createTextureAtlas(pack: TexturePack = 'default'): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = ATLAS_PX;
+  canvas.height = ATLAS_PX;
   const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestMipmapNearestFilter;
   tex.generateMipmaps = true;
   tex.anisotropy = 2;
   tex.flipY = true;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
+
+  applyTexturePackToAtlas(tex, pack);
   return tex;
 }

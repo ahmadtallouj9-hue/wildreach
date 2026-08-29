@@ -43,8 +43,11 @@ export const TEXTURE_STUDIO_HTML = `
       <select class="mod-tex-mat-select" aria-label="Material to edit"></select>
       <input type="text" class="mod-tex-name" maxlength="16" placeholder="Block name" />
       <input type="checkbox" class="mod-tex-apply-shape" checked />
-      <label class="mod-tex-import">
-        <input type="file" accept="image/png,image/jpeg,image/webp" />
+      <label class="mod-tex-import vy-file-pill">
+        <span class="vy-file-pill__btn">Upload texture</span>
+        <input type="file" accept="image/png,image/jpeg,image/webp" hidden />
+        <span class="vy-file-pill__name" hidden></span>
+        <button type="button" class="vy-file-pill__clear" hidden title="Clear file" aria-label="Clear file">✕</button>
       </label>
       <button type="button" data-tex="apply">Apply</button>
       <button type="button" data-tex="new">New</button>

@@ -416,19 +416,47 @@ export class VytheraAIStudio {
       if (f) void this.loadImageFile(f, preview, paletteEl);
     });
 
-    const fileBtn = document.createElement('button');
-    fileBtn.type = 'button';
-    fileBtn.className = 'vas-btn vas-btn--primary';
-    fileBtn.textContent = 'Choose Image';
+    const filePill = document.createElement('label');
+    filePill.className = 'vy-file-pill';
+    const filePillBtn = document.createElement('span');
+    filePillBtn.className = 'vy-file-pill__btn vy-btn--primary';
+    filePillBtn.textContent = 'Upload image';
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
     fileInput.hidden = true;
-    fileBtn.addEventListener('click', () => fileInput.click());
+    const fileNameEl = document.createElement('span');
+    fileNameEl.className = 'vy-file-pill__name';
+    fileNameEl.hidden = true;
+    const fileClearBtn = document.createElement('button');
+    fileClearBtn.type = 'button';
+    fileClearBtn.className = 'vy-file-pill__clear';
+    fileClearBtn.hidden = true;
+    fileClearBtn.title = 'Clear file';
+    fileClearBtn.setAttribute('aria-label', 'Clear file');
+    fileClearBtn.textContent = '✕';
+
+    filePill.append(filePillBtn, fileInput, fileNameEl, fileClearBtn);
+
     fileInput.addEventListener('change', () => {
       const f = fileInput.files?.[0];
-      if (f) void this.loadImageFile(f, preview, paletteEl);
+      if (f) {
+        fileNameEl.textContent = f.name;
+        fileNameEl.hidden = false;
+        fileClearBtn.hidden = false;
+        void this.loadImageFile(f, preview, paletteEl);
+      }
     });
+
+    fileClearBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fileInput.value = '';
+      fileNameEl.textContent = '';
+      fileNameEl.hidden = true;
+      fileClearBtn.hidden = true;
+    });
+
     const pasteBtn = document.createElement('button');
     pasteBtn.type = 'button';
     pasteBtn.className = 'vas-btn';
@@ -439,7 +467,7 @@ export class VytheraAIStudio {
     dropActions.className = 'vas-row';
     dropActions.style.justifyContent = 'center';
     dropActions.style.marginTop = '0.55rem';
-    dropActions.append(fileBtn, pasteBtn, fileInput);
+    dropActions.append(filePill, pasteBtn);
     drop.appendChild(dropActions);
 
     const stageWrap = document.createElement('div');

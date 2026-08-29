@@ -8,6 +8,7 @@
  * survive the trip.
  */
 import { WORLD_GENERATION_VERSION } from '../gen/version';
+import { DEFAULT_WORLD_VOXEL_SIZE, sanitizeWorldVoxelSize } from '../worldScale';
 import {
   CLOUD_STYLES,
   LANDSCAPE_STYLES,
@@ -171,6 +172,18 @@ export function sanitizeStyle(input: unknown, warnings: string[] = []): VytheraW
     : 0.25;
   if (!(TERRAIN_RESOLUTIONS as readonly number[]).includes(requestedSize)) {
     warnings.push('Unsupported terrain resolution; High (0.25) used instead.');
+  }
+
+  // Block size is separate from terrain resolution and arrives from the same
+  // untrusted file, so it is clamped rather than trusted. A style with no
+  // world scale predates the field and describes a stock world; defaulting it
+  // to 1.0 is what stops an old import from being silently rescaled.
+  const rawScale = raw.worldScale as { worldVoxelSize?: unknown } | undefined;
+  const requestedScale = rawScale?.worldVoxelSize;
+  const worldVoxelSize = sanitizeWorldVoxelSize(requestedScale ?? DEFAULT_WORLD_VOXEL_SIZE);
+  style.worldScale = { worldVoxelSize };
+  if (requestedScale !== undefined && Number(requestedScale) !== worldVoxelSize) {
+    warnings.push(`Unsupported world scale; ${worldVoxelSize} used instead.`);
   }
 
   // Numeric parameters are rebuilt strictly from the spec table, so any extra

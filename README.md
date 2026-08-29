@@ -43,3 +43,12 @@ Optional seed: `http://localhost:5173/?seed=yourseed`
 ## Stack
 
 Vite · TypeScript · Three.js · simplex-noise
+
+## Mod Studio & Data-Driven Modding
+
+VYTHERA Mod Studio features a strict data-driven modding architecture:
+- **No eval, no new Function, no fetch, no WebSockets** for mod logic.
+- **Storage**: `mods/<id>/mod.json` + `blocks`, `items`, `recipes`, `loot`, `sounds`, `lang`, `textures`, `models` in LocalStorage and package bundles.
+- **Custom Blocks & Items**: 16x16 face textures, custom hardness/dig speed, tools, drop tables, custom 2x2/3x3 crafting recipes.
+- **Backlog Checklist**: Complete 500-item system checklist accessible in Mod Studio.
+

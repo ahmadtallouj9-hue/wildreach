@@ -11,6 +11,18 @@ body,
   margin: 0;
   overflow: hidden;
   background: #030507;
+  overscroll-behavior: none;
+}
+
+html.touch-device,
+html.touch-device body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .game-canvas {

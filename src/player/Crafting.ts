@@ -1,5 +1,6 @@
 import { Block } from '../world/blocks';
 import type { ItemStack } from './Inventory';
+import { Item, createItemStack } from './items';
 
 export interface Recipe {
   id: string;
@@ -7,9 +8,115 @@ export interface Recipe {
   pattern: number[];
   result: ItemStack;
   hint: string;
+  gridRequired?: '2x2' | '3x3';
 }
 
 export const RECIPES: Recipe[] = [
+  // --- Basic Survival Recipes ---
+  {
+    id: 'planks',
+    name: 'Oak Planks',
+    pattern: [Block.Wood, 0, 0, 0, 0, 0, 0, 0, 0],
+    result: { id: Block.Planks, count: 4 },
+    hint: '1 Oak Log → 4 Planks',
+  },
+  {
+    id: 'sticks',
+    name: 'Sticks',
+    pattern: [Block.Planks, 0, 0, Block.Planks, 0, 0, 0, 0, 0],
+    result: { id: Item.Stick, count: 4 },
+    hint: '2 Planks (vertical) → 4 Sticks',
+  },
+  {
+    id: 'crafting_table',
+    name: 'Crafting Table',
+    pattern: [Block.Planks, Block.Planks, 0, Block.Planks, Block.Planks, 0, 0, 0, 0],
+    result: { id: Block.CraftingTable, count: 1 },
+    hint: '4 Planks (2×2) → Crafting Table',
+  },
+  {
+    id: 'torches',
+    name: 'Torches',
+    pattern: [Item.Coal, 0, 0, Item.Stick, 0, 0, 0, 0, 0],
+    result: { id: Block.Torch, count: 4 },
+    hint: 'Coal over Stick → 4 Torches',
+  },
+
+  // --- Wooden Tools (3x3 recommended) ---
+  {
+    id: 'wooden_pickaxe',
+    name: 'Wooden Pickaxe',
+    pattern: [
+      Block.Planks, Block.Planks, Block.Planks,
+      0, Item.Stick, 0,
+      0, Item.Stick, 0,
+    ],
+    result: createItemStack(Item.WoodenPickaxe, 1),
+    hint: '3 Planks top row + 2 Sticks center → Wooden Pickaxe',
+    gridRequired: '3x3',
+  },
+  {
+    id: 'wooden_axe',
+    name: 'Wooden Axe',
+    pattern: [
+      Block.Planks, Block.Planks, 0,
+      Block.Planks, Item.Stick, 0,
+      0, Item.Stick, 0,
+    ],
+    result: createItemStack(Item.WoodenAxe, 1),
+    hint: '3 Planks L-shape + 2 Sticks → Wooden Axe',
+    gridRequired: '3x3',
+  },
+  {
+    id: 'wooden_sword',
+    name: 'Wooden Sword',
+    pattern: [
+      Block.Planks, 0, 0,
+      Block.Planks, 0, 0,
+      Item.Stick, 0, 0,
+    ],
+    result: createItemStack(Item.WoodenSword, 1),
+    hint: '2 Planks vertical + 1 Stick → Wooden Sword',
+  },
+
+  // --- Stone Tools ---
+  {
+    id: 'stone_pickaxe',
+    name: 'Stone Pickaxe',
+    pattern: [
+      Block.Cobblestone, Block.Cobblestone, Block.Cobblestone,
+      0, Item.Stick, 0,
+      0, Item.Stick, 0,
+    ],
+    result: createItemStack(Item.StonePickaxe, 1),
+    hint: '3 Cobblestone top row + 2 Sticks center → Stone Pickaxe',
+    gridRequired: '3x3',
+  },
+  {
+    id: 'stone_axe',
+    name: 'Stone Axe',
+    pattern: [
+      Block.Cobblestone, Block.Cobblestone, 0,
+      Block.Cobblestone, Item.Stick, 0,
+      0, Item.Stick, 0,
+    ],
+    result: createItemStack(Item.StoneAxe, 1),
+    hint: '3 Cobblestone L-shape + 2 Sticks → Stone Axe',
+    gridRequired: '3x3',
+  },
+  {
+    id: 'stone_sword',
+    name: 'Stone Sword',
+    pattern: [
+      Block.Cobblestone, 0, 0,
+      Block.Cobblestone, 0, 0,
+      Item.Stick, 0, 0,
+    ],
+    result: createItemStack(Item.StoneSword, 1),
+    hint: '2 Cobblestone vertical + 1 Stick → Stone Sword',
+  },
+
+  // --- World Material Recipes ---
   {
     id: 'grass',
     name: 'Grass tuft',
@@ -37,6 +144,7 @@ export const RECIPES: Recipe[] = [
     pattern: [0, Block.Stone, 0, Block.Stone, Block.Crystal, Block.Stone, 0, Block.Stone, 0],
     result: { id: Block.Crystal, count: 2 },
     hint: 'Crystal ringed by Stone → Crystal×2',
+    gridRequired: '3x3',
   },
   {
     id: 'ruin',
@@ -51,13 +159,6 @@ export const RECIPES: Recipe[] = [
     pattern: [Block.Sand, Block.Sand, 0, Block.Sand, Block.Sand, 0, 0, 0, 0],
     result: { id: Block.Snow, count: 4 },
     hint: '2×2 Sand → Snow',
-  },
-  {
-    id: 'woodpack',
-    name: 'Timber bundle',
-    pattern: [Block.Wood, Block.Wood, Block.Wood, 0, 0, 0, 0, 0, 0],
-    result: { id: Block.Wood, count: 6 },
-    hint: '3 Wood in a row → Wood×6',
   },
   {
     id: 'gravel',
@@ -80,24 +181,38 @@ export class CraftingGrid {
 
   setCell(i: number, stack: ItemStack | null): void {
     if (i < 0 || i >= 9) return;
-    this.cells[i] = stack && stack.count > 0 ? { id: stack.id, count: stack.count } : null;
+    this.cells[i] =
+      stack && stack.count > 0
+        ? {
+            id: stack.id,
+            count: stack.count,
+            durability: stack.durability,
+            maxDurability: stack.maxDurability,
+            meta: stack.meta ? { ...stack.meta } : undefined,
+          }
+        : null;
   }
 
-  match(): Recipe | null {
+  set(i: number, stack: ItemStack | null): void {
+    this.setCell(i, stack);
+  }
+
+  match(is3x3 = true): Recipe | null {
     const ids = this.cells.map((c) => (c ? c.id : 0));
     for (const recipe of RECIPES) {
+      if (!is3x3 && recipe.gridRequired === '3x3') continue;
       if (patternsMatch(ids, recipe.pattern)) return recipe;
     }
     return null;
   }
 
-  peekResult(): ItemStack | null {
-    const r = this.match();
-    return r ? { id: r.result.id, count: r.result.count } : null;
+  peekResult(is3x3 = true): ItemStack | null {
+    const r = this.match(is3x3);
+    return r ? { ...r.result } : null;
   }
 
-  craftOnce(): ItemStack | null {
-    const recipe = this.match();
+  craftOnce(is3x3 = true): ItemStack | null {
+    const recipe = this.match(is3x3);
     if (!recipe) return null;
     for (let i = 0; i < 9; i++) {
       const c = this.cells[i];
@@ -105,7 +220,13 @@ export class CraftingGrid {
       c.count -= 1;
       if (c.count <= 0) this.cells[i] = null;
     }
-    return { id: recipe.result.id, count: recipe.result.count };
+    return { ...recipe.result };
+  }
+
+  clear(): (ItemStack | null)[] {
+    const items = [...this.cells];
+    this.cells = Array.from({ length: 9 }, () => null);
+    return items;
   }
 }
 

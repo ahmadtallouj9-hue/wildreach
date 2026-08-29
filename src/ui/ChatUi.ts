@@ -35,7 +35,7 @@ export class ChatUi {
     this.root = document.createElement('div');
     this.root.className = 'chat-root vy-chat';
     this.root.innerHTML = `
-      <div class="vy-chat__log" role="log" aria-live="polite" aria-relevant="additions"></div>
+      <div class="vy-chat__log" role="log" aria-live="polite" aria-relevant="additions" hidden></div>
       <form class="vy-chat__form" hidden>
         <input
           id="vy-chat-input"
@@ -145,6 +145,7 @@ export class ChatUi {
       row.append(nameEl, document.createTextNode(rtl ? ' :' : ': '), body);
     }
 
+    this.logEl.hidden = false;
     this.logEl.appendChild(row);
     while (this.logEl.children.length > MAX_VISIBLE) {
       this.logEl.firstElementChild?.remove();

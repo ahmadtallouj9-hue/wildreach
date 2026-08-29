@@ -15,8 +15,8 @@ export class ProfilePreview3D {
   private dragging = false;
   private lastX = 0;
   private yaw = 0.28;
-  private readonly pitch = 0.12;
-  private dist = 3.15;
+  private readonly pitch = 0.06;
+  private dist = 3.65;
   private previewPose: 'stand' | 'sneak' | 'sit' = 'stand';
   private previewMove = 0;
   private autoSpin = true;
@@ -111,6 +111,19 @@ export class ProfilePreview3D {
     const h = Math.max(160, Math.floor(host.clientHeight || this.root.clientHeight || 220));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    const baseFov = 35;
+    if (w < h) {
+      const targetAspect = 0.95;
+      if (this.camera.aspect < targetAspect) {
+        const vFovRad = THREE.MathUtils.degToRad(baseFov);
+        const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * targetAspect);
+        this.camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hFovRad / 2) / this.camera.aspect));
+      } else {
+        this.camera.fov = baseFov;
+      }
+    } else {
+      this.camera.fov = baseFov;
+    }
     this.camera.updateProjectionMatrix();
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
@@ -152,13 +165,13 @@ export class ProfilePreview3D {
   }
 
   private updateCamera(): void {
-    const targetY = 0.9;
+    const targetY = 0.92;
     const cp = Math.cos(this.pitch);
     // Fixed orbit angle — avatar spins in place (turntable).
     const camYaw = 0.45;
     this.camera.position.set(
       Math.sin(camYaw) * cp * this.dist,
-      targetY + Math.sin(this.pitch) * this.dist * 0.75,
+      targetY + Math.sin(this.pitch) * this.dist * 0.4,
       Math.cos(camYaw) * cp * this.dist,
     );
     this.camera.lookAt(0, targetY, 0);

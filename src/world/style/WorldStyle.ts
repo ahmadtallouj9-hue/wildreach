@@ -9,6 +9,11 @@
  */
 import { SEA_LEVEL } from '../blocks';
 import { WORLD_GENERATION_VERSION } from '../gen/version';
+import {
+  DEFAULT_WORLD_VOXEL_SIZE,
+  makeWorldScale,
+  type WorldScaleConfig,
+} from '../worldScale';
 
 /** Bumped when the meaning of style fields changes incompatibly. */
 export const WORLD_STYLE_FORMAT = 1;
@@ -100,6 +105,11 @@ export interface WorldStyleAtmosphere {
   weather: WeatherStyle;
 }
 
+export interface WorldStyleScale {
+  /** World units per gameplay block. */
+  worldVoxelSize: number;
+}
+
 export interface VytheraWorldStyle {
   id: string;
   name: string;
@@ -110,6 +120,14 @@ export interface VytheraWorldStyle {
   landscape: LandscapeStyle;
   seed: string;
   terrainVoxelSize: TerrainResolution;
+  /**
+   * Physical size of one gameplay block, distinct from `terrainVoxelSize`,
+   * which only controls how finely terrain elevation is represented within a
+   * block. Optional because every style written before the field existed
+   * describes a stock world, and those must keep loading as 1.0 rather than
+   * being silently rescaled.
+   */
+  worldScale?: WorldStyleScale;
   terrain: WorldStyleTerrain;
   water: WorldStyleWater;
   biome: WorldStyleBiome;
@@ -257,6 +275,20 @@ function defaultsFor(group: StyleGroup): Record<string, number> {
   return out;
 }
 
+/**
+ * The scale a style describes, as one config every system can read.
+ *
+ * Pairs the block size with the terrain resolution so callers never have to
+ * fetch them from two places and risk using one without the other. A style
+ * predating `worldScale` resolves to a stock 1.0 world.
+ */
+export function worldScaleOf(style: VytheraWorldStyle): WorldScaleConfig {
+  return makeWorldScale({
+    worldVoxelSize: style.worldScale?.worldVoxelSize ?? DEFAULT_WORLD_VOXEL_SIZE,
+    terrainVoxelSize: style.terrainVoxelSize,
+  });
+}
+
 export function createDefaultStyle(overrides: Partial<VytheraWorldStyle> = {}): VytheraWorldStyle {
   const now = Date.now();
   return {
@@ -268,6 +300,7 @@ export function createDefaultStyle(overrides: Partial<VytheraWorldStyle> = {}): 
     landscape: 'rolling',
     seed: 'vythera',
     terrainVoxelSize: 0.25,
+    worldScale: { worldVoxelSize: DEFAULT_WORLD_VOXEL_SIZE },
     terrain: defaultsFor('terrain') as unknown as WorldStyleTerrain,
     water: defaultsFor('water') as unknown as WorldStyleWater,
     biome: defaultsFor('biome') as unknown as WorldStyleBiome,

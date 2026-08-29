@@ -1,4 +1,4 @@
-import { Block, BLOCK_COLORS } from '../world/blocks';
+import { BLOCK_COLORS } from '../world/blocks';
 import { CraftingGrid, RECIPES } from '../player/Crafting';
 import {
   HOTBAR_SIZE,
@@ -7,73 +7,55 @@ import {
   type Inventory,
   type ItemStack,
 } from '../player/Inventory';
+import {
+  ITEM_NAMES,
+  ITEM_KINDS,
+  ITEM_ICONS,
+  ITEM_COLORS,
+} from '../player/items';
+import { ProfilePreview3D } from './ProfilePreview3D';
+import type { Profile } from './prefs';
 
-export const BLOCK_NAMES: Record<number, string> = {
-  [Block.Grass]: 'Grass',
-  [Block.Dirt]: 'Dirt',
-  [Block.Stone]: 'Stone',
-  [Block.Sand]: 'Sand',
-  [Block.Water]: 'Water',
-  [Block.Wood]: 'Wood',
-  [Block.Leaves]: 'Leaves',
-  [Block.Snow]: 'Snow',
-  [Block.Clay]: 'Clay',
-  [Block.Crystal]: 'Crystal',
-  [Block.Ruin]: 'Ruin',
-  [Block.Moss]: 'Moss',
-  [Block.Gravel]: 'Gravel',
-  [Block.Ice]: 'Ice',
-  [Block.DarkStone]: 'Dark stone',
-  [Block.Torch]: 'Torch',
-  [Block.Lava]: 'Lava',
-};
-
-/** Short type label shown in the look-at viewer. */
-export const BLOCK_KINDS: Record<number, string> = {
-  [Block.Grass]: 'Surface block',
-  [Block.Dirt]: 'Soil',
-  [Block.Stone]: 'Building block',
-  [Block.Sand]: 'Loose sediment',
-  [Block.Water]: 'Fluid',
-  [Block.Wood]: 'Natural material',
-  [Block.Leaves]: 'Foliage',
-  [Block.Snow]: 'Surface cover',
-  [Block.Clay]: 'Sediment',
-  [Block.Crystal]: 'Rare mineral',
-  [Block.Ruin]: 'Structure block',
-  [Block.Moss]: 'Growth',
-  [Block.Gravel]: 'Loose rock',
-  [Block.Ice]: 'Frozen water',
-  [Block.DarkStone]: 'Deep rock',
-  [Block.Torch]: 'Light source',
-  [Block.Lava]: 'Molten fluid',
-};
+export const BLOCK_NAMES = ITEM_NAMES;
+export const BLOCK_KINDS = ITEM_KINDS;
 
 export function blockCssColor(id: number): string {
-  const c = BLOCK_COLORS[id] ?? [1, 0, 1];
+  const c = ITEM_COLORS[id] ?? BLOCK_COLORS[id] ?? [1, 0, 1];
   return `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
 }
 
 type PanelTab = 'pack' | 'guide';
 type SlotKind = 'inv' | 'craft' | 'result';
 
+/** Maps 2x2 grid indices (0..3) to 3x3 CraftingGrid cell positions [row 0 (0,1), row 1 (3,4)]. */
+const CRAFT_2X2_MAP = [0, 1, 3, 4] as const;
+
 export class InventoryUi {
   readonly root: HTMLElement;
   private readonly panel: HTMLElement;
   private readonly hotbarEl: HTMLElement;
   private readonly hotbarNameEl: HTMLElement;
-  private readonly invGrid: HTMLElement;
+  private readonly storageGridEl: HTMLElement;
+  private readonly panelHotbarGridEl: HTMLElement;
   private readonly craftGridEl: HTMLElement;
+  private readonly craftSectionTitleEl: HTMLElement;
   private readonly resultSlot: HTMLElement;
   private readonly cursorEl: HTMLElement;
+  private readonly preview3d: ProfilePreview3D | null;
+  private profile: Profile | null = null;
   private tab: PanelTab = 'pack';
   private open = false;
+  private isTableMode = false;
   private cursor: ItemStack | null = null;
   private readonly craft = new CraftingGrid();
   private onChange: (() => void) | null = null;
   private onOpenChange: ((open: boolean) => void) | null = null;
 
-  constructor(private readonly inventory: Inventory) {
+  constructor(private readonly inventory: Inventory, opts?: { profile?: Profile }) {
+    this.profile = opts?.profile ?? null;
+    this.preview3d = this.profile
+      ? new ProfilePreview3D({ autoSpin: true, interactive: false, transparent: true })
+      : null;
     this.root = document.createElement('div');
     this.root.className = 'inv-root vy-inv';
     this.root.innerHTML = `
@@ -82,48 +64,64 @@ export class InventoryUi {
         <div class="vy-hotbar__row" role="listbox" aria-label="Hotbar"></div>
       </div>
       <div class="vy-inv-panel" hidden>
-        <header class="vy-inv-head">
-          <div class="vy-inv-tabs">
-            <button type="button" class="vy-inv-tab is-active" data-tab="pack">Pack</button>
-            <button type="button" class="vy-inv-tab" data-tab="guide">Guide</button>
-          </div>
-          <button type="button" class="vy-btn vy-btn--ghost" data-close aria-label="Close">✕</button>
-        </header>
-        <div class="vy-inv-body" data-view="pack">
-          <section class="vy-craft">
-            <h3>Crafting</h3>
-            <div class="vy-craft__row">
-              <div class="vy-craft__grid"></div>
-              <span class="vy-craft__arrow" aria-hidden="true">→</span>
-              <div class="vy-slot" data-kind="result" data-index="0"></div>
+        <div class="vy-inv-card">
+          <header class="vy-inv-head">
+            <div class="vy-inv-tabs">
+              <button type="button" class="vy-inv-tab is-active" data-tab="pack">Pack</button>
+              <button type="button" class="vy-inv-tab" data-tab="guide">Guide</button>
             </div>
-            <p class="vy-craft__hint">Arrange materials, then take the result.</p>
-          </section>
-          <section class="vy-pack">
-            <h3>Satchel</h3>
-            <div class="vy-pack__grid"></div>
-          </section>
-        </div>
-        <div class="vy-inv-body" data-view="guide" hidden>
-          <section class="vy-pack">
-            <h3>Controls</h3>
-            <ul class="vy-guide__list">
-              <li><kbd>E</kbd> Pack &amp; craft</li>
-              <li><kbd>T</kbd> / <kbd>Enter</kbd> Chat (AR / EN)</li>
-              <li><kbd>G</kbd> Field guide</li>
-              <li><kbd>Ctrl</kbd> Sneak</li>
-              <li><kbd>C</kbd> Sit / stand</li>
-              <li><kbd>Space</kbd> Jump</li>
-              <li><kbd>Shift</kbd> Sprint</li>
-              <li><kbd>V</kbd> First / third / front view</li>
-              <li><kbd>1–9</kbd> Hotbar · <kbd>F</kbd> / RMB place · LMB break</li>
-              <li><kbd>J</kbd> Journal · <kbd>M</kbd> Map</li>
-            </ul>
-          </section>
-          <section class="vy-pack">
-            <h3>Recipes</h3>
-            <ul class="vy-guide__recipes"></ul>
-          </section>
+            <button type="button" class="vy-btn vy-btn--ghost vy-inv-close" data-close aria-label="Close">✕</button>
+          </header>
+
+          <div class="vy-inv-body" data-view="pack">
+            <div class="vy-inv-top">
+              <div class="vy-inv-preview-wrap">
+                <div class="vy-inv-preview" aria-label="Wanderer preview"></div>
+              </div>
+              <section class="vy-inv-craft">
+                <h3 class="vy-inv-section__title vy-craft__title">Crafting (2×2)</h3>
+                <div class="vy-inv-craft__row">
+                  <div class="vy-inv-craft__grid"></div>
+                  <span class="vy-inv-craft__arrow" aria-hidden="true">→</span>
+                  <div class="vy-slot vy-slot--result" data-kind="result" data-index="0" title="Crafting result"></div>
+                </div>
+              </section>
+            </div>
+
+            <div class="vy-inv-bottom">
+              <section class="vy-inv-section">
+                <h3 class="vy-inv-section__title">Storage</h3>
+                <div class="vy-inv-storage__grid"></div>
+              </section>
+              <section class="vy-inv-section">
+                <h3 class="vy-inv-section__title">Hotbar</h3>
+                <div class="vy-inv-hotbar__grid"></div>
+              </section>
+            </div>
+          </div>
+
+          <div class="vy-inv-body" data-view="guide" hidden>
+            <div class="vy-inv-guide-content">
+              <section class="vy-inv-guide-sec">
+                <h3>Controls</h3>
+                <ul class="vy-guide__list">
+                  <li><kbd>E</kbd> Pack &amp; craft</li>
+                  <li><kbd>T</kbd> / <kbd>Enter</kbd> Chat</li>
+                  <li><kbd>Ctrl</kbd> Sneak</li>
+                  <li><kbd>C</kbd> Sit / stand</li>
+                  <li><kbd>Space</kbd> Jump</li>
+                  <li><kbd>Shift</kbd> Sprint</li>
+                  <li><kbd>V</kbd> First / third / front view</li>
+                  <li><kbd>1–9</kbd> Hotbar · <kbd>F</kbd> / RMB place / eat · LMB break / swing</li>
+                  <li><kbd>J</kbd> Discovery · <kbd>M</kbd> Map</li>
+                </ul>
+              </section>
+              <section class="vy-inv-guide-sec">
+                <h3>Recipes</h3>
+                <ul class="vy-guide__recipes"></ul>
+              </section>
+            </div>
+          </div>
         </div>
       </div>
       <div class="vy-inv-cursor" hidden></div>
@@ -132,10 +130,20 @@ export class InventoryUi {
     this.panel = this.root.querySelector('.vy-inv-panel')!;
     this.hotbarEl = this.root.querySelector('.vy-hotbar__row')!;
     this.hotbarNameEl = this.root.querySelector('.vy-hotbar__name')!;
-    this.invGrid = this.root.querySelector('.vy-pack__grid')!;
-    this.craftGridEl = this.root.querySelector('.vy-craft__grid')!;
+    this.storageGridEl = this.root.querySelector('.vy-inv-storage__grid')!;
+    this.panelHotbarGridEl = this.root.querySelector('.vy-inv-hotbar__grid')!;
+    this.craftGridEl = this.root.querySelector('.vy-inv-craft__grid')!;
+    this.craftSectionTitleEl = this.root.querySelector('.vy-craft__title')!;
     this.resultSlot = this.root.querySelector('[data-kind="result"]')!;
     this.cursorEl = this.root.querySelector('.vy-inv-cursor')!;
+
+    const previewHost = this.root.querySelector('.vy-inv-preview') as HTMLElement | null;
+    if (this.preview3d && previewHost) {
+      this.preview3d.mount(previewHost);
+      if (this.profile) this.preview3d.applyProfile(this.profile);
+    } else if (previewHost) {
+      previewHost.hidden = true;
+    }
 
     this.buildStaticGrids();
     this.buildGuide();
@@ -151,6 +159,14 @@ export class InventoryUi {
     this.onOpenChange = fn;
   }
 
+  applyProfile(profile: Profile): void {
+    this.profile = profile;
+    if (this.preview3d) {
+      this.preview3d.applyProfile(profile);
+      this.preview3d.start();
+    }
+  }
+
   get isOpen(): boolean {
     return this.open;
   }
@@ -159,9 +175,22 @@ export class InventoryUi {
     if (this.open === open) return;
     this.open = open;
     this.panel.hidden = !open;
-    if (!open) this.returnCursor();
+    if (open) {
+      this.buildGuide();
+    } else {
+      this.returnCursor();
+      this.isTableMode = false;
+      this.rebuildCraftGrid(false);
+    }
     this.onOpenChange?.(open);
     this.refresh();
+  }
+
+  openCraftingTable(): void {
+    this.isTableMode = true;
+    this.rebuildCraftGrid(true);
+    this.setTab('pack');
+    this.setOpen(true);
   }
 
   toggle(tab?: PanelTab): void {
@@ -173,9 +202,20 @@ export class InventoryUi {
     this.setOpen(!this.open);
   }
 
+  private rebuildCraftGrid(is3x3: boolean): void {
+    this.craftSectionTitleEl.textContent = is3x3 ? 'Workbench (3×3)' : 'Crafting (2×2)';
+    this.craftGridEl.classList.toggle('vy-inv-craft__grid--3x3', is3x3);
+    const count = is3x3 ? 9 : 4;
+    this.craftGridEl.innerHTML = Array.from({ length: count }, (_, i) =>
+      slotHtml('craft', i, ''),
+    ).join('');
+    this.refresh();
+  }
+
   refresh(): void {
-    this.paintRow(this.hotbarEl, true);
-    this.paintRow(this.invGrid, false);
+    this.paintSlots(this.hotbarEl);
+    this.paintSlots(this.storageGridEl);
+    this.paintSlots(this.panelHotbarGridEl);
     this.paintCraft();
     this.paintCursor();
     this.paintHotbarName();
@@ -192,28 +232,71 @@ export class InventoryUi {
   }
 
   private buildStaticGrids(): void {
+    // HUD hotbar row
     this.hotbarEl.innerHTML = Array.from({ length: HOTBAR_SIZE }, (_, i) =>
       slotHtml('inv', i, String(i + 1)),
     ).join('');
-    this.invGrid.innerHTML = Array.from({ length: INV_SIZE }, (_, i) =>
-      slotHtml('inv', i, i < HOTBAR_SIZE ? String(i + 1) : ''),
+
+    // Storage 9x3 = 27 slots (indices 9..35)
+    this.storageGridEl.innerHTML = Array.from({ length: INV_SIZE - HOTBAR_SIZE }, (_, i) =>
+      slotHtml('inv', i + HOTBAR_SIZE, ''),
     ).join('');
-    this.craftGridEl.innerHTML = Array.from({ length: 9 }, (_, i) =>
-      slotHtml('craft', i, ''),
+
+    // Panel hotbar row = 9 slots (indices 0..8)
+    this.panelHotbarGridEl.innerHTML = Array.from({ length: HOTBAR_SIZE }, (_, i) =>
+      slotHtml('inv', i, String(i + 1)),
     ).join('');
+
+    // Default 2x2 Crafting grid = 4 slots (indices 0..3)
+    this.rebuildCraftGrid(false);
   }
 
   private buildGuide(): void {
-    const list = this.root.querySelector('.vy-guide__recipes')!;
-    list.innerHTML = RECIPES.map(
-      (r) => `<li class="vy-guide__recipe">
-        <span class="vy-slot__swatch vy-guide__swatch" style="background:${blockCssColor(r.result.id)}"></span>
-        <div>
-          <strong>${r.name}</strong>
+    const list = this.root.querySelector('.vy-guide__recipes');
+    if (!list) return;
+    list.innerHTML = RECIPES.map((r) => {
+      const icon = ITEM_ICONS[r.result.id];
+      const iconMarkup = icon
+        ? `<img class="vy-guide__icon" src="${icon}" alt="${r.name}" onerror="this.style.display='none'" />`
+        : `<span class="vy-slot__swatch vy-guide__swatch" style="background:${blockCssColor(r.result.id)}"></span>`;
+
+      return `<li class="vy-guide__recipe" data-recipe-id="${r.id}" style="cursor:pointer;">
+        <div class="vy-guide__thumb">${iconMarkup}</div>
+        <div class="vy-guide__recipe-info">
+          <strong>${r.name}${r.result.count > 1 ? ` ×${r.result.count}` : ''}</strong>
           <span>${r.hint}</span>
         </div>
-      </li>`,
-    ).join('');
+      </li>`;
+    }).join('');
+
+    list.querySelectorAll<HTMLElement>('.vy-guide__recipe').forEach((el) => {
+      el.addEventListener('click', () => {
+        const rId = el.dataset.recipeId;
+        const rec = RECIPES.find((r) => r.id === rId);
+        if (!rec) return;
+
+        // Try to automatically populate crafting grid from inventory
+        this.craft.clear();
+        for (let i = 0; i < 9; i++) {
+          const reqId = rec.pattern[i];
+          if (reqId && reqId > 0) {
+            const hasSlot = this.inventory.slots.findIndex((s) => s && s.id === reqId && s.count > 0);
+            if (hasSlot >= 0) {
+              const itm = this.inventory.slots[hasSlot]!;
+              this.craft.set(i, { id: reqId, count: 1 });
+              if (itm.count > 1) {
+                itm.count--;
+              } else {
+                this.inventory.setSlot(hasSlot, null);
+              }
+            }
+          }
+        }
+        this.setTab('pack');
+        this.refresh();
+        this.onChange?.();
+      });
+    });
   }
 
   private bind(): void {
@@ -251,41 +334,47 @@ export class InventoryUi {
       this.clickSlot(slot.dataset.kind as SlotKind, Number(slot.dataset.index), true);
     });
 
-    window.addEventListener('pointermove', (e) => {
-      if (!this.cursor) return;
-      this.cursorEl.style.left = `${e.clientX + 12}px`;
-      this.cursorEl.style.top = `${e.clientY + 12}px`;
-    });
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('mousemove', this.onMouseMove);
+    window.addEventListener('keydown', this.onKeyDown);
+  }
 
-    window.addEventListener('mousemove', (e) => {
-      if (!this.cursor) return;
-      this.cursorEl.style.left = `${e.clientX + 12}px`;
-      this.cursorEl.style.top = `${e.clientY + 12}px`;
-    });
+  private onPointerMove = (e: PointerEvent): void => {
+    if (!this.cursor) return;
+    this.cursorEl.style.left = `${e.clientX + 12}px`;
+    this.cursorEl.style.top = `${e.clientY + 12}px`;
+  };
 
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyE') {
-        e.preventDefault();
-        if (this.open && this.tab === 'pack') this.setOpen(false);
-        else this.toggle('pack');
-      }
-      if (e.code === 'KeyG') {
-        e.preventDefault();
-        if (this.open && this.tab === 'guide') this.setOpen(false);
-        else this.toggle('guide');
-      }
-      if (e.code === 'Escape' && this.open) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.setOpen(false);
-      }
-      const n = e.code.match(/^Digit([1-9])$/);
-      if (n) {
-        this.inventory.setHotbar(Number(n[1]) - 1);
-        this.refresh();
-        this.onChange?.();
-      }
-    });
+  private onMouseMove = (e: MouseEvent): void => {
+    if (!this.cursor) return;
+    this.cursorEl.style.left = `${e.clientX + 12}px`;
+    this.cursorEl.style.top = `${e.clientY + 12}px`;
+  };
+
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.code === 'KeyE') {
+      e.preventDefault();
+      if (this.open && this.tab === 'pack') this.setOpen(false);
+      else this.toggle('pack');
+    }
+    if (e.code === 'Escape' && this.open) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.setOpen(false);
+    }
+    const n = e.code.match(/^Digit([1-9])$/);
+    if (n) {
+      this.inventory.setHotbar(Number(n[1]) - 1);
+      this.refresh();
+      this.onChange?.();
+    }
+  };
+
+  dispose(): void {
+    window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('keydown', this.onKeyDown);
+    this.root.remove();
   }
 
   private clickSlot(kind: SlotKind, index: number, right: boolean): void {
@@ -294,7 +383,8 @@ export class InventoryUi {
       return;
     }
     if (kind === 'craft') {
-      this.clickStack(this.craft.cells, index, right, (i, s) => this.craft.setCell(i, s));
+      const cellIndex = this.isTableMode ? index : (CRAFT_2X2_MAP[index] ?? index);
+      this.clickStack(this.craft.cells, cellIndex, right, (i, s) => this.craft.setCell(i, s));
       this.refresh();
       this.onChange?.();
       return;
@@ -314,7 +404,7 @@ export class InventoryUi {
     if (this.cursor) {
       if (!cell) {
         if (right) {
-          write(index, { id: this.cursor.id, count: 1 });
+          write(index, { ...this.cursor, count: 1 });
           this.cursor.count -= 1;
           if (this.cursor.count <= 0) this.cursor = null;
         } else {
@@ -337,9 +427,9 @@ export class InventoryUi {
     } else if (cell) {
       if (right) {
         const half = Math.ceil(cell.count / 2);
-        this.cursor = { id: cell.id, count: half };
+        this.cursor = { ...cell, count: half };
         cell.count -= half;
-        write(index, cell.count > 0 ? cell : null);
+        if (cell.count <= 0) write(index, null);
       } else {
         this.cursor = { ...cell };
         write(index, null);
@@ -348,12 +438,12 @@ export class InventoryUi {
   }
 
   private takeResult(): void {
-    const peek = this.craft.peekResult();
+    const peek = this.craft.peekResult(this.isTableMode);
     if (!peek) return;
     if (this.cursor && (this.cursor.id !== peek.id || this.cursor.count + peek.count > STACK_MAX)) {
       return;
     }
-    const made = this.craft.craftOnce();
+    const made = this.craft.craftOnce(this.isTableMode);
     if (!made) return;
     if (this.cursor) this.cursor.count += made.count;
     else this.cursor = made;
@@ -363,40 +453,50 @@ export class InventoryUi {
 
   private returnCursor(): void {
     if (this.cursor) {
-      this.inventory.add(this.cursor.id, this.cursor.count);
+      this.inventory.add(this.cursor.id, this.cursor.count, {
+        durability: this.cursor.durability,
+        maxDurability: this.cursor.maxDurability,
+      });
       this.cursor = null;
     }
     for (let i = 0; i < 9; i++) {
       const c = this.craft.cells[i];
       if (c) {
-        this.inventory.add(c.id, c.count);
+        this.inventory.add(c.id, c.count, {
+          durability: c.durability,
+          maxDurability: c.maxDurability,
+        });
         this.craft.setCell(i, null);
       }
     }
   }
 
-  private paintRow(el: HTMLElement, hotbar: boolean): void {
-    const nodes = el.querySelectorAll('.vy-slot');
-    const count = hotbar ? HOTBAR_SIZE : INV_SIZE;
-    for (let i = 0; i < count; i++) {
-      const node = nodes[i] as HTMLElement;
-      node.classList.toggle('is-active', hotbar && i === this.inventory.selectedHotbar);
-      node.classList.toggle('vy-slot--band', !hotbar && i < HOTBAR_SIZE);
-      paintSlot(node, this.inventory.slots[i]);
-    }
+  private paintSlots(el: HTMLElement): void {
+    const nodes = el.querySelectorAll<HTMLElement>('.vy-slot');
+    nodes.forEach((node) => {
+      const idx = Number(node.dataset.index);
+      if (!Number.isFinite(idx)) return;
+      const isHotbar = idx < HOTBAR_SIZE;
+      node.classList.toggle('is-active', isHotbar && idx === this.inventory.selectedHotbar);
+      paintSlot(node, this.inventory.slots[idx]);
+    });
   }
 
   private paintCraft(): void {
     const nodes = this.craftGridEl.querySelectorAll('.vy-slot');
-    for (let i = 0; i < 9; i++) paintSlot(nodes[i] as HTMLElement, this.craft.cells[i]);
-    const result = this.craft.peekResult();
+    const slotCount = this.isTableMode ? 9 : 4;
+    for (let i = 0; i < slotCount; i++) {
+      const cellIndex = this.isTableMode ? i : CRAFT_2X2_MAP[i];
+      paintSlot(nodes[i] as HTMLElement, this.craft.cells[cellIndex]);
+    }
+    const result = this.craft.peekResult(this.isTableMode);
     paintSlot(this.resultSlot, result);
     this.resultSlot.classList.toggle('is-ready', !!result);
   }
 
   private paintHotbarName(): void {
     const s = this.inventory.selected;
-    this.hotbarNameEl.textContent = s ? (BLOCK_NAMES[s.id] ?? 'Block') : '';
+    this.hotbarNameEl.textContent = s ? (ITEM_NAMES[s.id] ?? 'Item') : '';
   }
 
   private paintCursor(): void {
@@ -415,19 +515,35 @@ function slotHtml(kind: SlotKind, index: number, key: string): string {
   }</div>`;
 }
 
-function paintSlot(el: HTMLElement, stack: ItemStack | null): void {
-  const key = el.querySelector('.vy-slot__key');
-  const keyHtml = key ? key.outerHTML : '';
-  if (!stack) {
-    el.innerHTML = keyHtml;
-    el.title = '';
+function paintSlot(slot: HTMLElement, stack: ItemStack | null | undefined): void {
+  if (!stack || stack.count <= 0) {
+    slot.innerHTML = slot.querySelector('.vy-slot__key')?.outerHTML ?? '';
+    slot.removeAttribute('title');
     return;
   }
-  el.innerHTML = keyHtml + stackHtml(stack);
-  el.title = `${BLOCK_NAMES[stack.id] ?? 'Block'} ×${stack.count}`;
+  const key = slot.querySelector('.vy-slot__key')?.outerHTML ?? '';
+  slot.innerHTML = `${key}${stackHtml(stack)}`;
+  slot.title = `${ITEM_NAMES[stack.id] ?? 'Item'} ×${stack.count}`;
 }
 
 function stackHtml(stack: ItemStack): string {
-  return `<span class="vy-slot__swatch" style="background:${blockCssColor(stack.id)}"></span>
-    <span class="vy-slot__count">${stack.count > 1 ? stack.count : ''}</span>`;
+  const icon = ITEM_ICONS[stack.id];
+  const c = blockCssColor(stack.id);
+
+  let visualHtml = '';
+  if (icon) {
+    visualHtml = `<img class="vy-slot__icon" src="${icon}" alt="${ITEM_NAMES[stack.id] ?? 'Item'}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" /><span class="vy-slot__swatch" style="background:${c};display:none"></span>`;
+  } else {
+    visualHtml = `<span class="vy-slot__swatch" style="background:${c}"></span>`;
+  }
+
+  let durHtml = '';
+  if (stack.durability != null && stack.maxDurability != null && stack.maxDurability > 0) {
+    const pct = Math.max(0, Math.min(100, (stack.durability / stack.maxDurability) * 100));
+    durHtml = `<span class="vy-slot__durability"><span style="width:${pct}%"></span></span>`;
+  }
+
+  return `${visualHtml}${
+    stack.count > 1 ? `<span class="vy-slot__count">${stack.count}</span>` : ''
+  }${durHtml}`;
 }

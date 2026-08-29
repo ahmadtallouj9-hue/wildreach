@@ -63,9 +63,9 @@ export class SkinPaint3D {
     this.root.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a2826);
+    this.scene.background = new THREE.Color(0x081216);
 
-    const grid = new THREE.GridHelper(2.2, 12, 0x3d5a54, 0x2a3836);
+    const grid = new THREE.GridHelper(2.2, 12, 0xc9a227, 0x1a2e36);
     grid.position.y = 0.01;
     this.scene.add(grid);
 

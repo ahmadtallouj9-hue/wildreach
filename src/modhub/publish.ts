@@ -15,6 +15,7 @@ import {
 import type { ModManifest, ModPackage, ModVisibility, ValidationResult } from './types';
 import { gameCompatible, sanitizeModText, validatePackage } from './validator';
 import { loadOnlineSettings, onlineConfigured } from '../online/settings/onlineSettings';
+import { ModManager } from '../modding/ModSystem';
 
 export interface PublishBackendStatus {
   configured: boolean;
@@ -122,6 +123,39 @@ export async function installPackage(
     installedAt: Date.now(),
     source,
   });
+
+  // Also bridge into ModManager runtime system
+  const modSlug = pkg.manifest.id.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+  ModManager.get().saveMod({
+    id: pkg.manifest.id,
+    name: pkg.manifest.name,
+    displayName: pkg.manifest.displayName || pkg.manifest.name,
+    description: pkg.manifest.description || '',
+    version: pkg.manifest.version,
+    author: pkg.manifest.author,
+    packFormat: 1,
+    blocks: [
+      {
+        id: `${modSlug}_block`,
+        displayName: pkg.manifest.displayName || pkg.manifest.name,
+        hardness: 1.2,
+        color: [0.85, 0.45, 0.75],
+      },
+    ],
+    recipes: [
+      {
+        id: `${modSlug}_recipe`,
+        type: 'crafting_shapeless',
+        grid: '2x2',
+        ingredients: ['dirt', 'stone'],
+        result: { id: `${modSlug}_block`, count: 1 },
+      },
+    ],
+    createdAt: pkg.manifest.createdAt || Date.now(),
+    updatedAt: pkg.manifest.updatedAt || Date.now(),
+  });
+  ModManager.get().setModEnabled(pkg.manifest.id, true);
+
   if (source === 'hub' || source === 'import') bumpDownload(pkg.manifest.id);
   return { ok: true };
 }

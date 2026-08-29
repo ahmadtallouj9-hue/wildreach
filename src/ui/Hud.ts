@@ -22,10 +22,11 @@ export class Hud {
   private seedEl: HTMLElement;
   private paletteWrap: HTMLElement;
   private coordsEl: HTMLElement;
-  private coordsChunkEl: HTMLElement;
   private journalOpen = false;
   private mapOpen = false;
   private mapPanel: HTMLElement;
+  private guideOpen = false;
+  private guidePanel: HTMLElement;
   private underwaterOverlay: HTMLElement;
   private mpChip: HTMLElement;
   private mpLabel: HTMLElement;
@@ -44,6 +45,12 @@ export class Hud {
   private profileChip: HTMLElement;
   private profileNameEl: HTMLElement;
   private profileDot: HTMLElement;
+  private heartsEl: HTMLElement;
+  private foodBarEl: HTMLElement;
+  private hurtFlashEl: HTMLElement;
+  private deathScreenEl: HTMLElement;
+  private onRespawnClick?: () => void;
+  private onTitleClick?: () => void;
   private showFps = false;
   private fpsFrames = 0;
   private fpsTimer = 0;
@@ -78,10 +85,7 @@ export class Hud {
         <span class="vy-dot vy-hud__mp-dot"></span>
         <span class="vy-hud__mp-label">Solo</span>
       </div>
-      <div class="vy-hud__coords" aria-label="Coordinates">
-        <span class="vy-hud__xyz">XYZ 0 0 0</span>
-        <span class="vy-hud__chunk">Chunk 0 0</span>
-      </div>
+      <div class="vy-hud__coords" aria-label="Coordinates"></div>
       <div class="vy-hud__look" hidden aria-live="polite">
         <span class="vy-hud__look-swatch" aria-hidden="true"></span>
         <div class="vy-hud__look-text">
@@ -115,6 +119,45 @@ export class Hud {
         </ul>
         <ul class="vy-hud__map-roster"></ul>
       </aside>
+      <aside class="vy-side vy-hud__guide" hidden>
+        <header>
+          <h2>GUIDE</h2>
+          <button type="button" class="vy-btn vy-btn--ghost vy-hud__close-guide" aria-label="Close guide">✕</button>
+        </header>
+        <div class="vy-hud__guide-body">
+          <section class="vy-hud__guide-sec">
+            <h3>Move</h3>
+            <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Space</kbd> jump · <kbd>Shift</kbd> sprint · <kbd>Ctrl</kbd> sneak · mouse to look</p>
+          </section>
+          <section class="vy-hud__guide-sec">
+            <h3>Break &amp; place</h3>
+            <p><strong>LMB</strong> (hold) breaks the aimed block / attack · <strong>RMB</strong> / <kbd>F</kbd> places the selected block / eat</p>
+          </section>
+          <section class="vy-hud__guide-sec">
+            <h3>Hotbar</h3>
+            <p><kbd>1</kbd>–<kbd>9</kbd> select · scroll to cycle · <kbd>E</kbd> pack &amp; craft</p>
+          </section>
+          <section class="vy-hud__guide-sec">
+            <h3>World</h3>
+            <p><kbd>T</kbd> / <kbd>Enter</kbd> chat · <kbd>J</kbd> journal · <kbd>M</kbd> map · <kbd>V</kbd> view · <kbd>G</kbd> this guide</p>
+          </section>
+        </div>
+      </aside>
+      <div class="vy-hud__survival" aria-label="Player health and hunger">
+        <div class="vy-hud__hearts" aria-label="Health"></div>
+        <div class="vy-hud__food-bar" aria-label="Hunger"></div>
+      </div>
+      <div class="vy-hud__hurt-flash" aria-hidden="true"></div>
+      <div class="vy-death-screen" hidden>
+        <div class="vy-death-card">
+          <h1 class="vy-death-title">YOU DIED</h1>
+          <p class="vy-death-subtitle">Your journey continues with a new dawn.</p>
+          <div class="vy-death-actions">
+            <button type="button" class="vy-btn vy-btn--primary vy-death-respawn">Respawn</button>
+            <button type="button" class="vy-btn vy-btn--ghost vy-death-title-btn">Quit to Title</button>
+          </div>
+        </div>
+      </div>
       <div class="vy-uw" aria-hidden="true"></div>
       <div class="vy-hud__fps" hidden>0 FPS</div>
     `;
@@ -128,6 +171,7 @@ export class Hud {
     this.journalPanel = this.root.querySelector('.vy-hud__journal')!;
     this.journalList = this.root.querySelector('.vy-hud__journal-list')!;
     this.mapPanel = this.root.querySelector('.vy-hud__map')!;
+    this.guidePanel = this.root.querySelector('.vy-hud__guide')!;
     this.mapCanvas = this.root.querySelector('.vy-hud__map-canvas')!;
     this.mapCtx = this.mapCanvas.getContext('2d')!;
     this.distanceEl = this.root.querySelector('.vy-hud__distance')!;
@@ -139,8 +183,7 @@ export class Hud {
     this.mapMetaCountEl = this.root.querySelector('.vy-hud__map-count')!;
     this.mapWorldNameEl = this.root.querySelector('.vy-hud__map-world')!;
     this.paletteWrap = this.root.querySelector('.vy-hud__palette')!;
-    this.coordsEl = this.root.querySelector('.vy-hud__xyz')!;
-    this.coordsChunkEl = this.root.querySelector('.vy-hud__chunk')!;
+    this.coordsEl = this.root.querySelector('.vy-hud__coords')!;
     this.fpsEl = this.root.querySelector('.vy-hud__fps')!;
     this.lookViewerEl = this.root.querySelector('.vy-hud__look')!;
     this.lookNameEl = this.root.querySelector('.vy-hud__look-name')!;
@@ -149,17 +192,33 @@ export class Hud {
     this.profileChip = this.root.querySelector('.vy-hud__profile')!;
     this.profileNameEl = this.root.querySelector('.vy-hud__profile-name')!;
     this.profileDot = this.root.querySelector('.vy-hud__profile-dot')!;
+    this.heartsEl = this.root.querySelector('.vy-hud__hearts')!;
+    this.foodBarEl = this.root.querySelector('.vy-hud__food-bar')!;
+    this.hurtFlashEl = this.root.querySelector('.vy-hud__hurt-flash')!;
+    this.deathScreenEl = this.root.querySelector('.vy-death-screen')!;
     this.seedEl.textContent = seed;
+
+    this.root.querySelector('.vy-death-respawn')!.addEventListener('click', () => {
+      this.onRespawnClick?.();
+    });
+    this.root.querySelector('.vy-death-title-btn')!.addEventListener('click', () => {
+      this.onTitleClick?.();
+    });
 
     this.root.querySelector('.vy-hud__close-journal')!.addEventListener('click', () => this.setJournal(false));
     this.root.querySelector('.vy-hud__close-map')!.addEventListener('click', () => this.setMap(false));
+    this.root.querySelector('.vy-hud__close-guide')!.addEventListener('click', () => this.setGuide(false));
 
     window.addEventListener('keydown', (e) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.code === 'KeyG') this.setGuide(!this.guideOpen);
       if (e.code === 'KeyJ') this.setJournal(!this.journalOpen);
       if (e.code === 'KeyM') this.setMap(!this.mapOpen);
       if (e.code === 'Escape') {
         this.setJournal(false);
         this.setMap(false);
+        this.setGuide(false);
       }
     });
 
@@ -179,7 +238,8 @@ export class Hud {
     }
     const online = opts.status === 'connected';
     const linking = opts.status === 'connecting' || opts.status === 'reconnecting';
-    this.mpChip.hidden = opts.status === 'offline';
+    // Always show link state — Offline must be readable in solo play.
+    this.mpChip.hidden = false;
     this.mpChip.classList.toggle('vy-hud__mp--online', online);
     this.mpChip.classList.toggle('vy-hud__mp--wait', linking);
     this.mpChip.classList.toggle('vy-hud__mp--down', opts.status === 'offline');
@@ -265,6 +325,10 @@ export class Hud {
     return this.mapOpen;
   }
 
+  get isGuideOpen(): boolean {
+    return this.guideOpen;
+  }
+
   setPointerLocked(_locked: boolean): void {
     /* Escape opens the pause menu; no click-to-play overlay. */
   }
@@ -285,6 +349,53 @@ export class Hud {
   toggleMap(): void {
     this.setMap(!this.mapOpen);
     if (this.mapOpen) this.setJournal(false);
+  }
+
+  setSurvival(health: number, maxHealth: number, hunger: number, maxHunger: number, hurtFlash = 0): void {
+    // 1. Health Hearts (10 icons = 20 HP)
+    const heartsCount = 10;
+    let heartsHtml = '';
+    for (let i = 0; i < heartsCount; i++) {
+      const heartHp = (i + 1) * 2;
+      let state = 'empty';
+      if (health >= heartHp) state = 'full';
+      else if (health >= heartHp - 1) state = 'half';
+      heartsHtml += `<span class="vy-hud__heart vy-hud__heart--${state}" aria-hidden="true">♥</span>`;
+    }
+    this.heartsEl.innerHTML = heartsHtml;
+    this.heartsEl.setAttribute('title', `Health: ${Math.round(health)} / ${maxHealth}`);
+
+    // 2. Hunger Drumsticks (10 icons = 20 Hunger)
+    const foodCount = 10;
+    let foodHtml = '';
+    for (let i = 0; i < foodCount; i++) {
+      const foodVal = (i + 1) * 2;
+      let state = 'empty';
+      if (hunger >= foodVal) state = 'full';
+      else if (hunger >= foodVal - 1) state = 'half';
+      foodHtml += `<span class="vy-hud__food vy-hud__food--${state}" aria-hidden="true">🍖</span>`;
+    }
+    this.foodBarEl.innerHTML = foodHtml;
+    this.foodBarEl.setAttribute('title', `Hunger: ${Math.round(hunger)} / ${maxHunger}`);
+
+    // 3. Hurt Flash Red Screen Vignette
+    if (hurtFlash > 0.01) {
+      this.hurtFlashEl.style.opacity = String(Math.min(0.7, hurtFlash * 0.8));
+      this.hurtFlashEl.style.visibility = 'visible';
+    } else {
+      this.hurtFlashEl.style.opacity = '0';
+      this.hurtFlashEl.style.visibility = 'hidden';
+    }
+  }
+
+  showDeathScreen(show: boolean): void {
+    this.deathScreenEl.hidden = !show;
+    this.root.classList.toggle('is-dead', show);
+  }
+
+  onDeathActions(opts: { onRespawn: () => void; onTitle: () => void }): void {
+    this.onRespawnClick = opts.onRespawn;
+    this.onTitleClick = opts.onTitle;
   }
 
   setMenuOpen(open: boolean): void {
@@ -311,12 +422,29 @@ export class Hud {
   private setJournal(open: boolean): void {
     this.journalOpen = open;
     this.journalPanel.hidden = !open;
-    if (open) this.refreshJournal();
+    if (open) {
+      this.setMap(false);
+      this.setGuide(false);
+      this.refreshJournal();
+    }
   }
 
   private setMap(open: boolean): void {
     this.mapOpen = open;
     this.mapPanel.hidden = !open;
+    if (open) {
+      this.setJournal(false);
+      this.setGuide(false);
+    }
+  }
+
+  private setGuide(open: boolean): void {
+    this.guideOpen = open;
+    this.guidePanel.hidden = !open;
+    if (open) {
+      this.setJournal(false);
+      this.setMap(false);
+    }
   }
 
   private refreshJournal(): void {
@@ -359,15 +487,12 @@ export class Hud {
 
     this.compassNeedle.style.transform = `rotate(${opts.facingDeg}deg)`;
 
-    const x = Math.floor(opts.playerX);
-    const y = Math.floor(opts.playerY);
-    const z = Math.floor(opts.playerZ);
+    const x = opts.playerX;
+    const y = opts.playerY;
+    const z = opts.playerZ;
     const cx = Math.floor(x / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
-    this.coordsEl.textContent = opts.genDebug
-      ? `XYZ ${x} ${y} ${z} · ${opts.genDebug}`
-      : `XYZ ${x} ${y} ${z}`;
-    this.coordsChunkEl.textContent = `Chunk ${cx} ${cz}`;
+    this.coordsEl.textContent = `X ${x.toFixed(1)}  Y ${Math.floor(y)}  Z ${z.toFixed(1)}  Chunk ${cx} ${cz}`;
 
     if (opts.nearest && opts.nearest.dist < 180) {
       this.landmarkPin.hidden = false;

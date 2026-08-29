@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BIOMES, type BiomeId } from '../world/Biomes';
+import type { GfxPrefs } from './gfxPrefs';
 
 const skyVert = /* glsl */ `
   varying vec3 vWorldDir;
@@ -154,6 +155,8 @@ export class Sky {
   cloudiness = 0.7;
   /** Player setting 0–1 multiplier for cloud cover. */
   cloudCover = 0.7;
+  private shadowsEnabled = false;
+  private warmSun = false;
 
   constructor(private scene: THREE.Scene) {
     // Dome owns the background — never use a flat clear color
@@ -219,6 +222,12 @@ export class Sky {
     this.dome.visible = visible;
   }
 
+  setGfx(gfx: GfxPrefs): void {
+    this.shadowsEnabled = gfx.shadows !== 'none';
+    this.warmSun = gfx.warmSun;
+    this.viewDistanceChunks = gfx.renderDistance;
+  }
+
   setTimeOfDay(t: number): void {
     this.timeOfDay = ((t % 1) + 1) % 1;
   }
@@ -247,7 +256,7 @@ export class Sky {
     const day = THREE.MathUtils.smoothstep(-0.12, 0.42, this.sunDir.y);
     const night = 1 - day;
     this.sun.intensity = 0.35 + day * 1.2;
-    this.sun.castShadow = this.sunDir.y > 0.18;
+    this.sun.castShadow = this.shadowsEnabled && this.sunDir.y > 0.18;
     this.ambient.intensity = 0.58 + day * 0.2;
     this.hemi.intensity = 0.48 + day * 0.28;
 
@@ -284,7 +293,11 @@ export class Sky {
       this.scene.fog.density = this.fogDensity;
     }
 
-    this.sun.color.setRGB(1, 0.93 - night * 0.15, 0.8 - night * 0.25);
+    if (this.warmSun) {
+      this.sun.color.setRGB(1.05, 0.94 - night * 0.15, 0.78 - night * 0.25);
+    } else {
+      this.sun.color.setRGB(1, 0.93 - night * 0.15, 0.8 - night * 0.25);
+    }
 
     const um = this.skyMat.uniforms;
     um.uSunDir.value.copy(this.sunDir);

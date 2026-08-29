@@ -137,14 +137,14 @@ function profileViewHtml(f: FriendSummary): string {
       </p>
     </section>
 
-    <div class="friend-profile-actions">
+    <div class="friend-profile-actions vy-actions">
       ${
         f.inGame
-          ? `<button type="button" class="menu-btn primary block-btn" data-profile-action="request-join" data-id="${f.accountId}">Request to join</button>`
-          : `<button type="button" class="menu-btn ghost block-btn" disabled title="Friend must be in a world">Request to join</button>`
+          ? `<button type="button" class="vy-btn vy-btn--primary" style="width:100%" data-profile-action="request-join" data-id="${f.accountId}">Request to join</button>`
+          : `<button type="button" class="vy-btn" style="width:100%" disabled title="Friend must be in a world">Request to join</button>`
       }
-      <button type="button" class="menu-btn ghost block-btn" data-profile-action="copy-code" data-code="${escapeHtml(f.code)}">Copy their code</button>
-      <button type="button" class="menu-btn quiet block-btn" data-profile-action="remove" data-id="${f.accountId}">Remove friend</button>
+      <button type="button" class="vy-btn" style="width:100%" data-profile-action="copy-code" data-code="${escapeHtml(f.code)}">Copy their code</button>
+      <button type="button" class="vy-btn vy-btn--danger" style="width:100%" data-profile-action="remove" data-id="${f.accountId}">Remove friend</button>
     </div>
   `;
 }
@@ -281,13 +281,13 @@ export class FriendsPanel {
             </span>
           </span>
         </button>
-        <div class="friend-row-actions mc-row-actions">
+        <div class="friend-row-actions mc-row-actions vy-actions">
           ${
             f.inGame
-              ? `<button type="button" class="mc-btn mc-btn--small mc-btn--primary friend-join-btn" data-action="request-join" data-id="${f.accountId}">Join</button>`
-              : `<button type="button" class="mc-btn mc-btn--small mc-btn--ghost" data-action="view-friend" data-id="${f.accountId}">Profile</button>`
+              ? `<button type="button" class="vy-btn vy-btn--primary friend-join-btn" data-action="request-join" data-id="${f.accountId}">Join</button>`
+              : `<button type="button" class="vy-btn" data-action="view-friend" data-id="${f.accountId}">Profile</button>`
           }
-          <button type="button" class="mc-btn mc-btn--icon" data-action="remove-friend" data-id="${f.accountId}" title="Remove" aria-label="Remove friend">✕</button>
+          <button type="button" class="vy-btn vy-btn--ghost" data-action="remove-friend" data-id="${f.accountId}" title="Remove" aria-label="Remove friend">✕</button>
         </div>
       </article>
     `,
@@ -332,15 +332,15 @@ export class FriendsPanel {
     }
     this.requestsEl.hidden = false;
     this.requestsEl.innerHTML = `
-      <p class="mc-section-title friends-section-title">Join requests</p>
+      <p class="friends-section-title" style="margin:0 0 8px;font-size:0.65rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--vy-muted)">Join requests</p>
       ${reqs
         .map(
           (r) => `
-        <div class="friend-request-row mc-row mc-row--stack" data-id="${r.id}">
-          <span class="mc-row-text"><strong>${escapeHtml(r.from.profile.name || 'Friend')}</strong> wants to join your world</span>
-          <div class="friend-request-actions mc-row-actions">
-            <button type="button" class="mc-btn mc-btn--small mc-btn--primary" data-action="accept-join" data-id="${r.id}">Accept</button>
-            <button type="button" class="mc-btn mc-btn--small mc-btn--ghost" data-action="deny-join" data-id="${r.id}">Deny</button>
+        <div class="friend-request-row vy-panel" style="padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px" data-id="${r.id}">
+          <span style="font-size:0.8rem;color:var(--vy-ink)"><strong>${escapeHtml(r.from.profile.name || 'Friend')}</strong> wants to join your world</span>
+          <div class="friend-request-actions vy-actions">
+            <button type="button" class="vy-btn vy-btn--primary" data-action="accept-join" data-id="${r.id}">Accept</button>
+            <button type="button" class="vy-btn vy-btn--ghost" data-action="deny-join" data-id="${r.id}">Deny</button>
           </div>
         </div>
       `,

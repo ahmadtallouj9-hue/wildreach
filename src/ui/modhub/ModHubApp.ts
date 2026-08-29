@@ -243,7 +243,14 @@ export class ModHubApp {
   private renderImport(): string {
     return `<div class="ms-panel"><h3>Import package</h3>
       <p class="ms-muted">Load a .vymod.json package. Packages are validated (paths, integrity, size) before install. Code is never executed during validation.</p>
-      <input type="file" accept=".json,.vymod.json,application/json" data-file />
+      <div style="margin: 12px 0;">
+        <label class="vy-file-pill modhub-import-pill">
+          <span class="vy-file-pill__btn vy-btn--primary">Choose file</span>
+          <input type="file" accept=".json,.vymod.json,application/json" data-file hidden />
+          <span class="vy-file-pill__name" hidden></span>
+          <button type="button" class="vy-file-pill__clear" hidden title="Clear file" aria-label="Clear file">✕</button>
+        </label>
+      </div>
       <p class="ms-status" data-import-status></p></div>`;
   }
 
@@ -337,10 +344,27 @@ export class ModHubApp {
     });
 
     const file = body.querySelector('[data-file]') as HTMLInputElement | null;
+    const nameEl = body.querySelector('.modhub-import-pill .vy-file-pill__name') as HTMLElement | null;
+    const clearBtn = body.querySelector('.modhub-import-pill .vy-file-pill__clear') as HTMLButtonElement | null;
     const importStatus = body.querySelector('[data-import-status]') as HTMLElement | null;
+
+    clearBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (file) file.value = '';
+      if (nameEl) { nameEl.textContent = ''; nameEl.hidden = true; }
+      if (clearBtn) clearBtn.hidden = true;
+      if (importStatus) { importStatus.textContent = ''; importStatus.className = 'ms-status'; }
+    });
+
     file?.addEventListener('change', async () => {
       const f = file.files?.[0];
       if (!f || !importStatus) return;
+      if (nameEl) {
+        nameEl.textContent = f.name;
+        nameEl.hidden = false;
+      }
+      if (clearBtn) clearBtn.hidden = false;
       importStatus.textContent = 'Validating…';
       try {
         const raw = await f.text();

@@ -25,6 +25,7 @@ import {
   type ModVisibility,
 } from '../../modhub';
 import { VoxelEditorUi } from '../VoxelEditorUi';
+import { BACKLOG_ITEMS } from '../../modding/ModBacklogChecklist';
 
 type StudioView =
   | 'overview'
@@ -34,6 +35,7 @@ type StudioView =
   | 'assets'
   | 'scripts'
   | 'testing'
+  | 'checklist'
   | 'versions'
   | 'analytics'
   | 'publish';
@@ -46,6 +48,7 @@ const NAV: { id: StudioView; label: string }[] = [
   { id: 'assets', label: 'Assets' },
   { id: 'scripts', label: 'Scripts' },
   { id: 'testing', label: 'Testing' },
+  { id: 'checklist', label: 'Checklist (1–500)' },
   { id: 'versions', label: 'Versions' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'publish', label: 'Publish' },
@@ -86,11 +89,14 @@ export class ModStudioApp {
           <p class="ms-nav__title">MOD Studio</p><p class="ms-nav__sub">Creator workspace</p>
         </div></div>
         <nav class="ms-nav__list" role="tablist"></nav>
-        <p class="ms-nav__hint">Engine preserved · new VYTHERA chrome</p>
+        <p class="ms-nav__hint">Engine preserved · VYTHERA chrome</p>
       </aside>
       <section class="ms-main">
         <header class="ms-top">
-          <h2 class="ms-top__title" data-ms-title>Overview</h2>
+          <div class="ms-top__left">
+            <button type="button" class="ms-nav-toggle vy-btn vy-btn--ghost" aria-label="Toggle navigation" title="Menu">☰</button>
+            <h2 class="ms-top__title" data-ms-title>Overview</h2>
+          </div>
           <div class="ms-top__actions">
             <button type="button" class="vy-btn" data-ms-go="create">New mod</button>
             <button type="button" class="vy-btn vy-btn--primary" data-ms-go="editor">Open editor</button>
@@ -114,6 +120,12 @@ export class ModStudioApp {
     this.root.querySelectorAll<HTMLButtonElement>('[data-ms-go]').forEach((b) => {
       b.addEventListener('click', () => this.setView(b.dataset.msGo as StudioView));
     });
+    const navToggle = this.root.querySelector<HTMLButtonElement>('.ms-nav-toggle');
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        this.root.classList.toggle('ms-nav-open');
+      });
+    }
     this.setView('overview');
   }
 
@@ -136,6 +148,7 @@ export class ModStudioApp {
 
   private setView(view: StudioView): void {
     this.view = view;
+    this.root.classList.remove('ms-nav-open');
     this.root.querySelectorAll('.ms-nav__btn').forEach((b) => {
       b.classList.toggle('is-active', (b as HTMLElement).dataset.view === view);
     });
@@ -219,6 +232,10 @@ export class ModStudioApp {
     if (this.view === 'testing') {
       body.innerHTML = this.renderTesting();
       this.bindTesting(body);
+      return;
+    }
+    if (this.view === 'checklist') {
+      body.innerHTML = this.renderChecklist();
       return;
     }
     if (this.view === 'versions') {
@@ -384,6 +401,46 @@ export class ModStudioApp {
         status.className = 'ms-err';
       }
     });
+  }
+
+  private renderChecklist(): string {
+    const doneCount = BACKLOG_ITEMS.filter((i) => i.status === 'done').length;
+    const skipCount = BACKLOG_ITEMS.filter((i) => i.status === 'skipped').length;
+    const blockCount = BACKLOG_ITEMS.filter((i) => i.status === 'blocked').length;
+
+    const sections = Array.from(new Set(BACKLOG_ITEMS.map((i) => i.section)));
+
+    return `<div class="ms-panel" style="max-height: 80vh; overflow-y: auto;">
+      <h3>Mod Studio 500-Item Backlog Checklist</h3>
+      <p class="ms-muted">Strict data-driven architecture. No eval/fetch/Function. No world-gen rewrites. No dimensions. No guns/explosives.</p>
+      <div class="ms-statgrid" style="margin: 14px 0;">
+        <div class="ms-stat"><span>${doneCount}</span><em>DONE</em></div>
+        <div class="ms-stat"><span>${skipCount}</span><em>SKIPPED (spec rules)</em></div>
+        <div class="ms-stat"><span>${blockCount}</span><em>BLOCKED</em></div>
+      </div>
+      ${sections
+        .map((sec) => {
+          const items = BACKLOG_ITEMS.filter((i) => i.section === sec);
+          return `<h4 style="color:var(--vy-gold); margin: 18px 0 8px 0; font-size: 0.85rem; letter-spacing: 0.1em; text-transform: uppercase;">${esc(sec)}</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px;">
+              ${items
+                .map((it) => {
+                  const badgeColor =
+                    it.status === 'done'
+                      ? 'background:rgba(80,200,120,0.2);color:#80e890;border:1px solid rgba(80,200,120,0.4)'
+                      : it.status === 'skipped'
+                      ? 'background:rgba(255,200,80,0.15);color:#ffd060;border:1px solid rgba(255,200,80,0.3)'
+                      : 'background:rgba(255,80,80,0.2);color:#ff8080;border:1px solid rgba(255,80,80,0.4)';
+                  return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:0.75rem;">
+                    <span><strong>#${it.id}</strong> ${esc(it.name)}</span>
+                    <span style="font-size:0.65rem;font-weight:bold;padding:2px 6px;border-radius:3px;text-transform:uppercase;${badgeColor}">${it.status}</span>
+                  </div>`;
+                })
+                .join('')}
+            </div>`;
+        })
+        .join('')}
+    </div>`;
   }
 
   private renderVersions(): string {

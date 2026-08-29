@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { createTextureAtlas } from './TextureAtlas';
+import { applyTexturePackToAtlas, createTextureAtlas, type TexturePack } from './TextureAtlas';
 import { SEA_LEVEL } from '../world/blocks';
+import type { GfxPrefs } from './gfxPrefs';
 
 const terrainVert = /* glsl */ `
   attribute float ao;
@@ -100,6 +101,7 @@ function makeTerrainFrag(cutout: boolean): string {
   uniform vec3 fogColor;
   uniform float fogDensity;
   uniform float time;
+  uniform float cheapShading;
 
   varying vec2 vUv;
   varying float vAo;
@@ -118,11 +120,23 @@ function makeTerrainFrag(cutout: boolean): string {
     vec3 L = normalize(sunDir);
     float day = smoothstep(-0.12, 0.38, sunDir.y);
     float wrapSun = max(dot(N, L), 0.0) * 0.55 + 0.45;
+    float vl = clamp(vLight, 0.0, 1.0);
+
+    if (cheapShading > 0.5) {
+      // Cheap unlit / MeshLambert style for Very Low & Low mobile
+      vec3 lighting = ambientColor * (0.6 + vl * 0.4) + sunColor * wrapSun * mix(0.4, 1.0, vl);
+      vec3 color = tex.rgb * lighting;
+      ${rustle}
+      float dist = length(vWorldPos - cameraPosition);
+      float fog = clamp(1.0 - exp(-dist * fogDensity), 0.0, 0.72);
+      gl_FragColor = vec4(mix(color, fogColor, fog), 1.0);
+      return;
+    }
+
     float wrapMoon = max(dot(N, -L), 0.0) * 0.3 + 0.5;
     float skyFill = N.y * 0.42 + 0.58;
     float groundBounce = max(-N.y, 0.0) * 0.12;
 
-    float vl = clamp(vLight, 0.0, 1.0);
     float blockGlow = smoothstep(0.15, 0.55, vl);
     // Keep a readable base fill so caves aren't pure black.
     vec3 lighting = ambientColor * (0.42 + vl * 0.58);
@@ -181,6 +195,7 @@ const waterFrag = /* glsl */ `
   uniform float fogDensity;
   uniform float time;
   uniform float seaLevel;
+  uniform float waterShading;
 
   varying vec2 vUv;
   varying vec3 vWorldPos;
@@ -203,6 +218,31 @@ const waterFrag = /* glsl */ `
   }
 
   void main() {
+    if (waterShading < 0.5) {
+      // Very Low & Low: Flat transparent color without reflections or noise
+      vec4 tex = texture2D(map, vUv);
+      vec3 flatCol = mix(vec3(0.06, 0.36, 0.54), tex.rgb, 0.15);
+      float dist = length(vWorldPos - cameraPosition);
+      float fog = clamp(1.0 - exp(-dist * fogDensity), 0.0, 0.6);
+      gl_FragColor = vec4(mix(flatCol, fogColor, fog), 0.55);
+      return;
+    }
+
+    if (waterShading < 1.5) {
+      // Medium: Simple water tint with basic wave scroll
+      vec2 scroll = vec2(0.12, 0.08) * time * 0.03;
+      vec4 tex = texture2D(map, vUv + scroll);
+      float columnDepth = clamp(vDepth * 16.0, 1.0, 24.0);
+      vec3 shallow = vec3(0.08, 0.38, 0.5) + tex.rgb * 0.1;
+      vec3 deep = vec3(0.02, 0.12, 0.28);
+      vec3 color = mix(shallow, deep, clamp(columnDepth / 14.0, 0.0, 1.0));
+      float dist = length(vWorldPos - cameraPosition);
+      float fog = clamp(1.0 - exp(-dist * fogDensity), 0.0, 0.62);
+      gl_FragColor = vec4(mix(color, fogColor, fog), 0.62);
+      return;
+    }
+
+    // High & Max: BSL-like look with waves, ripples, caustics, fresnel, sparkle
     vec2 scroll = vec2(0.15, 0.1) * time * 0.03;
     vec2 uv = vUv * 1.4 + scroll;
     vec4 tex = texture2D(map, uv);
@@ -306,6 +346,7 @@ export class TerrainMaterials {
   readonly cutout: THREE.ShaderMaterial;
   readonly water: THREE.ShaderMaterial;
   readonly lava: THREE.ShaderMaterial;
+  private pack: TexturePack = 'default';
   readonly uniforms: {
     sunDir: THREE.IUniform<THREE.Vector3>;
     sunColor: THREE.IUniform<THREE.Color>;
@@ -315,10 +356,13 @@ export class TerrainMaterials {
     timeOfDay: THREE.IUniform<number>;
     time: THREE.IUniform<number>;
     seaLevel: THREE.IUniform<number>;
+    cheapShading: THREE.IUniform<number>;
+    waterShading: THREE.IUniform<number>;
   };
 
-  constructor() {
-    this.atlas = createTextureAtlas();
+  constructor(pack: TexturePack = 'default') {
+    this.pack = pack;
+    this.atlas = createTextureAtlas(pack);
     this.atlas.premultiplyAlpha = false;
 
     this.uniforms = {
@@ -330,6 +374,8 @@ export class TerrainMaterials {
       timeOfDay: { value: 0.28 },
       time: { value: 0 },
       seaLevel: { value: SEA_LEVEL },
+      cheapShading: { value: 0.0 },
+      waterShading: { value: 1.0 },
     };
 
     const shared = {
@@ -340,6 +386,7 @@ export class TerrainMaterials {
       fogColor: this.uniforms.fogColor,
       fogDensity: this.uniforms.fogDensity,
       time: this.uniforms.time,
+      cheapShading: this.uniforms.cheapShading,
     };
 
     this.solid = new THREE.ShaderMaterial({
@@ -373,6 +420,7 @@ export class TerrainMaterials {
         fogDensity: this.uniforms.fogDensity,
         time: this.uniforms.time,
         seaLevel: this.uniforms.seaLevel,
+        waterShading: this.uniforms.waterShading,
       },
       vertexShader: waterVert,
       fragmentShader: waterFrag,
@@ -398,6 +446,18 @@ export class TerrainMaterials {
       side: THREE.FrontSide,
       blending: THREE.NormalBlending,
     });
+  }
+
+  setGfx(gfx: GfxPrefs): void {
+    const isCheap = gfx.preset === 'very-low' || gfx.preset === 'low';
+    this.uniforms.cheapShading.value = isCheap ? 1.0 : 0.0;
+    this.uniforms.waterShading.value =
+      gfx.waterShading === 'flat' ? 0.0 : gfx.waterShading === 'simple' ? 1.0 : 2.0;
+    if (gfx.warmSun) {
+      this.uniforms.sunColor.value.setRGB(1.05, 0.94, 0.82);
+    } else {
+      this.uniforms.sunColor.value.setRGB(1.0, 0.96, 0.88);
+    }
   }
 
   update(
@@ -429,5 +489,18 @@ export class TerrainMaterials {
       (0.54 + day * 0.14) * (1 - u * 0.22),
       (0.6 + day * 0.1) * (1 - u * 0.12),
     );
+  }
+
+  get texturePack(): TexturePack {
+    return this.pack;
+  }
+
+  setTexturePack(pack: TexturePack, onComplete?: () => void): void {
+    if (this.pack === pack) {
+      onComplete?.();
+      return;
+    }
+    this.pack = pack;
+    applyTexturePackToAtlas(this.atlas, pack, onComplete);
   }
 }

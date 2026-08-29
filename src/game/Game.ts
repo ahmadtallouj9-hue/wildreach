@@ -5,6 +5,9 @@ import { ChunkManager } from '../world/ChunkManager';
 import { PlayerController } from '../player/PlayerController';
 import { BlockInteraction } from '../player/BlockInteraction';
 import { Inventory } from '../player/Inventory';
+import { PlayerSurvival } from '../player/PlayerSurvival';
+import { MobManager } from '../mobs/MobManager';
+import { loadSurvivalState, saveSurvivalState } from '../world/survivalStore';
 import { Sky } from '../render/Sky';
 import { TerrainMaterials } from '../render/TerrainMaterials';
 import { PostFX } from '../render/PostFX';
@@ -26,6 +29,8 @@ import { worldNameFromSeed } from '../ui/worldNames';
 import { styleFingerprint } from '../world/style/styleHash';
 import { isTouchDevice } from '../util/isTouchDevice';
 import { applyHudLayout, HudLayoutEditor, loadHudLayout } from '../ui/HudLayout';
+import { loadGfxPrefs, saveGfxPrefs, getPresetConfig, type GfxPrefs, type GfxPreset } from '../render/gfxPrefs';
+import { ModManager } from '../modding/ModSystem';
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
@@ -36,6 +41,9 @@ export class Game {
   private player: PlayerController;
   private inventory: Inventory;
   private inventoryUi: InventoryUi;
+  private survival: PlayerSurvival;
+  private mobManager: MobManager;
+  private survivalSaveTimer = 0;
   private chatUi: ChatUi;
   private pauseMenu: PauseMenu;
   private interaction: BlockInteraction;
@@ -54,6 +62,10 @@ export class Game {
   private worldLinkStatus: NetLinkStatus = 'offline';
   private playerName = 'Wanderer';
   private prefs: Settings = loadSettings();
+  private gfx: GfxPrefs = loadGfxPrefs();
+  private fpsCapAccumulator = 0;
+  private physicsAccumulator = 0;
+  private lowFpsTimer = 0;
   private genDebug: GenDebugMode = parseGenDebugMode();
   private clock = new THREE.Clock();
   private running = false;
@@ -61,6 +73,7 @@ export class Game {
   private ignorePointerUnlock = false;
   private onPointerLockChangeBound = () => this.onPointerLockChange();
   private onResizeBound = () => this.onResize();
+  private onVisibilityChangeBound = () => this.onVisibilityChange();
   readonly seed: string;
   onMenuRequest: ((panel?: 'settings' | 'multiplayer') => void) | null = null;
 
@@ -72,16 +85,23 @@ export class Game {
       powerPreference: 'high-performance',
       stencil: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.gfx.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = this.gfx.shadows !== 'none';
+    if (this.gfx.shadows === 'soft') {
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    } else {
+      this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    }
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.domElement.classList.add('game-canvas');
     host.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.materials = new TerrainMaterials();
+    ModManager.get().rebuildRuntimeRegistrations();
+    this.materials = new TerrainMaterials(this.prefs.texturePack || 'default');
+    this.materials.setGfx(this.gfx);
     const worldSettings = loadWorldSettings(seed);
     this.world = new WorldGen(seed, {
       terrain: worldSettings.terrain,
@@ -94,24 +114,76 @@ export class Game {
       this.materials,
       worldSettings.structures,
     );
-    this.chunks.setRenderDistance(worldSettings.renderDistance);
+    this.chunks.setRenderDistance(this.gfx.renderDistance);
+    this.chunks.setChunkBudget(this.gfx.chunkBudget);
     this.player = new PlayerController(this.renderer.domElement, this.chunks);
     this.scene.add(this.player.avatar);
     this.sky = new Sky(this.scene);
-    this.sky.viewDistanceChunks = worldSettings.renderDistance;
+    this.sky.setGfx(this.gfx);
     this.sky.setTimeOfDay(WORLD_TIME_VALUES[worldSettings.time]);
     this.postfx = new PostFX(this.renderer, this.scene, this.player.camera);
+    this.postfx.setGfx(this.gfx);
     this.discovery = new DiscoverySystem();
     this.hud = new Hud(this.discovery, seed);
     host.appendChild(this.hud.root);
     this.hud.hidePalette();
 
+    const savedSurvival = loadSurvivalState(seed);
+    this.survival = new PlayerSurvival(
+      savedSurvival ? { health: savedSurvival.health, hunger: savedSurvival.hunger } : undefined,
+    );
+
     this.inventory = new Inventory();
-    this.inventoryUi = new InventoryUi(this.inventory);
+    if (savedSurvival?.slots) {
+      savedSurvival.slots.forEach((s, idx) => this.inventory.setSlot(idx, s));
+    }
+    if (savedSurvival?.selectedHotbar != null) {
+      this.inventory.setHotbar(savedSurvival.selectedHotbar);
+    }
+
+    this.inventoryUi = new InventoryUi(this.inventory, { profile: loadProfile() });
     host.appendChild(this.inventoryUi.root);
     this.inventoryUi.onToggle((open) => {
       this.syncControlState();
       if (open) this.exitPointerLockQuiet();
+    });
+
+    this.mobManager = new MobManager(this.scene, this.chunks, (itemId, count) => {
+      this.inventory.add(itemId, count);
+      this.inventoryUi.refresh();
+      this.saveSurvival();
+    });
+
+    this.survival.onDeath(() => {
+      this.syncControlState();
+      this.hud.showDeathScreen(true);
+      for (let i = 0; i < this.inventory.slots.length; i++) {
+        const s = this.inventory.slots[i];
+        if (s && s.count > 0) {
+          this.mobManager.dropItem(s.id, s.count, this.player.position);
+          this.inventory.setSlot(i, null);
+        }
+      }
+      this.inventoryUi.refresh();
+      this.saveSurvival();
+      this.exitPointerLockQuiet();
+    });
+
+    this.hud.onDeathActions({
+      onRespawn: () => {
+        this.player.spawnAt(0, 0);
+        this.survival.respawn();
+        this.hud.showDeathScreen(false);
+        this.syncControlState();
+        this.saveSurvival();
+        if (!this.player.touchControlsActive) {
+          this.requestPointerLock();
+        }
+      },
+      onTitle: () => {
+        this.saveSurvival();
+        this.onMenuRequest?.();
+      },
     });
 
     this.chatUi = new ChatUi();
@@ -157,7 +229,14 @@ export class Game {
       this.player,
       this.renderer.domElement,
       this.inventory,
-      () => this.inventoryUi.refresh(),
+      this.survival,
+      this.mobManager,
+      () => this.inventoryUi.openCraftingTable(),
+      () => {
+        this.inventoryUi.refresh();
+        this.saveSurvival();
+      },
+      (x, y, z, block) => this.net?.sendBlock({ x, y, z, block }),
     );
 
     if (isTouchDevice()) {
@@ -175,6 +254,14 @@ export class Game {
         onMap: () => this.hud.toggleMap(),
         onChat: () => this.chatUi.toggle(),
         onMenu: () => this.setPaused(true),
+        onHotbarPrev: () => {
+          this.inventory.cycleHotbar(-1);
+          this.inventoryUi.refresh();
+        },
+        onHotbarNext: () => {
+          this.inventory.cycleHotbar(1);
+          this.inventoryUi.refresh();
+        },
       });
       host.appendChild(this.touchControls.root);
       this.touchControls.setEnabled(false);
@@ -184,11 +271,21 @@ export class Game {
 
     this.chunks.bootstrapAt(0, 0);
     this.player.spawnAt(0, 0);
+    if (savedSurvival?.position && Number.isFinite(savedSurvival.position.x)) {
+      this.player.position.set(
+        savedSurvival.position.x,
+        savedSurvival.position.y,
+        savedSurvival.position.z,
+      );
+      if (savedSurvival.yaw != null) this.player.yaw = savedSurvival.yaw;
+      if (savedSurvival.pitch != null) this.player.pitch = savedSurvival.pitch;
+    }
     this.spawnMobs();
 
     this.initMultiplayer(worldSettings, loadProfile());
 
     document.addEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    document.addEventListener('visibilitychange', this.onVisibilityChangeBound);
     window.addEventListener('resize', this.onResizeBound);
     this.onResize();
   }
@@ -209,7 +306,37 @@ export class Game {
     this.chatUi.setOpen(false);
   }
 
-  applyPrefs(profile: Profile, settings: Settings, skinPixels?: Uint8ClampedArray): void {
+  applyGfx(gfx: GfxPrefs): void {
+    this.gfx = gfx;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, gfx.pixelRatioCap));
+    if (gfx.shadows === 'none') {
+      this.renderer.shadowMap.enabled = false;
+    } else {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type =
+        gfx.shadows === 'soft' ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    }
+    this.sky.setGfx(gfx);
+    this.materials.setGfx(gfx);
+    this.postfx.setGfx(gfx);
+    this.fallingLeaves?.setEnabled(gfx.particles);
+    this.chunks.setRenderDistance(gfx.renderDistance);
+    this.chunks.setChunkBudget(gfx.chunkBudget);
+    this.onResize();
+  }
+
+  setGfxPreset(preset: GfxPreset): void {
+    const config = getPresetConfig(preset);
+    saveGfxPrefs(config);
+    this.applyGfx(config);
+  }
+
+  private onVisibilityChange(): void {
+    const hidden = document.hidden;
+    this.chunks.setPausedHidden(hidden);
+  }
+
+  applyPrefs(profile: Profile, settings: Settings, skinPixels?: Uint8ClampedArray, gfxPrefs?: GfxPrefs): void {
     this.playerName = profile.name || 'Wanderer';
     this.player.mouseSensitivity = settings.mouseSensitivity;
     this.player.invertY = settings.invertY;
@@ -218,12 +345,20 @@ export class Game {
     this.hud.setViewMode(settings.viewMode);
     this.player.applyProfile(profile);
     if (skinPixels) this.player.applySkinPixels(skinPixels);
-    this.chunks.setRenderDistance(settings.renderDistance);
     this.sky.cloudCover = settings.clouds;
     this.postfx.setBrightness(settings.brightness);
     this.hud.setShowFps(settings.showFps);
+    if (settings.texturePack && settings.texturePack !== this.materials.texturePack) {
+      this.materials.setTexturePack(settings.texturePack);
+    }
     this.prefs = settings;
+    if (gfxPrefs) {
+      this.applyGfx(gfxPrefs);
+    } else {
+      this.chunks.setRenderDistance(this.gfx.renderDistance);
+    }
     this.hud.setProfileName(profile.name, profile.accent);
+    this.inventoryUi.applyProfile(profile);
   }
 
   start(): void {
@@ -380,7 +515,7 @@ export class Game {
       return;
     }
     const canControl =
-      !this.paused && !this.inventoryUi.isOpen && !this.chatUi.isOpen;
+      !this.paused && !this.inventoryUi.isOpen && !this.chatUi.isOpen && !this.survival.isDead;
     this.player.setInputEnabled(canControl);
     this.interaction.setEnabled(canControl);
     this.touchControls?.setEnabled(canControl);
@@ -396,7 +531,7 @@ export class Game {
   }
 
   private requestPointerLock(): void {
-    if (isTouchDevice() || this.paused || this.chatUi.isOpen || this.inventoryUi.isOpen) return;
+    if (isTouchDevice() || this.paused || this.chatUi.isOpen || this.inventoryUi.isOpen || this.survival.isDead) return;
     this.renderer.domElement.requestPointerLock?.();
   }
 
@@ -404,31 +539,58 @@ export class Game {
     if (isTouchDevice()) return;
     if (document.pointerLockElement === this.renderer.domElement) return;
     if (this.ignorePointerUnlock) return;
-    if (this.paused || this.chatUi.isOpen || this.inventoryUi.isOpen) return;
+    if (this.paused || this.chatUi.isOpen || this.inventoryUi.isOpen || this.survival.isDead) return;
     // Lost aim lock (Alt-Tab / Escape) → Game Menu, not "Click to play".
     this.setPaused(true);
   }
 
   dispose(): void {
+    this.saveSurvival();
     this.running = false;
     this.setSessionCoveredByTitle(false);
     this.social?.setPresence({ inGame: false });
     this.renderer.setAnimationLoop(null);
     document.removeEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    document.removeEventListener('visibilitychange', this.onVisibilityChangeBound);
     window.removeEventListener('resize', this.onResizeBound);
     this.hud.root.remove();
-    this.inventoryUi.root.remove();
+    this.inventoryUi.dispose();
     this.chatUi.root.remove();
     this.pauseMenu.root.remove();
     this.touchControls?.root.remove();
     this.net?.disconnect();
+    this.net = null;
     this.remotePlayers?.root.remove();
+    this.remotePlayers = null;
     this.fallingLeaves?.dispose();
     this.fallingLeaves = null;
     for (const m of this.mobs) m.dispose();
     this.mobs = [];
+    this.mobManager?.dispose();
+    this.interaction.dispose();
+    this.player.dispose();
+    this.chunks.dispose();
+    this.scene.clear();
     this.renderer.domElement.remove();
     this.renderer.dispose();
+  }
+
+  private saveSurvival(): void {
+    if (!this.survival || !this.player || !this.inventory) return;
+    saveSurvivalState(this.seed, {
+      health: this.survival.health,
+      hunger: this.survival.hunger,
+      position: {
+        x: this.player.position.x,
+        y: this.player.position.y,
+        z: this.player.position.z,
+      },
+      yaw: this.player.yaw,
+      pitch: this.player.pitch,
+      slots: this.inventory.slots,
+      selectedHotbar: this.inventory.selectedHotbar,
+      savedAt: Date.now(),
+    });
   }
 
   private spawnMobs(): void {
@@ -436,16 +598,50 @@ export class Game {
   }
 
   private onResize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.renderer.setSize(w, h);
-    this.player.camera.aspect = w / h;
+    let w = window.innerWidth;
+    let h = window.innerHeight;
+    const maxDim = this.gfx.maxRenderDimension;
+    const longSide = Math.max(w, h);
+    if (longSide > maxDim) {
+      const scale = maxDim / longSide;
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+    this.renderer.setSize(w, h, false);
+    this.player.camera.aspect = window.innerWidth / window.innerHeight;
     this.player.camera.updateProjectionMatrix();
     this.postfx.setSize(w, h);
   }
 
   private frame(): void {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const rawDt = Math.min(this.clock.getDelta(), 0.05);
+
+    // Optional 30 FPS cap for Very Low preset on low-end devices
+    if (this.gfx.fpsCap === 30) {
+      this.fpsCapAccumulator += rawDt;
+      if (this.fpsCapAccumulator < 0.031) {
+        return;
+      }
+      this.fpsCapAccumulator = 0;
+    }
+
+    const dt = rawDt;
+
+    // Max preset auto-drop: if FPS < 25 for 3 seconds continuously, drop to High
+    if (this.gfx.preset === 'max' && !this.paused) {
+      const currentFps = dt > 0 ? 1 / dt : 60;
+      if (currentFps < 25) {
+        this.lowFpsTimer += dt;
+        if (this.lowFpsTimer >= 3.0) {
+          this.lowFpsTimer = 0;
+          this.setGfxPreset('high');
+          this.hud.showToast('Graphics adjusted', 'Lowered to High preset for performance');
+        }
+      } else {
+        this.lowFpsTimer = 0;
+      }
+    }
+
     const worldLive = !this.paused && !this.inventoryUi.isOpen;
     const canControl = worldLive && !this.chatUi.isOpen;
     // Journal is modal; map is an overlay — keep walking/looking while it's open.
@@ -453,12 +649,48 @@ export class Game {
 
     if (worldLive && !journalBlocking) {
       this.chunks.updateAround(this.player.position.x, this.player.position.z, 1);
-      if (canControl) {
-        this.player.update(dt);
-        this.interaction.update(dt);
-      } else {
-        // Chat open: keep standing still but world/time continue.
-        this.player.update(0);
+
+      // Deterministic 20 Hz fixed simulation step (0.05s)
+      const FIXED_DT = 0.05;
+      this.physicsAccumulator += dt;
+      if (this.physicsAccumulator > 0.25) this.physicsAccumulator = 0.25;
+
+      while (this.physicsAccumulator >= FIXED_DT) {
+        if (canControl) {
+          this.player.simulateTick(this.survival.damageSystem, this.survival.hungerSystem);
+          this.interaction.update(FIXED_DT);
+        }
+        this.survival.tick();
+        this.physicsAccumulator -= FIXED_DT;
+      }
+
+      const renderAlpha = this.physicsAccumulator / FIXED_DT;
+      this.player.render(renderAlpha, dt);
+
+      const isMoving = this.player.velocity.lengthSq() > 0.05;
+      const isSprinting = this.player.isSprinting;
+      const lavaSub = this.player.getLavaSubmersion();
+      const submersion = lavaSub > 0.02 ? 0 : this.player.getSubmersion();
+
+      this.survival.update(dt, {
+        onGround: this.player.isOnGround,
+        posY: this.player.position.y,
+        isMoving,
+        isSprinting,
+        inLava: lavaSub > 0.02,
+        isSubmerged: submersion > 0.5,
+      });
+
+      const isNight = this.sky.sunDir.y < 0.1;
+      this.mobManager.update(dt, this.player.position, isNight, (dmg) => {
+        this.survival.damage(dmg, 'mob');
+        this.player.velocity.y += 0.3;
+      });
+
+      this.survivalSaveTimer += dt;
+      if (this.survivalSaveTimer >= 5.0) {
+        this.survivalSaveTimer = 0;
+        this.saveSurvival();
       }
 
       const biomeLive = this.chunks.getBiomeAt(this.player.position.x, this.player.position.z);
@@ -474,6 +706,14 @@ export class Game {
       this.chunks.updateAround(this.player.position.x, this.player.position.z, 1);
       this.interaction.update(dt);
     }
+
+    this.hud.setSurvival(
+      this.survival.health,
+      this.survival.maxHealth,
+      this.survival.hunger,
+      this.survival.maxHunger,
+      this.survival.hurtFlash,
+    );
 
     const biome = this.chunks.getBiomeAt(this.player.position.x, this.player.position.z);
     const lavaSub = this.player.getLavaSubmersion();
@@ -577,6 +817,16 @@ export class Game {
     this.net.on({
       onStatus: (status) => {
         this.worldLinkStatus = status;
+        const others =
+          status === 'connected'
+            ? (this.remotePlayers?.getMapMarkers().map((p) => p.name) ?? [])
+            : [];
+        this.hud.setWorldLink({
+          status,
+          count: status === 'connected' ? Math.max(1, others.length + 1) : 1,
+          worldName: worldNameFromSeed(this.seed),
+          others,
+        });
       },
       onWelcome: (_id, players, edits) => {
         this.remotePlayers!.clear();
@@ -595,7 +845,7 @@ export class Game {
         this.hud.showToast(
           'Connected to world',
           total > 1 ? `${total} explorers here` : 'You are the first here',
-        )
+        );
       },
       onPlayerJoin: (id, p, snapshot) => {
         this.remotePlayers!.add(id, p, snapshot);
@@ -615,7 +865,9 @@ export class Game {
         this.chatUi.push({ id, name, text });
       },
       onDisconnect: () => {
-        this.worldLinkStatus = this.net ? 'reconnecting' : 'offline';
+        // Prefer NetClient status (may already be offline after give-up).
+        const status = this.net?.status ?? 'offline';
+        this.worldLinkStatus = status === 'connected' ? 'reconnecting' : status;
         this.hud.setWorldLink({
           status: this.worldLinkStatus,
           count: 1,

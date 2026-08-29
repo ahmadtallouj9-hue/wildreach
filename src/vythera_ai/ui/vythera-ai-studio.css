@@ -1,28 +1,28 @@
 /**
- * VYTHERA AI Studio — professional editor shell theme.
- * Dark · technical · restrained accent · game-tool aesthetic.
+ * VYTHERA AI Studio — gold frosted theme (reuses src/ui/theme/tokens.css).
+ * Layout/selectors preserved; only visuals mapped to the VYTHERA gold system.
  */
 
 .vythera-ai-studio.vas-shell {
-  --vas-bg: var(--v-bg, #0b0d10);
-  --vas-panel: var(--v-panel, #11151a);
-  --vas-panel-2: var(--v-panel-2, #161b22);
-  --vas-line: #252b33;
-  --vas-line-soft: #1c2229;
-  --vas-text: var(--v-ink, #d7dde5);
-  --vas-muted: var(--v-muted, #8b95a3);
-  --vas-dim: var(--v-dim, #5c6673);
-  --vas-accent: var(--v-ai, #3ebba5);
-  --vas-accent-dim: var(--v-ai-dim, rgba(62, 187, 165, 0.14));
-  --vas-accent-glow: rgba(78, 184, 168, 0.28);
-  --vas-ok: var(--v-ok, #5ecf8a);
-  --vas-warn: var(--v-warn, #d4a24c);
-  --vas-err: var(--v-err, #e07070);
-  --vas-mono: var(--font-mono, ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace);
-  --vas-sans: var(--font-body, 'Outfit', 'Segoe UI', system-ui, sans-serif);
+  --vas-bg: rgba(7, 10, 14, 0.6);
+  --vas-panel: rgba(8, 16, 20, 0.55);
+  --vas-panel-2: rgba(10, 22, 26, 0.6);
+  --vas-line: rgba(201, 162, 39, 0.32);
+  --vas-line-soft: rgba(201, 162, 39, 0.18);
+  --vas-text: var(--vy-ink, #f3eee2);
+  --vas-muted: var(--vy-muted, #a4b3a8);
+  --vas-dim: var(--vy-faint, #6c7c72);
+  --vas-accent: var(--vy-gold, #c9a227);
+  --vas-accent-dim: var(--vy-gold-dim, rgba(201, 162, 39, 0.16));
+  --vas-accent-glow: var(--vy-gold-glow, rgba(201, 162, 39, 0.35));
+  --vas-ok: var(--vy-ok, #6bb56f);
+  --vas-warn: var(--vy-warn, #c9923a);
+  --vas-err: var(--vy-err, #c45d5d);
+  --vas-mono: var(--vy-font-mono, ui-monospace, 'IBM Plex Mono', Menlo, Consolas, monospace);
+  --vas-sans: var(--vy-font-ui, 'Outfit', 'Segoe UI', system-ui, sans-serif);
   --vas-nav-w: 188px;
   --vas-insp-w: 260px;
-  --vas-radius: 2px;
+  --vas-radius: 10px;
   --vas-font: 12px;
   --vas-font-sm: 11px;
   --vas-font-xs: 10px;
@@ -32,12 +32,16 @@
   height: 100%;
   min-height: 420px;
   max-height: 100%;
-  /* world-bg translucent */
-  background: rgba(11, 13, 16, 0.72);
+  /* frosted dark glass */
+  background: rgba(7, 10, 14, 0.65);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
   color: var(--vas-text);
   font-family: var(--vas-sans);
   font-size: var(--vas-font);
   border: 1px solid var(--vas-line);
+  border-radius: var(--vy-radius-lg, 16px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
   position: relative;
 }
@@ -52,9 +56,9 @@
   grid-template-columns: minmax(140px, 1fr) auto minmax(200px, 1fr);
   align-items: center;
   gap: 0.75rem;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 0.65rem;
-  background: linear-gradient(180deg, #12171d 0%, var(--vas-panel) 100%);
+  background: linear-gradient(180deg, rgba(12, 20, 26, 0.9) 0%, var(--vas-panel) 100%);
   border-bottom: 1px solid var(--vas-line);
   flex-shrink: 0;
   z-index: 3;
@@ -255,7 +259,7 @@
 
 .vas-nav-btn:hover {
   color: var(--vas-text);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(201, 162, 39, 0.1);
 }
 
 .vas-nav-btn:focus-visible {
@@ -265,8 +269,8 @@
 
 .vas-nav-btn.is-active {
   color: var(--vas-text);
-  background: var(--vas-accent-dim);
-  border-color: rgba(62, 187, 165, 0.35);
+  background: linear-gradient(180deg, rgba(224, 192, 104, 0.22), rgba(201, 162, 39, 0.12));
+  border-color: rgba(201, 162, 39, 0.55);
   box-shadow: inset 2px 0 0 var(--vas-accent);
 }
 
@@ -433,9 +437,9 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem 1rem;
-  min-height: 26px;
+  min-height: 28px;
   padding: 0.2rem 0.65rem;
-  background: #0a0c0f;
+  background: rgba(5, 8, 11, 0.85);
   border-top: 1px solid var(--vas-line);
   font-size: var(--vas-font-xs);
   letter-spacing: 0.06em;
@@ -468,8 +472,9 @@
 
 .vas-view-head h2 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 650;
+  font-family: var(--vy-font-display, var(--vas-sans));
+  font-size: 0.95rem;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--vas-text);
@@ -523,19 +528,20 @@
 .vas-btn {
   appearance: none;
   border: 1px solid var(--vas-line);
-  background: var(--vas-panel-2);
+  background: rgba(8, 16, 20, 0.5);
   color: var(--vas-text);
   font-size: var(--vas-font-sm);
   letter-spacing: 0.04em;
-  padding: 0.32rem 0.55rem;
+  padding: 0.34rem 0.6rem;
   cursor: pointer;
   border-radius: var(--vas-radius);
   transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
 }
 
 .vas-btn:hover:not(:disabled) {
-  border-color: #3a4450;
-  background: #1a2129;
+  border-color: var(--vas-line-strong, rgba(201, 162, 39, 0.55));
+  background: rgba(201, 162, 39, 0.12);
+  color: var(--vas-text);
 }
 
 .vas-btn:focus-visible {
@@ -549,18 +555,25 @@
 }
 
 .vas-btn--primary {
-  border-color: rgba(62, 187, 165, 0.45);
-  background: var(--vas-accent-dim);
-  color: var(--vas-accent);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  border-color: rgba(232, 196, 96, 0.85);
+  background: linear-gradient(180deg, #e0c068 0%, #c9a227 48%, #a88414 100%);
+  color: #1a1408;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   font-size: var(--vas-font-xs);
+  border-radius: var(--vy-radius-pill, 999px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 240, 190, 0.45);
 }
 
 .vas-btn--primary:hover:not(:disabled) {
-  box-shadow: 0 0 0 1px var(--vas-accent-glow);
-  border-color: var(--vas-accent);
+  color: #120e06;
+  filter: brightness(1.06);
+  border-color: #f0d789;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(240, 215, 137, 0.35),
+    inset 0 1px 0 rgba(255, 240, 190, 0.55);
 }
 
 .vas-btn--ghost {
@@ -569,12 +582,12 @@
 
 .vas-btn--danger {
   color: var(--vas-err);
-  border-color: rgba(224, 112, 112, 0.35);
+  border-color: rgba(196, 93, 93, 0.45);
 }
 
 .vas-btn--ok {
   color: var(--vas-ok);
-  border-color: rgba(94, 207, 138, 0.35);
+  border-color: rgba(95, 158, 120, 0.45);
 }
 
 .vas-chip {
@@ -592,7 +605,7 @@
 
 .vas-chip.is-active {
   color: var(--vas-accent);
-  border-color: rgba(62, 187, 165, 0.4);
+  border-color: rgba(201, 162, 39, 0.55);
   background: var(--vas-accent-dim);
 }
 
@@ -600,7 +613,7 @@
 .vas-shell textarea.mod-ai-input,
 .vas-shell .mod-ai-input {
   width: 100%;
-  background: var(--vas-bg) !important;
+  background: rgba(6, 12, 16, 0.65) !important;
   border: 1px solid var(--vas-line) !important;
   color: var(--vas-text) !important;
   border-radius: var(--vas-radius) !important;
@@ -611,7 +624,7 @@
 
 .vas-shell textarea.mod-ai-input:focus,
 .vas-shell .mod-ai-input:focus {
-  border-color: rgba(62, 187, 165, 0.5) !important;
+  border-color: rgba(232, 196, 96, 0.85) !important;
   outline: none !important;
   box-shadow: 0 0 0 1px var(--vas-accent-dim);
 }
@@ -620,7 +633,7 @@
 .vas-shell .vythera-ai-json {
   font-family: var(--vas-mono) !important;
   font-size: var(--vas-font-xs) !important;
-  background: var(--vas-bg) !important;
+  background: rgba(6, 12, 16, 0.7) !important;
   border: 1px solid var(--vas-line-soft);
   border-radius: var(--vas-radius);
   color: var(--vas-muted) !important;
@@ -642,12 +655,12 @@
 
 .vas-badge--ok {
   color: var(--vas-ok);
-  border-color: rgba(94, 207, 138, 0.35);
+  border-color: rgba(95, 158, 120, 0.45);
 }
 
 .vas-badge--priv {
   color: var(--vas-accent);
-  border-color: rgba(62, 187, 165, 0.35);
+  border-color: rgba(201, 162, 39, 0.5);
 }
 
 /* Drop zone */
@@ -659,15 +672,15 @@
   min-height: 160px;
   margin: 0 !important;
   padding: 1.5rem !important;
-  border: 1px dashed #2f3842 !important;
+  border: 1px dashed rgba(201, 162, 39, 0.4) !important;
   background:
-    linear-gradient(180deg, rgba(22, 27, 34, 0.65), rgba(11, 13, 16, 0.9)),
+    linear-gradient(180deg, rgba(10, 22, 26, 0.65), rgba(7, 10, 14, 0.9)),
     repeating-linear-gradient(
       -45deg,
       transparent,
       transparent 8px,
-      rgba(255, 255, 255, 0.012) 8px,
-      rgba(255, 255, 255, 0.012) 9px
+      rgba(201, 162, 39, 0.04) 8px,
+      rgba(201, 162, 39, 0.04) 9px
     );
   color: var(--vas-muted) !important;
   text-align: center;
@@ -680,7 +693,7 @@
 .vas-shell .vythera-ai-image-drop.is-drag {
   border-color: var(--vas-accent) !important;
   color: var(--vas-text) !important;
-  box-shadow: inset 0 0 0 1px var(--vas-accent-dim), 0 0 24px rgba(62, 187, 165, 0.06);
+  box-shadow: inset 0 0 0 1px var(--vas-accent-dim), 0 0 24px rgba(201, 162, 39, 0.08);
 }
 
 .vas-drop-title {
@@ -699,7 +712,7 @@
 .vas-image-stage {
   position: relative;
   border: 1px solid var(--vas-line);
-  background: #080a0c;
+  background: #070b0e;
   border-radius: var(--vas-radius);
   min-height: 200px;
   display: grid;
@@ -778,7 +791,7 @@
 .vas-conf-bar {
   width: 48px;
   height: 3px;
-  background: #1e252d;
+  background: rgba(201, 162, 39, 0.18);
   border-radius: 1px;
   overflow: hidden;
 }
@@ -821,11 +834,11 @@
 }
 
 .vas-task-card.is-approved {
-  border-color: rgba(94, 207, 138, 0.35);
+  border-color: rgba(95, 158, 120, 0.45) !important;
 }
 
 .vas-task-card.is-rejected {
-  border-color: rgba(224, 112, 112, 0.3);
+  border-color: rgba(196, 93, 93, 0.4) !important;
   opacity: 0.75;
 }
 
@@ -866,7 +879,7 @@
 
 .vas-balance-track {
   height: 4px;
-  background: #1a2027;
+  background: rgba(201, 162, 39, 0.16);
   border-radius: 1px;
   overflow: hidden;
 }
@@ -875,7 +888,7 @@
   display: block;
   height: 100%;
   background: var(--vas-accent);
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 /* Chat */
@@ -977,7 +990,7 @@
   color: var(--vas-muted);
   border: 1px dashed var(--vas-line);
   border-radius: var(--vas-radius);
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .vas-empty strong {
@@ -1005,7 +1018,7 @@
 .vas-shell .voxel-editor-btn {
   appearance: none;
   border: 1px solid var(--vas-line);
-  background: var(--vas-panel-2);
+  background: rgba(8, 16, 20, 0.5);
   color: var(--vas-text);
   font-size: var(--vas-font-sm);
   padding: 0.32rem 0.5rem;
@@ -1014,7 +1027,8 @@
 }
 
 .vas-shell .voxel-editor-btn:hover {
-  border-color: #3a4450;
+  border-color: var(--vas-line-strong, rgba(201, 162, 39, 0.55));
+  background: rgba(201, 162, 39, 0.12);
 }
 
 .vas-shell .mod-ai-chip {
@@ -1031,7 +1045,7 @@
 
 .vas-shell .mod-ai-chip.is-active {
   color: var(--vas-accent);
-  border-color: rgba(62, 187, 165, 0.4);
+  border-color: rgba(201, 162, 39, 0.55);
   background: var(--vas-accent-dim);
 }
 
@@ -1086,5 +1100,12 @@
   }
   .vas-top-status .vas-pill span:not(.vas-dot) {
     display: none;
+  }
+  /* Phone touch targets >= 44px */
+  .vas-nav-btn,
+  .vas-btn,
+  .vas-chip,
+  .vas-insp-toggle {
+    min-height: 44px;
   }
 }

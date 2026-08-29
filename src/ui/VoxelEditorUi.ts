@@ -23,6 +23,8 @@ import {
   loadModAsset,
   saveModAsset,
 } from '../modding/ModStorage';
+import { ModManager } from '../modding/ModSystem';
+import type { ModManifestJson } from '../modding/ModSchema';
 import { LocalVoxelGrid } from '../modding/LocalVoxelGrid';
 import { exportModShape } from '../modding/ModShapeExport';
 import { partMaskFromArray, partMaskToArray } from '../modding/PartAssignment';
@@ -759,7 +761,44 @@ export class VoxelEditorUi {
     try {
       const asset = this.currentAsset();
       this.modId = saveModAsset(asset, this.modId ?? undefined);
-      this.setStatus(`Saved “${asset.name}”`);
+
+      // Also register / update as an active game ModManifest in ModManager
+      const modSlug = this.modId.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+      const existing = ModManager.get().getMod(this.modId);
+
+      const blockDef = {
+        id: `${modSlug}_block`,
+        displayName: asset.name,
+        hardness: 1.2,
+        color: [0.85, 0.45, 0.75] as [number, number, number],
+      };
+
+      const manifest: ModManifestJson = {
+        id: this.modId,
+        name: asset.name,
+        displayName: asset.name,
+        description: `Custom mod created in VYTHERA Mod Studio`,
+        version: existing?.version || '1.0.0',
+        author: 'Player',
+        packFormat: 1,
+        blocks: [blockDef],
+        recipes: [
+          {
+            id: `${modSlug}_recipe`,
+            type: 'crafting_shapeless',
+            grid: '2x2',
+            ingredients: ['dirt', 'stone'],
+            result: { id: `${modSlug}_block`, count: 1 },
+          },
+        ],
+        createdAt: existing?.createdAt || Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      ModManager.get().saveMod(manifest);
+      ModManager.get().setModEnabled(this.modId, true);
+
+      this.setStatus(`Saved & Enabled “${asset.name}”`);
     } catch {
       this.setStatus('Save failed');
     }

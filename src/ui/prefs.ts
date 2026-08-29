@@ -66,6 +66,8 @@ export interface Profile {
   skinData?: string;
 }
 
+export type TexturePack = 'default' | 'goodvibes';
+
 export interface Settings {
   mouseSensitivity: number;
   fov: number;
@@ -76,6 +78,7 @@ export interface Settings {
   clouds: number;
   underwaterFx: boolean;
   brightness: number;
+  texturePack: TexturePack;
 }
 
 const PROFILE_KEY = 'wildreach.profile';
@@ -106,7 +109,7 @@ const DEFAULT_PROFILE: Profile = {
 };
 
 const DEFAULT_SETTINGS: Settings = {
-  mouseSensitivity: 1,
+  mouseSensitivity: 0.04,
   fov: 75,
   viewMode: 'first',
   renderDistance: 7,
@@ -115,6 +118,7 @@ const DEFAULT_SETTINGS: Settings = {
   clouds: 0.7,
   underwaterFx: true,
   brightness: 1,
+  texturePack: 'default',
 };
 
 const HATS: HatStyle[] = ['none', 'cap', 'band', 'hood', 'beanie', 'visor', 'crown', 'helm'];
@@ -213,7 +217,7 @@ export function saveProfile(profile: Profile): void {
 
 export function loadSettings(): Settings {
   const s = readJson(SETTINGS_KEY, DEFAULT_SETTINGS);
-  s.mouseSensitivity = Math.min(2.5, Math.max(0.35, Number(s.mouseSensitivity) || 1));
+  s.mouseSensitivity = Math.min(0.20, Math.max(0.01, Number(s.mouseSensitivity) || 0.04));
   s.fov = Math.min(100, Math.max(55, Number(s.fov) || 75));
   s.viewMode =
     s.viewMode === 'third' || s.viewMode === 'front' ? s.viewMode : 'first';
@@ -223,6 +227,7 @@ export function loadSettings(): Settings {
   s.clouds = Math.min(1, Math.max(0, Number(s.clouds) || 0.7));
   s.underwaterFx = s.underwaterFx !== false;
   s.brightness = Math.min(1.4, Math.max(0.6, Number(s.brightness) || 1));
+  s.texturePack = s.texturePack === 'goodvibes' ? 'goodvibes' : 'default';
   return s;
 }
 

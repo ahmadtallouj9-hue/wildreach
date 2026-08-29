@@ -4,6 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import type { GfxPrefs } from './gfxPrefs';
 
 /** Soft underwater tint / caustics. */
 const UnderwaterShader = {
@@ -174,8 +175,9 @@ export class PostFX {
   private camera: THREE.Camera;
   private scene: THREE.Scene;
   private renderer: THREE.WebGLRenderer;
-  /** Multipass composer is expensive — keep off unless underwater FX needs it. */
+  /** Multipass composer is expensive — keep off on Very Low/Low/Medium. */
   private useComposer = false;
+  private postProcessingEnabled = false;
   private time = 0;
   private sunWorld = new THREE.Vector3();
   private sunNdc = new THREE.Vector3();
@@ -200,6 +202,13 @@ export class PostFX {
     this.composer.addPass(new OutputPass());
   }
 
+  setGfx(gfx: GfxPrefs): void {
+    this.postProcessingEnabled = gfx.postProcessing;
+    this.bloomPass.enabled = gfx.bloom;
+    this.gradePass.enabled = gfx.colorGrade;
+    this.syncUseComposer();
+  }
+
   setSize(w: number, h: number): void {
     this.composer.setSize(w, h);
     this.bloomPass.resolution.set(w, h);
@@ -211,8 +220,12 @@ export class PostFX {
     this.underwaterPass.uniforms.time.value = this.time;
     this.underwaterPass.enabled = amount > 0.02;
     this.gradePass.uniforms.time.value = this.time;
-    // Only pay for composer when actually underwater.
-    this.useComposer = amount > 0.02;
+    this.syncUseComposer();
+  }
+
+  private syncUseComposer(): void {
+    // Very Low, Low, Medium strictly skip composer. Only High / Max enable it.
+    this.useComposer = this.postProcessingEnabled;
   }
 
   /** Update sun shafts from world-space sun direction. */

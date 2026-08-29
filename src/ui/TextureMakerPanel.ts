@@ -135,10 +135,27 @@ export class TextureMakerPanel {
       });
     });
     const file = this.root.querySelector<HTMLInputElement>('.mod-tex-import input');
+    const nameEl = this.root.querySelector<HTMLElement>('.mod-tex-import .vy-file-pill__name');
+    const clearBtn = this.root.querySelector<HTMLButtonElement>('.mod-tex-import .vy-file-pill__clear');
+
     file?.addEventListener('change', () => {
       const f = file.files?.[0];
-      if (f) this.importImage(f);
-      file.value = '';
+      if (f) {
+        if (nameEl) {
+          nameEl.textContent = f.name;
+          nameEl.hidden = false;
+        }
+        if (clearBtn) clearBtn.hidden = false;
+        this.importImage(f);
+      }
+    });
+
+    clearBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (file) file.value = '';
+      if (nameEl) { nameEl.textContent = ''; nameEl.hidden = true; }
+      if (clearBtn) clearBtn.hidden = true;
     });
     this.root.addEventListener('keydown', (e) => this.onKey(e));
     new ResizeObserver(() => this.layoutCanvas()).observe(

@@ -1,5 +1,6 @@
 import { sanitizeStyle } from '../world/style/styleValidation';
 import type { VytheraWorldStyle } from '../world/style/WorldStyle';
+import { DEFAULT_WORLD_VOXEL_SIZE, sanitizeWorldVoxelSize } from '../world/worldScale';
 
 export type TerrainType = 'balanced' | 'flat' | 'mountains' | 'islands' | 'wild';
 export type WorldTime = 'day' | 'noon' | 'sunset' | 'night';
@@ -17,6 +18,13 @@ export interface WorldSettings {
    * the style in their library.
    */
   style?: VytheraWorldStyle | null;
+  /**
+   * Physical scale this world was generated at, recorded explicitly rather
+   * than only inside the style so the world keeps its own scale even if the
+   * style is later edited. Absent on worlds created before scales existed,
+   * which are stock 1.0 worlds and must not be rescaled underneath a player.
+   */
+  worldScale?: { worldVoxelSize: number };
 }
 
 const WORLD_KEY = 'wildreach.worlds';
@@ -70,7 +78,23 @@ function normalize(settings: Partial<WorldSettings>): WorldSettings {
     time: TIMES.includes(settings.time as WorldTime) ? (settings.time as WorldTime) : 'day',
     renderDistance: Math.min(8, Math.max(3, Math.round(Number(settings.renderDistance) || 7))),
     style: settings.style ? sanitizeStyle(settings.style) : null,
+    worldScale: { worldVoxelSize: resolveWorldVoxelSize(settings) },
   };
+}
+
+/**
+ * The scale a saved world runs at.
+ *
+ * Prefers the world's own record, because that is what it was generated with.
+ * Falls back to the embedded style for worlds saved between the style gaining
+ * a scale and the world doing so, and finally to stock for everything older.
+ */
+function resolveWorldVoxelSize(settings: Partial<WorldSettings>): number {
+  const recorded = settings.worldScale?.worldVoxelSize;
+  if (recorded !== undefined) return sanitizeWorldVoxelSize(recorded);
+  const fromStyle = settings.style?.worldScale?.worldVoxelSize;
+  if (fromStyle !== undefined) return sanitizeWorldVoxelSize(fromStyle);
+  return DEFAULT_WORLD_VOXEL_SIZE;
 }
 
 export function loadWorldSettings(seed: string): WorldSettings {

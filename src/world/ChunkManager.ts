@@ -9,6 +9,7 @@ import type { WorldGen } from './WorldGen';
 import { BIOMES, type BiomeId } from './Biomes';
 import type { TerrainMaterials } from '../render/TerrainMaterials';
 import { surfaceHeightFromStep } from './terrainResolution';
+import { loadEdits, saveEdits } from './editStore';
 
 export class ChunkManager {
   private chunks = new Map<string, Chunk>();
@@ -20,6 +21,8 @@ export class ChunkManager {
   private buildQueue: Chunk[] = [];
   private genQueue: { cx: number; cz: number; dist: number }[] = [];
   renderDistance = RENDER_DISTANCE;
+  private chunkBudget = 2;
+  private pausedHidden = false;
   private generateStructures: boolean;
   private edits = new Map<string, number>();
   private fluidDirty = new Set<string>();
@@ -27,6 +30,9 @@ export class ChunkManager {
   private fluidNeighborDirty = new Set<string>();
   /** Player-placed or spread fluid cells that should simulate (not whole oceans). */
   private activeFluids = new Set<string>();
+  private persistSeed: string | null = null;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  private persistDirty = false;
 
   constructor(
     private scene: THREE.Scene,
@@ -36,12 +42,23 @@ export class ChunkManager {
   ) {
     this.generateStructures = generateStructures;
     this.landmarkGen = new LandmarkGen(world.seed);
+    this.persistSeed = world.seed;
+    const saved = loadEdits(world.seed);
+    for (const [k, v] of saved) this.edits.set(k, v);
   }
 
   setRenderDistance(r: number): void {
     this.renderDistance = Math.min(8, Math.max(3, Math.round(r)));
     this.lastCx = Number.NaN;
     this.lastCz = Number.NaN;
+  }
+
+  setChunkBudget(budget: number): void {
+    this.chunkBudget = Math.max(1, Math.min(4, Math.round(budget)));
+  }
+
+  setPausedHidden(paused: boolean): void {
+    this.pausedHidden = paused;
   }
 
   getLandmarks(): Landmark[] {
@@ -86,8 +103,33 @@ export class ChunkManager {
     return chunk.getLocal(lx, y, lz);
   }
 
+  /** True when the chunk column at this XZ has finished generation. */
+  isColumnReady(wx: number, wz: number): boolean {
+    const cx = Math.floor(Math.floor(wx) / CHUNK_SIZE);
+    const cz = Math.floor(Math.floor(wz) / CHUNK_SIZE);
+    return !!this.chunks.get(chunkKey(cx, cz))?.ready;
+  }
+
+  /**
+   * Collision probe. Unloaded columns use generated surface height so the
+   * player cannot fall through streaming voids (getBlock still returns Air).
+   */
   isSolidAt(wx: number, y: number, wz: number): boolean {
-    return isSolid(this.getBlock(Math.floor(wx), Math.floor(y), Math.floor(wz)));
+    wx = Math.floor(wx);
+    y = Math.floor(y);
+    wz = Math.floor(wz);
+    if (y < 0) return true;
+    if (y >= CHUNK_HEIGHT) return false;
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.chunks.get(chunkKey(cx, cz));
+    if (!chunk?.ready) {
+      const h = this.world.getHeight(wx, wz);
+      return y <= h;
+    }
+    const lx = wx - cx * CHUNK_SIZE;
+    const lz = wz - cz * CHUNK_SIZE;
+    return isSolid(chunk.getLocal(lx, y, lz));
   }
 
   isWaterAt(wx: number, y: number, wz: number): boolean {
@@ -199,6 +241,7 @@ export class ChunkManager {
   }
 
   updateAround(px: number, pz: number, _maxBuildsPerFrame = 2): void {
+    if (this.pausedHidden) return;
     const cx = Math.floor(px / CHUNK_SIZE);
     const cz = Math.floor(pz / CHUNK_SIZE);
 
@@ -210,13 +253,19 @@ export class ChunkManager {
 
     // Time-sliced streaming — stay under budget so movement stays smooth.
     const backlog = this.genQueue.length + this.buildQueue.length;
-    const budgetMs = backlog > 40 ? 3.5 : backlog > 15 ? 4.5 : 6;
+    const budgetMs = this.chunkBudget === 1 ? 2.5 : backlog > 40 ? 3.5 : backlog > 15 ? 4.5 : 6;
     const t0 = performance.now();
     if (this.genQueue.length > 1) this.genQueue.sort((a, b) => a.dist - b.dist);
-    this.processGenQueue(cx, cz, 1);
-    while (performance.now() - t0 < budgetMs && this.buildQueue.length > 0) {
+    this.processGenQueue(cx, cz, Math.min(1, this.chunkBudget));
+    let builds = 0;
+    while (
+      performance.now() - t0 < budgetMs &&
+      this.buildQueue.length > 0 &&
+      builds < this.chunkBudget
+    ) {
       const before = this.buildQueue.length;
       this.processBuildQueue(1);
+      builds++;
       if (this.buildQueue.length === before) break;
     }
   }
@@ -377,8 +426,9 @@ export class ChunkManager {
       chunk.fluidLevel[i] = 0;
     }
 
-    if (block !== Block.Air) this.edits.set(`${wx},${y},${wz}`, block);
-    else this.edits.delete(`${wx},${y},${wz}`);
+    // Persist Air too — otherwise mined blocks regenerate on reload.
+    this.edits.set(`${wx},${y},${wz}`, block);
+    this.schedulePersist();
     this.trackFluid(wx, y, wz, block, prev);
 
     const key = chunkKey(cx, cz);
@@ -493,6 +543,7 @@ export class ChunkManager {
     wz = Math.floor(wz);
     this.edits.set(`${wx},${y},${wz}`, block);
     this.setBlock(wx, y, wz, block);
+    this.schedulePersist();
   }
 
   loadNetworkEdits(edits: { x: number; y: number; z: number; block: number }[]): void {
@@ -500,6 +551,48 @@ export class ChunkManager {
       this.edits.set(`${e.x},${e.y},${e.z}`, e.block);
       this.setBlock(e.x, e.y, e.z, e.block);
     }
+    this.schedulePersist();
+  }
+
+  /** Flush pending edit saves immediately (world leave / dispose). */
+  flushPersist(): void {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    if (!this.persistDirty || !this.persistSeed) return;
+    this.persistDirty = false;
+    saveEdits(this.persistSeed, this.edits);
+  }
+
+  private schedulePersist(): void {
+    if (!this.persistSeed) return;
+    this.persistDirty = true;
+    if (this.persistTimer) return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.flushPersist();
+    }, 400);
+  }
+
+  dispose(): void {
+    this.flushPersist();
+    for (const chunk of this.chunks.values()) {
+      if (chunk.mesh) this.scene.remove(chunk.mesh);
+      if (chunk.cutoutMesh) this.scene.remove(chunk.cutoutMesh);
+      if (chunk.waterMesh) this.scene.remove(chunk.waterMesh);
+      if (chunk.lavaMesh) this.scene.remove(chunk.lavaMesh);
+      chunk.dispose();
+    }
+    this.chunks.clear();
+    this.buildQueue = [];
+    this.genQueue = [];
+    this.landmarks.clear();
+    this.explored.clear();
+    this.fluidDirty.clear();
+    this.fluidLightDirty.clear();
+    this.fluidNeighborDirty.clear();
+    this.activeFluids.clear();
   }
 
   private buildMesh(chunk: Chunk): void {
@@ -651,8 +744,9 @@ export class ChunkManager {
     }
 
     const key = `${wx},${y},${wz}`;
-    if (block === Block.Air) this.edits.delete(key);
-    else this.edits.set(key, block);
+    // Persist Air too — otherwise mined blocks regenerate on reload.
+    this.edits.set(key, block);
+    this.schedulePersist();
     const placedFluid = block === Block.Water || block === Block.Lava;
     this.trackFluid(wx, y, wz, block, prev, placedFluid);
 

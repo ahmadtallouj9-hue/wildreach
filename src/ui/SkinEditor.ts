@@ -1,4 +1,4 @@
-﻿import {
+import {
   FACE_LABELS,
   OUTFIT_PARTS,
   PART_LABELS,
@@ -32,15 +32,16 @@ export type BaseColorField =
   | 'shoes'
   | 'hairStyle'
   | 'all';
-export type SkinEditMode = '2d' | '3d';
+export type SkinEditMode = 'split' | '2d' | '3d';
 
 const EDIT_MODE_KEY = 'wildreach.skinEditMode';
 
 function loadEditMode(): SkinEditMode {
   try {
-    return localStorage.getItem(EDIT_MODE_KEY) === '2d' ? '2d' : '3d';
+    const saved = localStorage.getItem(EDIT_MODE_KEY);
+    return saved === '2d' || saved === '3d' || saved === 'split' ? saved : 'split';
   } catch {
-    return '3d';
+    return 'split';
   }
 }
 
@@ -74,7 +75,7 @@ export interface SkinEditorOpts {
   onChange: (pixels: Uint8ClampedArray, dataUrl: string) => void;
 }
 
-const PARTS: SkinPart[] = ['head', 'body', 'armR', 'armL', 'legR', 'legL', 'hat'];
+const PARTS: SkinPart[] = ['head', 'hat', 'body', 'armR', 'armL', 'legR', 'legL'];
 const FACES: SkinFace[] = ['front', 'back', 'left', 'right', 'top', 'bottom'];
 
 export class SkinEditor {
@@ -90,8 +91,8 @@ export class SkinEditor {
   private lineStart: { x: number; y: number } | null = null;
   private readonly undoStack: Uint8ClampedArray[] = [];
   private readonly redoStack: Uint8ClampedArray[] = [];
-  private readonly recentColors: string[] = [];
-  private scale = 18;
+  private readonly recentColors: string[] = ['#1a1a1a', '#e0c068', '#f3eee2', '#5f9e78', '#a84438'];
+  private scale = 36;
   private readonly paint: HTMLCanvasElement;
   private readonly atlas: HTMLCanvasElement;
   private readonly onChange: SkinEditorOpts['onChange'];
@@ -111,8 +112,9 @@ export class SkinEditor {
   private avatarProfile: Profile;
   private editMode: SkinEditMode = loadEditMode();
   private paint3d: SkinPaint3D | null = null;
-  private readonly paint2dWrap: HTMLElement;
   private readonly paint3dMount: HTMLElement;
+  private readonly coordLabel: HTMLElement;
+  private hoverCell: { x: number; y: number } | null = null;
 
   constructor(opts: SkinEditorOpts) {
     this.onChange = opts.onChange;
@@ -152,76 +154,144 @@ export class SkinEditor {
     this.pixels = createDefaultSkin(opts.skin, opts.outfit, opts.accent, this.base);
 
     this.root = document.createElement('div');
-    this.root.className = 'skin-editor';
+    this.root.className = 'skin-editor vy-panel';
     this.root.innerHTML = `
+      <!-- Top header bar -->
       <div class="skin-editor-head">
-        <div class="seg skin-edit-mode" role="group" aria-label="Editor mode">
-          <button type="button" class="seg-btn" data-edit-mode="2d">2D grid</button>
-          <button type="button" class="seg-btn" data-edit-mode="3d">3D model</button>
+        <div class="vy-seg skin-edit-mode" role="group" aria-label="Editor view">
+          <button type="button" class="vy-seg__btn" data-edit-mode="split">Split view</button>
+          <button type="button" class="vy-seg__btn" data-edit-mode="2d">2D grid</button>
+          <button type="button" class="vy-seg__btn" data-edit-mode="3d">3D model</button>
+        </div>
+        <div class="skin-actions-top vy-actions">
+          <button type="button" class="vy-btn vy-btn--ghost" data-act="undo" title="Undo (Ctrl+Z)">Undo</button>
+          <button type="button" class="vy-btn vy-btn--ghost" data-act="redo" title="Redo (Ctrl+Y)">Redo</button>
+          <button type="button" class="vy-btn vy-btn--ghost" data-act="reset" title="Reset to base colors">Reset</button>
+          <button type="button" class="vy-btn vy-btn--ghost" data-act="clear" title="Clear current face">Clear face</button>
+          <label class="vy-file-pill skin-import skin-upload-btn">
+            <span class="vy-file-pill__btn">Upload PNG</span>
+            <input type="file" accept="image/png" hidden />
+            <span class="vy-file-pill__name" hidden></span>
+            <button type="button" class="vy-file-pill__clear" hidden title="Clear file" aria-label="Clear file">✕</button>
+          </label>
+          <button type="button" class="vy-btn vy-btn--primary" data-act="export" title="Export skin PNG">Export</button>
         </div>
       </div>
-      <p class="skin-editor-hint">64×64 · paint on the grid or directly on the 3D player</p>
-      <div class="skin-toolbar">
-        <div class="seg skin-parts" role="group" aria-label="Body part"></div>
-        <div class="seg skin-faces" role="group" aria-label="Face"></div>
-      </div>
-      <div class="skin-tools-row">
-        <div class="skin-tools seg" role="group" aria-label="Tool">
-          <button type="button" class="seg-btn" data-tool="pen">Pen</button>
-          <button type="button" class="seg-btn" data-tool="eraser">Erase</button>
-          <button type="button" class="seg-btn" data-tool="fill">Fill</button>
-          <button type="button" class="seg-btn" data-tool="line">Line</button>
-          <button type="button" class="seg-btn" data-tool="replace">Replace</button>
-          <button type="button" class="seg-btn" data-tool="eyedrop">Pick</button>
-        </div>
-        <input type="color" class="skin-color" value="#1a1a1a" aria-label="Paint color" />
-        <div class="seg skin-brush" role="group" aria-label="Brush size">
-          <button type="button" class="seg-btn" data-brush="1">1×</button>
-          <button type="button" class="seg-btn" data-brush="2">2×</button>
-          <button type="button" class="seg-btn" data-brush="3">3×</button>
-          <button type="button" class="seg-btn" data-brush="4">4×</button>
-          <button type="button" class="seg-btn" data-brush="5">5×</button>
-        </div>
-        <button type="button" class="seg-btn skin-mirror-btn" data-act="toggle-mirror" title="Mirror paint across X">Mirror</button>
-      </div>
-      <div class="skin-history-row">
-        <button type="button" class="menu-btn quiet" data-act="undo" title="Undo">Undo</button>
-        <button type="button" class="menu-btn quiet" data-act="redo" title="Redo">Redo</button>
-        <button type="button" class="menu-btn quiet" data-act="mirror-face" title="Flip current face horizontally">Flip face</button>
-        <button type="button" class="menu-btn quiet" data-act="copy-limbs" title="Copy right limbs to left">Mirror limbs</button>
-        <div class="skin-recent" role="group" aria-label="Recent colors"></div>
-      </div>
-      <div class="skin-palette" role="group" aria-label="Colors"></div>
-      <div class="skin-paint-3d-mount" hidden></div>
-      <div class="skin-workspace">
-        <div class="skin-paint-wrap skin-paint-2d">
-          <div class="skin-paint-label">Head · Front</div>
-          <canvas class="skin-paint" width="8" height="8"></canvas>
-        </div>
-        <div class="skin-side">
-          <canvas class="skin-atlas" width="64" height="64" title="Full skin"></canvas>
-          <div class="skin-actions">
-            <button type="button" class="menu-btn quiet" data-act="reset">Reset</button>
-            <button type="button" class="menu-btn quiet" data-act="clear">Clear face</button>
-            <label class="menu-btn quiet skin-import skin-upload-btn">Upload skin<input type="file" accept="image/png" hidden /></label>
-            <button type="button" class="menu-btn quiet" data-act="export">Export PNG</button>
+
+      <!-- Main 3-column body -->
+      <div class="skin-editor-body">
+        <!-- LEFT: Part tabs + Tools + Brush & Symmetry + Color strip -->
+        <aside class="skin-editor-sidebar">
+          <!-- Body parts -->
+          <div class="skin-sidebar-section">
+            <label class="skin-section-label">Body Part</label>
+            <div class="skin-parts vy-seg" role="group" aria-label="Body part"></div>
           </div>
-        </div>
+
+          <!-- Face orientation -->
+          <div class="skin-sidebar-section">
+            <label class="skin-section-label">Face orientation</label>
+            <div class="skin-faces vy-seg" role="group" aria-label="Face"></div>
+          </div>
+
+          <!-- Tools -->
+          <div class="skin-sidebar-section">
+            <label class="skin-section-label">Tools</label>
+            <div class="skin-tools vy-seg" role="group" aria-label="Paint tool">
+              <button type="button" class="vy-seg__btn is-active" data-tool="pen" title="Pen (P)">Pen</button>
+              <button type="button" class="vy-seg__btn" data-tool="eraser" title="Eraser (E)">Erase</button>
+              <button type="button" class="vy-seg__btn" data-tool="fill" title="Fill (F)">Fill</button>
+              <button type="button" class="vy-seg__btn" data-tool="line" title="Line (L)">Line</button>
+              <button type="button" class="vy-seg__btn" data-tool="replace" title="Replace Color (R)">Replace</button>
+              <button type="button" class="vy-seg__btn" data-tool="eyedrop" title="Pick Color (I)">Pick</button>
+            </div>
+          </div>
+
+          <!-- Brush size, mirror, undo/redo row -->
+          <div class="skin-sidebar-section">
+            <label class="skin-section-label">Brush & Symmetry</label>
+            <div class="skin-compact-row">
+              <div class="skin-brush vy-seg" role="group" aria-label="Brush size">
+                <button type="button" class="vy-seg__btn is-active" data-brush="1" title="1px brush">1×</button>
+                <button type="button" class="vy-seg__btn" data-brush="2" title="2px brush">2×</button>
+                <button type="button" class="vy-seg__btn" data-brush="3" title="3px brush">3×</button>
+                <button type="button" class="vy-seg__btn" data-brush="4" title="4px brush">4×</button>
+              </div>
+              <button type="button" class="vy-seg__btn skin-mirror-btn" data-act="toggle-mirror" title="Mirror paint across horizontal center">Mirror X</button>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button type="button" class="vy-seg__btn" data-act="mirror-face" title="Flip face horizontally" style="font-size:0.64rem;flex:1">Flip face</button>
+              <button type="button" class="vy-seg__btn" data-act="copy-limbs" title="Copy right limbs to left" style="font-size:0.64rem;flex:1">Mirror limbs</button>
+            </div>
+          </div>
+
+          <!-- Color strip & Palette -->
+          <div class="skin-sidebar-section">
+            <label class="skin-section-label">Color</label>
+            <div class="skin-color-strip">
+              <div class="skin-color-input-wrap">
+                <input type="color" class="skin-color" value="#1a1a1a" aria-label="Paint color" />
+                <span class="skin-color-hex">#1A1A1A</span>
+              </div>
+              <div class="skin-recent" role="group" aria-label="Recent colors"></div>
+            </div>
+            <div class="skin-palette" role="group" aria-label="Palette presets"></div>
+          </div>
+        </aside>
+
+        <!-- CENTER: 64x64 Grid & Canvas -->
+        <main class="skin-editor-center">
+          <div class="skin-canvas-card">
+            <div class="skin-canvas-header">
+              <span class="skin-paint-label vy-chip">Head · Front</span>
+              <span class="skin-coord-label" style="font-size:0.72rem;font-family:var(--vy-font-mono);color:var(--vy-muted)">UV [8, 8, 8, 8]</span>
+            </div>
+            <div class="skin-paint-container">
+              <canvas class="skin-paint" width="288" height="288"></canvas>
+            </div>
+            <div class="skin-canvas-footer">
+              <div class="skin-atlas-preview">
+                <canvas class="skin-atlas" width="64" height="64" title="64×64 Texture Map (click any face to jump)"></canvas>
+                <div class="skin-atlas-meta">
+                  <span style="font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:#f3eee2;font-weight:600">64×64 Skin Atlas</span>
+                  <span style="font-size:0.65rem;color:var(--vy-muted)">Click any region to select face</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- RIGHT: 3D Preview -->
+        <aside class="skin-editor-right">
+          <div class="skin-3d-card">
+            <div class="skin-3d-header">
+              <span class="vy-chip"><span class="vy-dot"></span>Live 3D Model</span>
+              <button type="button" class="skin-paint-3d-reset vy-btn vy-btn--ghost" style="padding:0.25rem 0.6rem;min-height:28px;font-size:0.7rem" title="Reset camera view">Reset view</button>
+            </div>
+            <div class="skin-paint-3d-mount"></div>
+            <p class="skin-3d-footer-hint" style="margin:8px 0 0;font-size:0.65rem;color:var(--vy-muted);text-align:center">
+              Left-drag to paint · Right-drag to orbit · Scroll to zoom
+            </p>
+          </div>
+        </aside>
       </div>
     `;
 
     this.paint = this.root.querySelector('.skin-paint')!;
     this.atlas = this.root.querySelector('.skin-atlas')!;
-    this.paint2dWrap = this.root.querySelector('.skin-paint-2d')!;
     this.paint3dMount = this.root.querySelector('.skin-paint-3d-mount')!;
+    this.coordLabel = this.root.querySelector('.skin-coord-label')!;
 
     this.fillParts();
     this.fillFaces();
     this.fillPalette();
+    this.fillRecent();
     this.bindTools();
     this.bindEditMode();
     this.bindPaint();
+    this.bindAtlasClick();
     this.bindActions();
+    this.bindShortcuts();
     this.syncSeg();
     this.setEditMode(this.editMode, false);
 
@@ -386,11 +456,11 @@ export class SkinEditor {
   }
 
   setActive(active: boolean): void {
-    if (this.editMode !== '3d') return;
     if (active) {
       requestAnimationFrame(() => {
         this.paint3d?.layout();
         this.paint3d?.start();
+        this.redraw();
       });
     } else {
       this.paint3d?.stop();
@@ -405,8 +475,7 @@ export class SkinEditor {
         this.face = face;
         this.syncSeg();
         this.redrawAtlas();
-        const label = this.root.querySelector('.skin-paint-label');
-        if (label) label.textContent = `${PART_LABELS[part]} · ${FACE_LABELS[face]}`;
+        this.redrawPaint();
       },
       onStroke: (part, face, ax, ay) => {
         this.part = part;
@@ -431,23 +500,24 @@ export class SkinEditor {
   private setEditMode(mode: SkinEditMode, save = true): void {
     this.editMode = mode;
     if (save) saveEditMode(mode);
-    const is3d = mode === '3d';
-    this.root.classList.toggle('mode-3d', is3d);
-    this.paint2dWrap.hidden = is3d;
-    this.paint3dMount.hidden = !is3d;
+
+    this.root.classList.remove('mode-split', 'mode-2d', 'mode-3d');
+    this.root.classList.add(`mode-${mode}`);
+
     this.root.querySelectorAll<HTMLButtonElement>('[data-edit-mode]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.editMode === mode);
+      btn.classList.toggle('is-active', btn.dataset.editMode === mode);
     });
-    if (is3d) {
-      const p3 = this.ensurePaint3d();
+
+    const p3 = this.ensurePaint3d();
+    if (mode !== '2d') {
       requestAnimationFrame(() => {
         p3?.layout();
         p3?.start();
       });
     } else {
-      this.paint3d?.stop();
-      this.redrawPaint();
+      p3?.stop();
     }
+    this.redraw();
   }
 
   private pushHistory(): void {
@@ -479,7 +549,7 @@ export class SkinEditor {
     const i = this.recentColors.indexOf(c);
     if (i >= 0) this.recentColors.splice(i, 1);
     this.recentColors.unshift(c);
-    if (this.recentColors.length > 8) this.recentColors.pop();
+    if (this.recentColors.length > 7) this.recentColors.pop();
     this.fillRecent();
   }
 
@@ -494,12 +564,19 @@ export class SkinEditor {
       .join('');
     el.querySelectorAll<HTMLButtonElement>('.skin-swatch').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.color = btn.dataset.c!;
-        this.root.querySelector<HTMLInputElement>('.skin-color')!.value = this.color;
-        if (this.tool === 'eraser' || this.tool === 'eyedrop') this.tool = 'pen';
-        this.syncSeg();
+        this.setColor(btn.dataset.c!);
       });
     });
+  }
+
+  private setColor(c: string): void {
+    this.color = c.slice(0, 7);
+    const input = this.root.querySelector<HTMLInputElement>('.skin-color');
+    const hex = this.root.querySelector('.skin-color-hex');
+    if (input) input.value = this.color;
+    if (hex) hex.textContent = this.color.toUpperCase();
+    if (this.tool === 'eraser' || this.tool === 'eyedrop') this.tool = 'pen';
+    this.syncSeg();
   }
 
   private mirrorPoint(ax: number, ay: number): { x: number; y: number } | null {
@@ -516,7 +593,7 @@ export class SkinEditor {
       for (let dx = -half; dx < this.brushSize - half; dx++) {
         this.paintPixel(ax + dx, ay + dy, false);
         if (this.mirrorX) {
-          const m = this.mirrorPoint(ax + dx, ay + dy);
+          const m = this.mirrorPoint(ax + dx, dy + ay);
           if (m) this.paintPixel(m.x, m.y, false);
         }
       }
@@ -627,11 +704,12 @@ export class SkinEditor {
 
     if (this.tool === 'eyedrop') {
       const [r, g, b, a] = getPixel(this.pixels, ax, ay);
-      if (a < 8) this.tool = 'eraser';
-      else {
-        this.color = `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-        this.root.querySelector<HTMLInputElement>('.skin-color')!.value = this.color;
-        this.rememberColor(this.color);
+      if (a < 8) {
+        this.tool = 'eraser';
+      } else {
+        const hex = `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+        this.setColor(hex);
+        this.rememberColor(hex);
         this.tool = 'pen';
       }
       this.syncSeg();
@@ -661,7 +739,7 @@ export class SkinEditor {
   private fillParts(): void {
     const row = this.root.querySelector('.skin-parts')!;
     row.innerHTML = PARTS.map(
-      (p) => `<button type="button" class="seg-btn" data-part="${p}">${PART_LABELS[p]}</button>`,
+      (p) => `<button type="button" class="vy-seg__btn" data-part="${p}">${PART_LABELS[p]}</button>`,
     ).join('');
     row.querySelectorAll<HTMLButtonElement>('[data-part]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -676,7 +754,7 @@ export class SkinEditor {
   private fillFaces(): void {
     const row = this.root.querySelector('.skin-faces')!;
     row.innerHTML = FACES.map(
-      (f) => `<button type="button" class="seg-btn" data-face="${f}">${FACE_LABELS[f]}</button>`,
+      (f) => `<button type="button" class="vy-seg__btn" data-face="${f}">${FACE_LABELS[f]}</button>`,
     ).join('');
     row.querySelectorAll<HTMLButtonElement>('[data-face]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -692,19 +770,17 @@ export class SkinEditor {
     const pal = this.root.querySelector('.skin-palette')!;
     pal.innerHTML = SKIN_PALETTE.map((c) => {
       const clear = c === '#00000000';
-      return `<button type="button" class="skin-swatch${clear ? ' erase' : ''}" data-c="${c}" style="background-color:${clear ? 'transparent' : c}" title="${clear ? 'Transparent' : c}"></button>`;
+      return `<button type="button" class="skin-swatch${clear ? ' erase' : ''}" data-c="${c}" style="background-color:${clear ? 'transparent' : c}" title="${clear ? 'Transparent eraser' : c}"></button>`;
     }).join('');
     pal.querySelectorAll<HTMLButtonElement>('.skin-swatch').forEach((btn) => {
       btn.addEventListener('click', () => {
         const c = btn.dataset.c!;
         if (c === '#00000000') {
           this.tool = 'eraser';
+          this.syncSeg();
         } else {
-          this.color = c.slice(0, 7);
-          this.root.querySelector<HTMLInputElement>('.skin-color')!.value = this.color;
-          if (this.tool === 'eraser' || this.tool === 'eyedrop') this.tool = 'pen';
+          this.setColor(c);
         }
-        this.syncSeg();
       });
     });
   }
@@ -717,9 +793,7 @@ export class SkinEditor {
       });
     });
     this.root.querySelector<HTMLInputElement>('.skin-color')!.addEventListener('input', (e) => {
-      this.color = (e.target as HTMLInputElement).value;
-      if (this.tool === 'eraser') this.tool = 'pen';
-      this.syncSeg();
+      this.setColor((e.target as HTMLInputElement).value);
     });
     this.root.querySelectorAll<HTMLButtonElement>('[data-brush]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -735,15 +809,21 @@ export class SkinEditor {
       const uv = PART_UV[this.part][this.face];
       const lx = Math.floor(((e.clientX - box.left) / Math.max(1, box.width)) * uv.w);
       const ly = Math.floor(((e.clientY - box.top) / Math.max(1, box.height)) * uv.h);
+      const cx = Math.max(0, Math.min(uv.w - 1, lx));
+      const cy = Math.max(0, Math.min(uv.h - 1, ly));
       return {
-        x: uv.x + Math.max(0, Math.min(uv.w - 1, lx)),
-        y: uv.y + Math.max(0, Math.min(uv.h - 1, ly)),
+        lx: cx,
+        ly: cy,
+        x: uv.x + cx,
+        y: uv.y + cy,
       };
     };
 
     const stroke = (e: PointerEvent) => {
-      const { x, y } = cellAt(e);
-      this.applyStrokeAt(x, y);
+      const cell = cellAt(e);
+      this.hoverCell = { x: cell.lx, y: cell.ly };
+      this.coordLabel.textContent = `UV [${cell.x}, ${cell.y}] · Pixel (${cell.lx + 1}, ${cell.ly + 1})`;
+      this.applyStrokeAt(cell.x, cell.y);
     };
 
     this.paint.addEventListener('pointerdown', (e) => {
@@ -753,17 +833,55 @@ export class SkinEditor {
       if (this.tool !== 'eyedrop') this.pushHistory();
       stroke(e);
     });
+
     this.paint.addEventListener('pointermove', (e) => {
-      if (!this.painting) return;
+      const cell = cellAt(e);
+      this.hoverCell = { x: cell.lx, y: cell.ly };
+      this.coordLabel.textContent = `UV [${cell.x}, ${cell.y}] · Pixel (${cell.lx + 1}, ${cell.ly + 1})`;
+      if (!this.painting) {
+        this.redrawPaint();
+        return;
+      }
       if (this.tool === 'fill' || this.tool === 'eyedrop' || this.tool === 'line' || this.tool === 'replace')
         return;
       stroke(e);
     });
+
+    this.paint.addEventListener('pointerleave', () => {
+      this.hoverCell = null;
+      const uv = PART_UV[this.part][this.face];
+      this.coordLabel.textContent = `UV [${uv.x}, ${uv.y}, ${uv.w}, ${uv.h}]`;
+      this.redrawPaint();
+    });
+
     const stop = () => {
       this.painting = false;
+      this.hoverCell = null;
+      this.redrawPaint();
     };
     this.paint.addEventListener('pointerup', stop);
     this.paint.addEventListener('pointercancel', stop);
+  }
+
+  private bindAtlasClick(): void {
+    this.atlas.addEventListener('click', (e) => {
+      const box = this.atlas.getBoundingClientRect();
+      const x = Math.floor(((e.clientX - box.left) / Math.max(1, box.width)) * SKIN_SIZE);
+      const y = Math.floor(((e.clientY - box.top) / Math.max(1, box.height)) * SKIN_SIZE);
+      for (const part of PARTS) {
+        for (const face of FACES) {
+          const rect = PART_UV[part][face];
+          if (x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h) {
+            this.part = part;
+            this.face = face;
+            this.syncSeg();
+            this.redrawPaint();
+            this.redrawAtlas();
+            return;
+          }
+        }
+      }
+    });
   }
 
   private bindActions(): void {
@@ -776,8 +894,10 @@ export class SkinEditor {
       this.syncSeg();
     });
     this.root.querySelector('[data-act="reset"]')!.addEventListener('click', () => {
-      this.pushHistory();
-      this.setBaseColors(this.base.skin, this.base.outfit, this.base.accent, 'all', this.base);
+      if (confirm('Reset skin pixels to base cosmetic colors?')) {
+        this.pushHistory();
+        this.setBaseColors(this.base.skin, this.base.outfit, this.base.accent, 'all', this.base);
+      }
     });
     this.root.querySelector('[data-act="clear"]')!.addEventListener('click', () => {
       this.pushHistory();
@@ -795,17 +915,67 @@ export class SkinEditor {
     this.root.querySelector('[data-act="export"]')!.addEventListener('click', () => {
       const a = document.createElement('a');
       a.href = encodeSkin(this.pixels);
-      a.download = 'wildreach-skin.png';
+      a.download = `${(this.avatarProfile.name || 'wanderer').toLowerCase().replace(/\s+/g, '_')}_skin.png`;
       a.click();
     });
     const input = this.root.querySelector<HTMLInputElement>('.skin-import input')!;
+    const nameEl = this.root.querySelector<HTMLElement>('.skin-import .vy-file-pill__name');
+    const clearBtn = this.root.querySelector<HTMLButtonElement>('.skin-import .vy-file-pill__clear');
+
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      if (!file) return;
+      if (!file) {
+        if (nameEl) { nameEl.textContent = ''; nameEl.hidden = true; }
+        if (clearBtn) clearBtn.hidden = true;
+        return;
+      }
+      if (nameEl) {
+        nameEl.textContent = file.name;
+        nameEl.hidden = false;
+      }
+      if (clearBtn) clearBtn.hidden = false;
       void importSkinFromFile(file)
         .then((result) => this.applyImportedSkin(result))
         .catch(() => undefined);
+    });
+
+    clearBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       input.value = '';
+      if (nameEl) { nameEl.textContent = ''; nameEl.hidden = true; }
+      clearBtn.hidden = true;
+    });
+  }
+
+  private bindShortcuts(): void {
+    window.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (!this.root.isConnected || this.root.offsetParent === null) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) this.redo();
+        else this.undo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        this.redo();
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === 'p') { this.tool = 'pen'; this.syncSeg(); }
+      else if (key === 'e') { this.tool = 'eraser'; this.syncSeg(); }
+      else if (key === 'f') { this.tool = 'fill'; this.syncSeg(); }
+      else if (key === 'l') { this.tool = 'line'; this.syncSeg(); }
+      else if (key === 'r') { this.tool = 'replace'; this.syncSeg(); }
+      else if (key === 'i') { this.tool = 'eyedrop'; this.syncSeg(); }
+      else if (key === 'm') { this.mirrorX = !this.mirrorX; this.syncSeg(); }
+      else if (['1', '2', '3', '4'].includes(key)) {
+        this.brushSize = parseInt(key, 10);
+        this.syncSeg();
+      }
     });
   }
 
@@ -847,23 +1017,25 @@ export class SkinEditor {
 
   private syncSeg(): void {
     this.root.querySelectorAll<HTMLButtonElement>('[data-part]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.part === this.part);
+      btn.classList.toggle('is-active', btn.dataset.part === this.part);
     });
     this.root.querySelectorAll<HTMLButtonElement>('[data-face]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.face === this.face);
+      btn.classList.toggle('is-active', btn.dataset.face === this.face);
     });
     this.root.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.tool === this.tool);
+      btn.classList.toggle('is-active', btn.dataset.tool === this.tool);
     });
     this.root.querySelectorAll<HTMLButtonElement>('[data-brush]').forEach((btn) => {
-      btn.classList.toggle('active', Number(btn.dataset.brush) === this.brushSize);
+      btn.classList.toggle('is-active', Number(btn.dataset.brush) === this.brushSize);
     });
-    this.root.querySelector('[data-act="toggle-mirror"]')?.classList.toggle('active', this.mirrorX);
+    this.root.querySelector('[data-act="toggle-mirror"]')?.classList.toggle('is-active', this.mirrorX);
     const pick = this.color.toLowerCase();
     this.root.querySelectorAll<HTMLButtonElement>('.skin-swatch').forEach((btn) => {
       const c = btn.dataset.c!;
-      btn.classList.toggle('active', !c.endsWith('00') && c.slice(0, 7).toLowerCase() === pick);
+      btn.classList.toggle('is-active', !c.endsWith('00') && c.slice(0, 7).toLowerCase() === pick);
     });
+    const hex = this.root.querySelector('.skin-color-hex');
+    if (hex) hex.textContent = this.color.toUpperCase();
   }
 
   private redraw(): void {
@@ -874,39 +1046,45 @@ export class SkinEditor {
 
   private redrawPaint(): void {
     const rect = PART_UV[this.part][this.face];
-    this.scale = rect.w <= 4 ? 32 : 24;
+    this.scale = rect.w <= 4 ? 36 : 32;
     const px = this.scale;
     this.paint.width = rect.w * px;
     this.paint.height = rect.h * px;
-    this.paint.style.width = `${this.paint.width}px`;
-    this.paint.style.height = `${this.paint.height}px`;
+    this.paint.style.maxWidth = `${this.paint.width}px`;
+    this.paint.style.maxHeight = `${this.paint.height}px`;
 
     const label = this.root.querySelector('.skin-paint-label');
-    if (label) label.textContent = `${PART_LABELS[this.part]} · ${FACE_LABELS[this.face]}`;
+    if (label) {
+      label.textContent = `${PART_LABELS[this.part]} · ${FACE_LABELS[this.face]} [${rect.w}×${rect.h}]`;
+    }
+    if (!this.hoverCell) {
+      this.coordLabel.textContent = `UV [${rect.x}, ${rect.y}, ${rect.w}, ${rect.h}]`;
+    }
 
     const ctx = this.paint.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
 
+    // 1. Crisp checkerboard for transparent / backdrop pixels
     for (let y = 0; y < rect.h; y++) {
       for (let x = 0; x < rect.w; x++) {
-        ctx.fillStyle = (x + y) % 2 === 0 ? '#5a6e6a' : '#3e4f4b';
+        ctx.fillStyle = (x + y) % 2 === 0 ? '#101c22' : '#16262e';
         ctx.fillRect(x * px, y * px, px, px);
       }
     }
 
-    let painted = 0;
+    // 2. Painted skin pixels
     for (let y = 0; y < rect.h; y++) {
       for (let x = 0; x < rect.w; x++) {
         const [r, g, b, a] = getPixel(this.pixels, rect.x + x, rect.y + y);
         if (a > 0) {
-          painted++;
           ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
           ctx.fillRect(x * px, y * px, px, px);
         }
       }
     }
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    // 3. Grid line overlay
+    ctx.strokeStyle = 'rgba(201, 162, 39, 0.22)';
     ctx.lineWidth = 1;
     for (let x = 0; x <= rect.w; x++) {
       ctx.beginPath();
@@ -921,14 +1099,32 @@ export class SkinEditor {
       ctx.stroke();
     }
 
-    if (painted === 0) {
-      ctx.fillStyle = 'rgba(10, 18, 16, 0.55)';
-      ctx.fillRect(0, 0, this.paint.width, this.paint.height);
-      ctx.fillStyle = '#d7efe6';
-      ctx.font = '600 12px IBM Plex Sans, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Empty — paint here', this.paint.width / 2, this.paint.height / 2);
+    // 4. Center symmetry guide if mirrorX is enabled
+    if (this.mirrorX) {
+      const mid = (rect.w / 2) * px;
+      ctx.strokeStyle = 'rgba(224, 192, 104, 0.65)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(mid, 0);
+      ctx.lineTo(mid, rect.h * px);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // 5. Hover cell indicator
+    if (this.hoverCell && this.hoverCell.x < rect.w && this.hoverCell.y < rect.h) {
+      const hx = this.hoverCell.x * px;
+      const hy = this.hoverCell.y * px;
+      ctx.strokeStyle = '#f0d789';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(hx + 1, hy + 1, px - 2, px - 2);
+
+      if (this.mirrorX) {
+        const mx = (rect.w - 1 - this.hoverCell.x) * px;
+        ctx.strokeStyle = 'rgba(240, 215, 137, 0.6)';
+        ctx.strokeRect(mx + 1, hy + 1, px - 2, px - 2);
+      }
     }
   }
 
@@ -940,7 +1136,7 @@ export class SkinEditor {
     img.data.set(this.pixels);
     ctx.putImageData(img, 0, 0);
     const rect = PART_UV[this.part][this.face];
-    ctx.strokeStyle = '#5ec4b0';
+    ctx.strokeStyle = '#e0c068';
     ctx.lineWidth = 1;
     ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
   }

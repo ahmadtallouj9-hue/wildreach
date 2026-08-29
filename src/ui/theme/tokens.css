@@ -6,23 +6,25 @@
 :root {
   --vy-void: #030507;
   --vy-bg: #070a0e;
-  --vy-surface: #0c1016;
-  --vy-surface-2: #121820;
-  --vy-surface-3: #1a222c;
-  --vy-ink: #e8ebe4;
-  --vy-ink-dim: #a8b0a6;
-  --vy-muted: #6e7a72;
-  --vy-faint: #3d4650;
+  --vy-surface: rgba(10, 22, 26, 0.55);
+  --vy-surface-2: rgba(8, 18, 22, 0.72);
+  --vy-surface-3: rgba(14, 26, 32, 0.85);
+  --vy-ink: #f3eee2;
+  --vy-ink-dim: #d8dfd6;
+  --vy-muted: #a4b3a8;
+  --vy-faint: #6c7c72;
 
-  --vy-line: rgba(210, 220, 200, 0.1);
-  --vy-line-strong: rgba(220, 228, 210, 0.22);
+  --vy-line: rgba(201, 162, 39, 0.32);
+  --vy-line-strong: rgba(201, 162, 39, 0.55);
   --vy-gold: #c9a227;
-  --vy-gold-dim: rgba(201, 162, 39, 0.14);
-  --vy-gold-glow: rgba(201, 162, 39, 0.32);
+  --vy-gold-bright: #e0c068;
+  --vy-gold-dark: #a88414;
+  --vy-gold-dim: rgba(201, 162, 39, 0.16);
+  --vy-gold-glow: rgba(201, 162, 39, 0.35);
   --vy-moss: #5f9e78;
-  --vy-moss-dim: rgba(95, 158, 120, 0.16);
+  --vy-moss-dim: rgba(95, 158, 120, 0.2);
   --vy-teal: #4eb8a8;
-  --vy-teal-dim: rgba(78, 184, 168, 0.14);
+  --vy-teal-dim: rgba(78, 184, 168, 0.18);
   --vy-ok: #6bb56f;
   --vy-warn: #c9923a;
   --vy-err: #c45d5d;
@@ -30,7 +32,7 @@
 
   --vy-font-brand: 'Cinzel Decorative', Cinzel, Georgia, serif;
   --vy-font-display: 'Cinzel', Georgia, serif;
-  --vy-font-ui: 'Outfit', system-ui, sans-serif;
+  --vy-font-ui: 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --vy-font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
 
   --vy-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -44,14 +46,18 @@
   --vy-space-4: 16px;
   --vy-space-5: 24px;
   --vy-space-6: 32px;
-  --vy-radius: 3px;
-  --vy-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --vy-radius-sm: 8px;
+  --vy-radius: 14px;
+  --vy-radius-lg: 16px;
+  --vy-radius-pill: 999px;
+  --vy-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --vy-shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.6);
   --vy-safe-t: max(12px, env(safe-area-inset-top));
   --vy-safe-b: max(12px, env(safe-area-inset-bottom));
   --vy-safe-l: max(12px, env(safe-area-inset-left));
   --vy-safe-r: max(12px, env(safe-area-inset-right));
 
-  /* legacy aliases so residual selectors don't break mid-migration */
+  /* legacy aliases */
   --bg: var(--vy-bg);
   --ink: var(--vy-ink);
   --muted: var(--vy-muted);
@@ -102,6 +108,7 @@ body,
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+  overscroll-behavior: none;
 }
 
 .game-canvas--title-covered {

@@ -6,7 +6,15 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { ATLAS_GRID, ATLAS_PX, TILE, Tex, flattenTiles, faceTexture } from './TextureAtlas';
+import {
+  ATLAS_GRID,
+  ATLAS_PX,
+  TILE,
+  Tex,
+  flattenTiles,
+  faceTexture,
+  GOODVIBES_TEXTURE_MAP,
+} from './TextureAtlas';
 import {
   LEAF_COLOR,
   MATERIAL,
@@ -224,4 +232,16 @@ test('grass faces resolve to tiles the flat palette actually defines', () => {
   assert.equal(faceTexture(Block.Grass, 0), Tex.GrassTop);
   assert.equal(faceTexture(Block.Grass, 2), Tex.GrassSide);
   assert.equal(faceTexture(Block.Grass, 1), Tex.Dirt);
+});
+
+test('GoodVibes mapping covers all terrain and block face textures', () => {
+  const allTexTiles = Object.values(Tex) as number[];
+  for (const tile of allTexTiles) {
+    const mapped = GOODVIBES_TEXTURE_MAP[tile];
+    assert.ok(mapped, `tile ${tile} is missing GoodVibes mapping`);
+    assert.ok(
+      mapped.startsWith('/textures/goodvibes/block/'),
+      `tile ${tile} mapped to invalid path: ${mapped}`,
+    );
+  }
 });

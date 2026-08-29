@@ -80,7 +80,7 @@ function ensureGame(seed: string): Game {
 
 menu.on((action) => {
   if (action.type === 'prefs') {
-    game?.applyPrefs(action.profile, action.settings, action.skinPixels);
+    game?.applyPrefs(action.profile, action.settings, action.skinPixels, action.gfxPrefs);
     social.updateProfile(action.profile);
     return;
   }

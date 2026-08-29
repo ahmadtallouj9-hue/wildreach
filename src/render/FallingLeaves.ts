@@ -69,6 +69,7 @@ export class FallingLeaves {
   private readonly leafTex: THREE.CanvasTexture;
   private spawnAcc = 0;
   private time = 0;
+  private enabled = true;
 
   constructor(
     scene: THREE.Scene,
@@ -101,7 +102,13 @@ export class FallingLeaves {
     this.mesh.instanceMatrix.needsUpdate = true;
   }
 
+  setEnabled(on: boolean): void {
+    this.enabled = on;
+    this.mesh.visible = on;
+  }
+
   update(dt: number, origin: THREE.Vector3): void {
+    if (!this.enabled) return;
     this.time += dt;
     this.spawnAcc += dt;
     const want = 0.055;
