@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using VYTHERA.Core.Timing;
 using VYTHERA.Player.Collision;
 using VYTHERA.Voxel.Data;
 using VYTHERA.World.Streaming;
@@ -44,7 +45,7 @@ namespace VYTHERA.Player.Physics
         public float CurrentEyeHeight => Sneaking ? PlayerConfig.Dimensions.SneakingEye : (Crawling ? PlayerConfig.Dimensions.CrawlingEye : PlayerConfig.Dimensions.StandingEye);
 
         public Vector3 InterpolatedPosition =>
-            Vector3.Lerp(PreviousPosition, Position, Timing.FixedTickManager.Alpha);
+            Vector3.Lerp(PreviousPosition, Position, FixedTickManager.Alpha);
 
         public event Action<float, byte> OnLanded;
 
