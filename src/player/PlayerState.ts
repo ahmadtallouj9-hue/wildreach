@@ -83,3 +83,13 @@ export function lerpTransform(
 ): THREE.Vector3 {
   return out.lerpVectors(prevPos, currPos, THREE.MathUtils.clamp(alpha, 0, 1));
 }
+
+/**
+ * Shortest-path angle interpolation in radians.
+ */
+export function lerpAngle(a: number, b: number, t: number): number {
+  let diff = (b - a) % (Math.PI * 2);
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  if (diff > Math.PI) diff -= Math.PI * 2;
+  return a + diff * THREE.MathUtils.clamp(t, 0, 1);
+}

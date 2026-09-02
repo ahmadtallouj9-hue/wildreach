@@ -2,6 +2,7 @@ import { PlayerDamage } from './PlayerDamage';
 import { PlayerHunger } from './PlayerHunger';
 import { Difficulty, type DamageSource } from './PlayerState';
 import { isFood } from './items';
+import type { EquipmentSystem } from '../equipment/EquipmentSystem';
 
 export interface SurvivalSnapshot {
   health: number;
@@ -18,8 +19,8 @@ export class PlayerSurvival {
   readonly damageSystem: PlayerDamage;
   readonly hungerSystem: PlayerHunger;
 
-  constructor(initial?: { health?: number; hunger?: number }) {
-    this.damageSystem = new PlayerDamage(initial?.health);
+  constructor(initial?: { health?: number; hunger?: number }, equipment?: EquipmentSystem) {
+    this.damageSystem = new PlayerDamage(initial?.health, equipment);
     this.hungerSystem = new PlayerHunger(initial?.hunger);
   }
 

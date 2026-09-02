@@ -7,6 +7,7 @@ import { BlockInteraction } from '../player/BlockInteraction';
 import { Inventory } from '../player/Inventory';
 import { PlayerSurvival } from '../player/PlayerSurvival';
 import { MobManager } from '../mobs/MobManager';
+import { EquipmentSystem } from '../equipment/EquipmentSystem';
 import { loadSurvivalState, saveSurvivalState } from '../world/survivalStore';
 import { Sky } from '../render/Sky';
 import { TerrainMaterials } from '../render/TerrainMaterials';
@@ -31,6 +32,8 @@ import { isTouchDevice } from '../util/isTouchDevice';
 import { applyHudLayout, HudLayoutEditor, loadHudLayout } from '../ui/HudLayout';
 import { loadGfxPrefs, saveGfxPrefs, getPresetConfig, type GfxPrefs, type GfxPreset } from '../render/gfxPrefs';
 import { ModManager } from '../modding/ModSystem';
+import { FixedTimestep } from '../engine/core/FixedTimestep';
+import { profiler } from '../engine/core/Profiler';
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
@@ -64,8 +67,10 @@ export class Game {
   private prefs: Settings = loadSettings();
   private gfx: GfxPrefs = loadGfxPrefs();
   private fpsCapAccumulator = 0;
-  private physicsAccumulator = 0;
+
   private lowFpsTimer = 0;
+  /** Deterministic 20 Hz simulation clock (engine core). */
+  private readonly timestep = new FixedTimestep(0.05, 0.25);
   private genDebug: GenDebugMode = parseGenDebugMode();
   private clock = new THREE.Clock();
   private running = false;
@@ -129,8 +134,14 @@ export class Game {
     this.hud.hidePalette();
 
     const savedSurvival = loadSurvivalState(seed);
+    const equipment = new EquipmentSystem();
+    if (savedSurvival?.equipment) {
+      equipment.deserialize(savedSurvival.equipment);
+    }
+
     this.survival = new PlayerSurvival(
       savedSurvival ? { health: savedSurvival.health, hunger: savedSurvival.hunger } : undefined,
+      equipment,
     );
 
     this.inventory = new Inventory();
@@ -141,18 +152,22 @@ export class Game {
       this.inventory.setHotbar(savedSurvival.selectedHotbar);
     }
 
-    this.inventoryUi = new InventoryUi(this.inventory, { profile: loadProfile() });
+    this.inventoryUi = new InventoryUi(this.inventory, { profile: loadProfile(), equipment });
     host.appendChild(this.inventoryUi.root);
     this.inventoryUi.onToggle((open) => {
       this.syncControlState();
       if (open) this.exitPointerLockQuiet();
     });
 
-    this.mobManager = new MobManager(this.scene, this.chunks, (itemId, count) => {
-      this.inventory.add(itemId, count);
-      this.inventoryUi.refresh();
-      this.saveSurvival();
-    });
+    this.mobManager = new MobManager(
+      this.scene,
+      this.chunks,
+      (itemId, count, durability, maxDurability) => {
+        this.inventory.add(itemId, count, { durability, maxDurability });
+        this.inventoryUi.refresh();
+        this.saveSurvival();
+      },
+    );
 
     this.survival.onDeath(() => {
       this.syncControlState();
@@ -589,6 +604,7 @@ export class Game {
       pitch: this.player.pitch,
       slots: this.inventory.slots,
       selectedHotbar: this.inventory.selectedHotbar,
+      equipment: this.inventoryUi?.equipment?.serialize(),
       savedAt: Date.now(),
     });
   }
@@ -615,6 +631,8 @@ export class Game {
 
   private frame(): void {
     const rawDt = Math.min(this.clock.getDelta(), 0.05);
+    // Frame interval in ms — the primary frame-time metric (engine Profiler).
+    profiler.record('frame.dt', rawDt * 1000);
 
     // Optional 30 FPS cap for Very Low preset on low-end devices
     if (this.gfx.fpsCap === 30) {
@@ -650,22 +668,29 @@ export class Game {
     if (worldLive && !journalBlocking) {
       this.chunks.updateAround(this.player.position.x, this.player.position.z, 1);
 
-      // Deterministic 20 Hz fixed simulation step (0.05s)
-      const FIXED_DT = 0.05;
-      this.physicsAccumulator += dt;
-      if (this.physicsAccumulator > 0.25) this.physicsAccumulator = 0.25;
+      // Deterministic 20 Hz fixed simulation step (engine core FixedTimestep)
+      this.timestep.addTime(dt);
 
-      while (this.physicsAccumulator >= FIXED_DT) {
+      const simEnd = profiler.begin('frame.sim');
+      while (this.timestep.hasStep()) {
         if (canControl) {
-          this.player.simulateTick(this.survival.damageSystem, this.survival.hungerSystem);
-          this.interaction.update(FIXED_DT);
+          const snapshot = this.player.simulateTick(this.survival.damageSystem, this.survival.hungerSystem);
+          this.interaction.simulateTick(snapshot);
         }
         this.survival.tick();
-        this.physicsAccumulator -= FIXED_DT;
+        this.timestep.consumeStep();
       }
+      simEnd();
 
-      const renderAlpha = this.physicsAccumulator / FIXED_DT;
+      const renderAlpha = this.timestep.alpha;
       this.player.render(renderAlpha, dt);
+      this.interaction.update(dt);
+
+      if (typeof window !== 'undefined' && (window as any).CAMERA_DEBUG) {
+        this.hud.setCameraDebug(this.player.getCameraDebugInfo(renderAlpha, dt));
+      } else {
+        this.hud.setCameraDebug(null);
+      }
 
       const isMoving = this.player.velocity.lengthSq() > 0.05;
       const isSprinting = this.player.isSprinting;
@@ -782,10 +807,31 @@ export class Game {
               Math.floor(this.player.position.x),
               Math.floor(this.player.position.z),
               this.genDebug,
-            ),
+            ) + '\n' + this.perfDebugLine(),
     });
 
+    const renderEnd = profiler.begin('frame.render');
     this.postfx.render();
+    renderEnd();
+  }
+
+  /** One-line profiler summary for the engine debug overlay (?genDebug=…). */
+  private perfDebugLine(): string {
+    const dtS = profiler.stats('frame.dt');
+    const simS = profiler.stats('frame.sim');
+    const renderS = profiler.stats('frame.render');
+    const genS = profiler.stats('chunk.gen');
+    const meshS = profiler.stats('chunk.mesh');
+    const info = this.renderer.info.render;
+    const parts: string[] = [];
+    if (dtS) parts.push(`frame ${dtS.avg.toFixed(2)}ms`);
+    if (simS) parts.push(`sim ${simS.avg.toFixed(2)}ms`);
+    if (renderS) parts.push(`render ${renderS.avg.toFixed(2)}ms`);
+    if (genS) parts.push(`gen ${genS.avg.toFixed(1)}ms`);
+    if (meshS) parts.push(`mesh ${meshS.avg.toFixed(1)}ms`);
+    const queues = `${this.chunks.loadedChunks}c +${this.chunks.genPending}g/${this.chunks.buildPending}b`;
+    const draw = `${info.calls}dc ${info.triangles}tri`;
+    return `${parts.join(' · ')}\n${queues} · ${draw}`;
   }
 
   private initMultiplayer(worldSettings: WorldSettings, profile: Profile): void {

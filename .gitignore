@@ -37,3 +37,20 @@ public/dev-reference/
 data/
 mobile-viewport.png
 
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*TestResults.xml
+hub_help.txt
+
+

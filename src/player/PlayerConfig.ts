@@ -1,17 +1,28 @@
 /**
  * Authoritative Player Configuration Constants for VYTHERA.
- * Exact Minecraft Java Edition-inspired physics, dimensions, and survival parameters.
+ * Exact Minecraft Java Edition reference (version 1.20+ / 1.21).
  */
+
+export const MINECRAFT_JAVA_REFERENCE_VERSION = '1.20+ / 1.21';
 
 export const TICK_RATE = 20; // 20 Hz
 export const TICK_DT = 1 / TICK_RATE; // 0.05 seconds per tick
 
+export function toBlocksPerTick(blocksPerSec: number): number {
+  return blocksPerSec / TICK_RATE;
+}
+
+export function toBlocksPerSecond(blocksPerTick: number): number {
+  return blocksPerTick * TICK_RATE;
+}
+
 export const PlayerConfig = {
+  referenceVersion: MINECRAFT_JAVA_REFERENCE_VERSION,
   tickRate: TICK_RATE,
   tickDt: TICK_DT,
 
   movement: {
-    /** Walking speed: 4.317 blocks/sec (≈ 0.21585 blocks/tick) */
+    /** Target walking speed: 4.317 blocks/sec (≈ 0.21585 blocks/tick) */
     walkSpeed: 4.317,
     walkSpeedTick: 4.317 / TICK_RATE,
 
@@ -23,8 +34,14 @@ export const PlayerConfig = {
     sneakMultiplier: 0.3,
     sneakSpeed: (4.317 * 0.3) / TICK_RATE,
 
-    /** Base movement factor for Minecraft Java ground acceleration formula: a = factor * (0.6 / f)^3 */
-    walkAccelerationFactor: 0.1348,
+    /** Crawl speed multiplier: 0.30 (≈ 1.295 blocks/sec) */
+    crawlMultiplier: 0.3,
+
+    /** Base movement speed attribute in Minecraft Java (generic.movement_speed = 0.10) */
+    baseMovementSpeed: 0.10,
+
+    /** Base movement acceleration factor on ground: 0.10 (speed * (0.16277136 / f^3) where f=0.546 -> 1.0) */
+    walkAccelerationFactor: 0.10,
 
     /** Acceleration in air (blocks/tick) */
     airAccelerationWalk: 0.02,
@@ -52,6 +69,11 @@ export const PlayerConfig = {
     /** Max vertical step-up obstacle height without jumping: 0.60 blocks */
     maxStepHeight: 0.6,
 
+    /** Auto-Jump configuration */
+    autoJumpEnabled: true,
+    autoJumpMinObstacle: 0.6,
+    autoJumpMaxObstacle: 1.25,
+
     /** Water movement speed factor */
     waterSpeedMultiplier: 0.52,
 
@@ -68,12 +90,16 @@ export const PlayerConfig = {
     standingHeight: 1.8,
     /** Sneaking collision height: 1.50 blocks */
     sneakingHeight: 1.5,
+    /** Crawling collision height: 0.625 blocks */
+    crawlingHeight: 0.625,
     /** Sitting collision height: 1.15 blocks */
     sittingHeight: 1.15,
     /** Eye height when standing: 1.62 blocks */
     standingEye: 1.62,
-    /** Eye height when sneaking: 1.35 blocks */
-    sneakingEye: 1.35,
+    /** Eye height when sneaking: 1.27 blocks (Modern Java 1.20+ is 1.27) */
+    sneakingEye: 1.27,
+    /** Eye height when crawling: 0.40 blocks */
+    crawlingEye: 0.40,
     /** Eye height when sitting: 1.05 blocks */
     sittingEye: 1.05,
   },
@@ -121,6 +147,26 @@ export const PlayerConfig = {
     hurtFlashDuration: 0.15,
   },
 
+  interaction: {
+    /** Block reach distance in blocks */
+    blockReachDistance: 5.0,
+    /** Entity/mob attack reach distance in blocks */
+    entityReachDistance: 3.5,
+    /** Minimum cooldown between block placements in seconds */
+    placeCooldown: 0.15,
+  },
+
+  combat: {
+    /** Base fist damage (1 HP = 0.5 hearts) */
+    baseFistDamage: 1,
+    /** Base knockback strength */
+    baseFistKnockback: 0.35,
+    /** Base fist attack cooldown in seconds */
+    baseAttackCooldown: 0.5,
+    /** Critical attack damage multiplier (while falling) */
+    criticalMultiplier: 1.5,
+  },
+
   camera: {
     /** Pitch limits in degrees to prevent camera inversion */
     pitchMinDeg: -89,
@@ -141,9 +187,22 @@ export const PlayerConfig = {
     /** Camera height lift above head in third/front person */
     camHeightLift: 0.35,
 
+    /** Camera rotation smoothing time constant (high value = responsive/crisp without input lag) */
+    cameraRotationSmoothness: 55,
+
+    /** Visual eye height transition speed (sneak/stand) */
+    eyeHeightSmoothSpeed: 16,
+
+    /** Landing dip spring stiffness and damping */
+    landingSpringStiffness: 160,
+    landingSpringDamping: 18,
+
+    /** Damage tilt decay speed */
+    damageTiltDecaySpeed: 10,
+
     /** Subtle head bob amplitudes (blocks) */
-    bobVerticalAmp: 0.025,
-    bobHorizontalAmp: 0.015,
+    bobVerticalAmp: 0.012,
+    bobHorizontalAmp: 0.008,
 
     /** Sprint FOV increase */
     sprintFovBoost: 10,

@@ -13,6 +13,8 @@ import {
   ITEM_ICONS,
   ITEM_COLORS,
 } from '../player/items';
+import { EquipmentSystem } from '../equipment/EquipmentSystem';
+import type { EquipmentSlot } from '../equipment/EquipmentSlot';
 import { ProfilePreview3D } from './ProfilePreview3D';
 import type { Profile } from './prefs';
 
@@ -25,7 +27,7 @@ export function blockCssColor(id: number): string {
 }
 
 type PanelTab = 'pack' | 'guide';
-type SlotKind = 'inv' | 'craft' | 'result';
+type SlotKind = 'inv' | 'craft' | 'result' | 'equip';
 
 /** Maps 2x2 grid indices (0..3) to 3x3 CraftingGrid cell positions [row 0 (0,1), row 1 (3,4)]. */
 const CRAFT_2X2_MAP = [0, 1, 3, 4] as const;
@@ -41,6 +43,8 @@ export class InventoryUi {
   private readonly craftSectionTitleEl: HTMLElement;
   private readonly resultSlot: HTMLElement;
   private readonly cursorEl: HTMLElement;
+  private readonly equipSlotsEl: HTMLElement;
+  private readonly armorStatsEl: HTMLElement;
   private readonly preview3d: ProfilePreview3D | null;
   private profile: Profile | null = null;
   private tab: PanelTab = 'pack';
@@ -48,11 +52,16 @@ export class InventoryUi {
   private isTableMode = false;
   private cursor: ItemStack | null = null;
   private readonly craft = new CraftingGrid();
+  readonly equipment: EquipmentSystem;
   private onChange: (() => void) | null = null;
   private onOpenChange: ((open: boolean) => void) | null = null;
 
-  constructor(private readonly inventory: Inventory, opts?: { profile?: Profile }) {
+  constructor(
+    private readonly inventory: Inventory,
+    opts?: { profile?: Profile; equipment?: EquipmentSystem },
+  ) {
     this.profile = opts?.profile ?? null;
+    this.equipment = opts?.equipment ?? new EquipmentSystem();
     this.preview3d = this.profile
       ? new ProfilePreview3D({ autoSpin: true, interactive: false, transparent: true })
       : null;
@@ -75,6 +84,15 @@ export class InventoryUi {
 
           <div class="vy-inv-body" data-view="pack">
             <div class="vy-inv-top">
+              <div class="vy-inv-equip-col">
+                <div class="vy-inv-equip__slots">
+                  <div class="vy-slot vy-slot--equip" data-kind="equip" data-slot="HEAD" title="Head / Helmet"></div>
+                  <div class="vy-slot vy-slot--equip" data-kind="equip" data-slot="CHEST" title="Chest / Chestplate"></div>
+                  <div class="vy-slot vy-slot--equip" data-kind="equip" data-slot="LEGS" title="Legs / Leggings"></div>
+                  <div class="vy-slot vy-slot--equip" data-kind="equip" data-slot="FEET" title="Feet / Boots"></div>
+                </div>
+                <div class="vy-inv-armor-stats" aria-label="Armor stats"></div>
+              </div>
               <div class="vy-inv-preview-wrap">
                 <div class="vy-inv-preview" aria-label="Wanderer preview"></div>
               </div>
@@ -136,6 +154,8 @@ export class InventoryUi {
     this.craftSectionTitleEl = this.root.querySelector('.vy-craft__title')!;
     this.resultSlot = this.root.querySelector('[data-kind="result"]')!;
     this.cursorEl = this.root.querySelector('.vy-inv-cursor')!;
+    this.equipSlotsEl = this.root.querySelector('.vy-inv-equip__slots')!;
+    this.armorStatsEl = this.root.querySelector('.vy-inv-armor-stats')!;
 
     const previewHost = this.root.querySelector('.vy-inv-preview') as HTMLElement | null;
     if (this.preview3d && previewHost) {
@@ -217,6 +237,7 @@ export class InventoryUi {
     this.paintSlots(this.storageGridEl);
     this.paintSlots(this.panelHotbarGridEl);
     this.paintCraft();
+    this.paintEquipment();
     this.paintCursor();
     this.paintHotbarName();
   }
@@ -324,6 +345,7 @@ export class InventoryUi {
         slot.dataset.kind as SlotKind,
         Number(slot.dataset.index),
         (e as MouseEvent).shiftKey,
+        slot,
       );
     });
 
@@ -331,7 +353,7 @@ export class InventoryUi {
       const slot = (e.target as HTMLElement).closest('.vy-slot') as HTMLElement | null;
       if (!slot || !this.open) return;
       e.preventDefault();
-      this.clickSlot(slot.dataset.kind as SlotKind, Number(slot.dataset.index), true);
+      this.clickSlot(slot.dataset.kind as SlotKind, Number(slot.dataset.index), true, slot);
     });
 
     window.addEventListener('pointermove', this.onPointerMove);
@@ -377,9 +399,17 @@ export class InventoryUi {
     this.root.remove();
   }
 
-  private clickSlot(kind: SlotKind, index: number, right: boolean): void {
+  private clickSlot(kind: SlotKind, index: number, right: boolean, slotEl?: HTMLElement): void {
     if (kind === 'result') {
       this.takeResult();
+      return;
+    }
+    if (kind === 'equip') {
+      const slotName = slotEl?.dataset.slot as EquipmentSlot | undefined;
+      if (!slotName) return;
+      this.clickEquipSlot(slotName);
+      this.refresh();
+      this.onChange?.();
       return;
     }
     if (kind === 'craft') {
@@ -392,6 +422,18 @@ export class InventoryUi {
     this.clickStack(this.inventory.slots, index, right, (i, s) => this.inventory.setSlot(i, s));
     this.refresh();
     this.onChange?.();
+  }
+
+  private clickEquipSlot(slot: EquipmentSlot): void {
+    if (this.cursor) {
+      if (this.equipment.canEquip(slot, this.cursor)) {
+        const prev = this.equipment.equip(slot, this.cursor);
+        this.cursor = prev;
+      }
+    } else {
+      const current = this.equipment.unequip(slot);
+      this.cursor = current;
+    }
   }
 
   private clickStack(
@@ -492,6 +534,24 @@ export class InventoryUi {
     const result = this.craft.peekResult(this.isTableMode);
     paintSlot(this.resultSlot, result);
     this.resultSlot.classList.toggle('is-ready', !!result);
+  }
+
+  private paintEquipment(): void {
+    if (!this.equipSlotsEl) return;
+    const slots = this.equipSlotsEl.querySelectorAll<HTMLElement>('.vy-slot--equip');
+    slots.forEach((node) => {
+      const slotName = node.dataset.slot as EquipmentSlot | undefined;
+      if (!slotName) return;
+      const stack = this.equipment.getSlot(slotName);
+      paintSlot(node, stack);
+    });
+
+    if (this.armorStatsEl) {
+      const stats = this.equipment.stats;
+      this.armorStatsEl.innerHTML = `
+        <span class="vy-armor-stat">🛡️ Armor: <strong>${stats.armorPoints}</strong></span>
+      `;
+    }
   }
 
   private paintHotbarName(): void {

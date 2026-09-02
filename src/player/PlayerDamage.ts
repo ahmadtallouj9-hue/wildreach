@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { PlayerConfig } from './PlayerConfig';
 import { Difficulty, type DamageEvent } from './PlayerState';
+import type { EquipmentSystem } from '../equipment/EquipmentSystem';
 
 export class PlayerDamage {
   health: number = PlayerConfig.survival.maxHealth;
   maxHealth: number = PlayerConfig.survival.maxHealth;
   isDead: boolean = false;
   difficulty: Difficulty = Difficulty.NORMAL;
+  equipment?: EquipmentSystem;
 
   private immunityTicksRemaining = 0;
   private hurtFlashTimer = 0;
@@ -14,10 +16,11 @@ export class PlayerDamage {
   private onDamageCallbacks: Array<(amount: number, source: string) => void> = [];
   private onDeathCallbacks: Array<() => void> = [];
 
-  constructor(initialHealth?: number) {
+  constructor(initialHealth?: number, equipment?: EquipmentSystem) {
     if (initialHealth != null) {
       this.health = THREE.MathUtils.clamp(initialHealth, 0, this.maxHealth);
     }
+    this.equipment = equipment;
   }
 
   get hurtFlash(): number {
@@ -69,6 +72,13 @@ export class PlayerDamage {
       finalDamage = Math.max(1, Math.round(finalDamage * 0.75));
     } else if (this.difficulty === Difficulty.HARD && event.source === 'mob') {
       finalDamage = Math.round(finalDamage * 1.5);
+    }
+
+    // Apply armor reduction & durability wear through EquipmentSystem
+    if (this.equipment) {
+      const source = String(event.source ?? 'physical');
+      finalDamage = this.equipment.calculateDamage(finalDamage, source);
+      this.equipment.damageArmor(1, source);
     }
 
     this.health = Math.max(0, this.health - finalDamage);

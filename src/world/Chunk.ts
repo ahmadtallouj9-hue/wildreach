@@ -24,6 +24,8 @@ export class Chunk {
   ready = false;
   /** True after first mesh build (even if all layers are empty). */
   meshed = false;
+  /** True once voxel data is safe for authoritative gameplay collision. */
+  collisionReady = false;
   lightsDirty = true;
   /** Skip fluid sim when false (set by seedFluidLevels / edits). */
   hasFluid = false;
@@ -97,5 +99,6 @@ export class Chunk {
       this.lavaMesh = null;
     }
     this.meshed = false;
+    this.collisionReady = false;
   }
 }

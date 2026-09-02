@@ -6,7 +6,7 @@ import type { PlayerInputSnapshot } from './PlayerInput';
 import type { PlayerDamage } from './PlayerDamage';
 import type { PlayerHunger } from './PlayerHunger';
 import type { MovementState, PlayerLandedEvent } from './PlayerState';
-import type { ChunkManager } from '../world/ChunkManager';
+import type { ChunkManager, CollisionAvailability } from '../world/ChunkManager';
 
 export class PlayerPhysics {
   position = new THREE.Vector3(0, 80, 0);
@@ -17,15 +17,19 @@ export class PlayerPhysics {
   movementState: MovementState = 'idle';
   sprinting = false;
   sneaking = false;
+  crawling = false;
   sitting = false;
   inWater = false;
   deepWater = false;
   inLava = false;
   lavaSubmersion = 0;
+  blockedByStreaming = false;
+  collisionAvailability: CollisionAvailability = 'READY';
 
   fallDistance = 0;
   private fallStartY: number | null = null;
   private justJumped = false;
+  private lastJumpSource: 'input' | 'auto' | null = null;
 
   private onLandedCallbacks: Array<(evt: PlayerLandedEvent) => void> = [];
 
@@ -43,18 +47,45 @@ export class PlayerPhysics {
 
   get currentHeight(): number {
     if (this.sitting) return PlayerConfig.dimensions.sittingHeight;
+    if (this.crawling) return PlayerConfig.dimensions.crawlingHeight;
     if (this.sneaking) return PlayerConfig.dimensions.sneakingHeight;
     return PlayerConfig.dimensions.standingHeight;
   }
 
   get currentEyeHeight(): number {
     if (this.sitting) return PlayerConfig.dimensions.sittingEye;
+    if (this.crawling) return PlayerConfig.dimensions.crawlingEye;
     if (this.sneaking) return PlayerConfig.dimensions.sneakingEye;
     return PlayerConfig.dimensions.standingEye;
   }
 
   get wasJustJumped(): boolean {
     return this.justJumped;
+  }
+
+  get jumpSource(): 'input' | 'auto' | null {
+    return this.lastJumpSource;
+  }
+
+  /**
+   * Executes a jump matching Minecraft Java Edition impulse physics.
+   */
+  private executeJump(
+    hungerSystem: PlayerHunger,
+    source: 'input' | 'auto',
+    lookYaw: number,
+  ): void {
+    this.velocity.y = PlayerConfig.movement.jumpVelocity; // 0.42 blocks/tick
+    if (this.sprinting) {
+      const sinYaw = Math.sin(lookYaw);
+      const cosYaw = Math.cos(lookYaw);
+      this.velocity.x += -sinYaw * PlayerConfig.movement.sprintJumpForwardBoost;
+      this.velocity.z += -cosYaw * PlayerConfig.movement.sprintJumpForwardBoost;
+    }
+    this.grounded = false;
+    this.justJumped = true;
+    this.lastJumpSource = source;
+    hungerSystem.recordJump(this.sprinting);
   }
 
   /**
@@ -75,18 +106,60 @@ export class PlayerPhysics {
       return;
     }
 
-    // 1. Sneak state with ceiling clearance verification
-    if (input.sneakHeld && !this.sitting) {
-      this.sneaking = true;
-    } else if (this.sneaking) {
-      if (this.collision.canStandUp(this.position)) {
-        this.sneaking = false;
-      }
+    this.blockedByStreaming = false;
+    this.collisionAvailability = 'READY';
+
+    // A restored/player position must itself be backed by authoritative voxel
+    // data before pose or physics logic interprets missing space as Air.
+    const currentBox = this.collision.getPlayerAABB(
+      this.position,
+      PlayerConfig.dimensions.width,
+      PlayerConfig.dimensions.standingHeight,
+    );
+    const currentAvailability = this.collision.getCollisionAvailabilityForRegion(
+      currentBox.minX,
+      currentBox.minY,
+      currentBox.minZ,
+      currentBox.maxX,
+      currentBox.maxY,
+      currentBox.maxZ,
+    );
+    if (currentAvailability !== 'READY') {
+      this.blockedByStreaming = true;
+      this.collisionAvailability = currentAvailability;
+      this.velocity.set(0, 0, 0);
+      this.sprinting = false;
+      this.grounded = false;
+      this.movementState = 'idle';
+      return;
     }
 
-    // 2. Stand up from sitting on movement key
+    // 1. Stand up from sitting on movement key
     if (this.sitting && (input.forward || input.backward || input.left || input.right || input.jumpHeld)) {
       this.sitting = false;
+    }
+
+    // 2. Pose & Ceiling Clearance Verification (Crawl / Sneak / Stand)
+    const canStand = this.collision.canStandUp(this.position);
+    const canSneak = this.collision.canSneakUp(this.position);
+
+    if (!canStand) {
+      // Under low ceiling: force appropriate low space pose
+      if (!canSneak) {
+        this.crawling = true;
+        this.sneaking = false;
+      } else {
+        this.sneaking = true;
+        this.crawling = false;
+      }
+    } else {
+      // Sufficient standing headroom available
+      this.crawling = false;
+      if (input.sneakHeld && !this.sitting) {
+        this.sneaking = true;
+      } else {
+        this.sneaking = false;
+      }
     }
 
     // 3. Sprint state verification with hunger requirement
@@ -95,11 +168,12 @@ export class PlayerPhysics {
       wantsSprint &&
       input.forward &&
       !this.sneaking &&
+      !this.crawling &&
       !this.sitting &&
       hungerSystem.canSprint
     ) {
       this.sprinting = true;
-    } else if (!input.forward || this.sneaking || this.sitting || !hungerSystem.canSprint) {
+    } else if (!input.forward || this.sneaking || this.crawling || this.sitting || !hungerSystem.canSprint) {
       this.sprinting = false;
     }
 
@@ -145,15 +219,18 @@ export class PlayerPhysics {
     // 6. Minecraft Java Acceleration & Friction parameters
     const groundBlock = this.collision.getGroundBlock(this.position);
     const blockProps = getBlockMovementProperties(groundBlock);
-    const groundFriction = blockProps.friction; // 0.546 for normal block
+    const groundFriction = blockProps.friction; // 0.546 for standard block (S=0.6)
     const airFriction = PlayerConfig.movement.airFriction; // 0.91
 
     let accel = 0;
     if (this.grounded) {
-      const q = Math.pow(0.6 / groundFriction, 3);
-      let factor: number = PlayerConfig.movement.walkAccelerationFactor; // 0.1348
+      // Exact Java formula: f1 = 0.16277136 / (groundFriction^3)
+      const q = 0.16277136 / Math.pow(groundFriction, 3);
+      let factor: number = PlayerConfig.movement.walkAccelerationFactor; // 0.10
       if (this.sitting) {
         factor = 0;
+      } else if (this.crawling) {
+        factor *= PlayerConfig.movement.crawlMultiplier; // 0.3
       } else if (this.sneaking) {
         factor *= PlayerConfig.movement.sneakMultiplier; // 0.3
       } else if (this.sprinting) {
@@ -163,7 +240,7 @@ export class PlayerPhysics {
     } else {
       if (this.sprinting) {
         accel = PlayerConfig.movement.airAccelerationSprint; // 0.026
-      } else if (this.sneaking) {
+      } else if (this.sneaking || this.crawling) {
         accel = PlayerConfig.movement.airAccelerationSneak; // 0.006
       } else {
         accel = PlayerConfig.movement.airAccelerationWalk; // 0.020
@@ -182,40 +259,39 @@ export class PlayerPhysics {
       this.velocity.z += wishDir.z * accel;
     }
 
-    // 7. Jump
-    if (
-      this.grounded &&
-      !this.sitting &&
-      !this.deepWater &&
-      !this.inLava &&
-      input.jumpPressed
+    // 7. Jump Logic (Manual Jump + Holding Space + Auto-Jump)
+    const canJump = this.grounded && !this.sitting && !this.deepWater && !this.inLava;
+    if (canJump && (input.jumpPressed || input.jumpHeld)) {
+      this.executeJump(hungerSystem, 'input', lookYaw);
+    } else if (
+      canJump &&
+      !this.justJumped &&
+      PlayerConfig.movement.autoJumpEnabled &&
+      !this.sneaking &&
+      !this.crawling &&
+      wishDir.lengthSq() > 0.01
     ) {
-      this.velocity.y = PlayerConfig.movement.jumpVelocity; // 0.42 blocks/tick
-      if (this.sprinting && wishDir.lengthSq() > 0) {
-        this.velocity.x += wishDir.x * PlayerConfig.movement.sprintJumpForwardBoost; // +0.2 boost
-        this.velocity.z += wishDir.z * PlayerConfig.movement.sprintJumpForwardBoost;
+      // Auto-jump candidate detection
+      const autoJumpCheck = this.collision.checkAutoJumpCandidate(
+        this.position,
+        wishDir,
+        PlayerConfig.dimensions.width,
+        PlayerConfig.dimensions.standingHeight,
+      );
+      if (autoJumpCheck.canAutoJump) {
+        this.executeJump(hungerSystem, 'auto', lookYaw);
       }
-      this.grounded = false;
-      this.justJumped = true;
-      hungerSystem.recordJump(this.sprinting);
     }
 
     // 8. Vertical Motion & Fluid Mechanics
     if (this.inLava) {
       if (input.jumpHeld && !this.sitting) this.velocity.y += 0.08;
-      if (this.sneaking) this.velocity.y -= 0.08;
+      if (this.sneaking || this.crawling) this.velocity.y -= 0.08;
       this.grounded = false;
     } else if (this.deepWater) {
       if (input.jumpHeld && !this.sitting) this.velocity.y += 0.09;
-      if (this.sneaking) this.velocity.y -= 0.08;
+      if (this.sneaking || this.crawling) this.velocity.y -= 0.08;
       this.grounded = false;
-    }
-
-    // Unloaded column protection
-    const columnReady = this.chunks.isColumnReady(this.position.x, this.position.z);
-    if (!columnReady && this.velocity.y < 0) {
-      this.velocity.y = 0;
-      this.grounded = true;
     }
 
     // 9. Fall Tracking
@@ -231,10 +307,22 @@ export class PlayerPhysics {
       this.velocity,
       height,
       PlayerConfig.dimensions.width,
-      this.sneaking && this.grounded,
+      (this.sneaking || this.crawling) && this.grounded,
     );
 
     const prevGrounded = this.grounded;
+    if (collisionResult.blockedByStreaming) {
+      this.blockedByStreaming = true;
+      this.collisionAvailability = collisionResult.collisionAvailability;
+      this.velocity.set(0, 0, 0);
+      // Preserve a previously verified grounded state because the position did
+      // not move. Never manufacture grounded=true from an unresolved region.
+      this.grounded = prevGrounded;
+      this.sprinting = false;
+      this.movementState = 'idle';
+      return;
+    }
+    this.collisionAvailability = collisionResult.collisionAvailability;
     this.grounded = collisionResult.onGround;
 
     // 11. Post-Movement Vertical Gravity & Horizontal Friction Damping
@@ -280,16 +368,18 @@ export class PlayerPhysics {
         }
       }
 
-      const landEvent: PlayerLandedEvent = {
-        fallDistance: fallDist,
-        landingVelocityY: this.velocity.y,
-        surfaceBlock: collisionResult.groundBlock,
-        wasSprinting: this.sprinting,
-        damageTaken,
-      };
+      if (fallDist > 0.5) {
+        const landEvent: PlayerLandedEvent = {
+          fallDistance: fallDist,
+          landingVelocityY: this.velocity.y,
+          surfaceBlock: collisionResult.groundBlock,
+          wasSprinting: this.sprinting,
+          damageTaken,
+        };
 
-      for (const cb of this.onLandedCallbacks) {
-        cb(landEvent);
+        for (const cb of this.onLandedCallbacks) {
+          cb(landEvent);
+        }
       }
     }
 
@@ -306,15 +396,20 @@ export class PlayerPhysics {
     }
 
     // 14. Determine Movement State
-    if (this.deepWater) {
+    const isMovingHoriz = movedHoriz > 0.001;
+    if (this.inWater && this.deepWater) {
       this.movementState = 'swimming';
-    } else if (!this.grounded) {
-      this.movementState = this.velocity.y > 0 ? 'jumping' : 'falling';
+    } else if (this.crawling) {
+      this.movementState = 'crawling';
     } else if (this.sneaking) {
-      this.movementState = movedHoriz > 0.005 ? 'sneaking' : 'idle';
-    } else if (this.sprinting) {
-      this.movementState = movedHoriz > 0.005 ? 'sprinting' : 'idle';
-    } else if (movedHoriz > 0.005) {
+      this.movementState = 'sneaking';
+    } else if (this.justJumped) {
+      this.movementState = 'jumping';
+    } else if (!this.grounded && this.velocity.y < -0.1) {
+      this.movementState = 'falling';
+    } else if (this.sprinting && isMovingHoriz) {
+      this.movementState = 'sprinting';
+    } else if (isMovingHoriz) {
       this.movementState = 'walking';
     } else {
       this.movementState = 'idle';
@@ -323,7 +418,7 @@ export class PlayerPhysics {
 
   teleport(x: number, y: number, z: number): void {
     this.position.set(x, y, z);
-    this.previousPosition.copy(this.position);
+    this.previousPosition.set(x, y, z);
     this.velocity.set(0, 0, 0);
     this.fallStartY = null;
     this.fallDistance = 0;

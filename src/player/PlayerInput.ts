@@ -12,13 +12,16 @@ export interface PlayerInputSnapshot {
   sneakPressed: boolean;
   sneakHeld: boolean;
   attackPressed: boolean;
+  attackHeld: boolean;
   usePressed: boolean;
+  useHeld: boolean;
   analogX: number;
   analogZ: number;
 }
 
 export class PlayerInput {
   private keys = new Set<string>();
+  private mouseButtons = new Set<number>();
   private locked = false;
   private enabled = true;
 
@@ -55,6 +58,7 @@ export class PlayerInput {
   private onKeyUpBound = this.onKeyUp.bind(this);
   private onMouseMoveBound = this.onMouseMove.bind(this);
   private onMouseDownBound = this.onMouseDown.bind(this);
+  private onMouseUpBound = this.onMouseUp.bind(this);
   private onPointerLockChangeBound = this.onPointerLockChange.bind(this);
   private onCanvasClickBound = this.onCanvasClick.bind(this);
 
@@ -82,6 +86,7 @@ export class PlayerInput {
     this.enabled = enabled;
     if (!enabled) {
       this.keys.clear();
+      this.mouseButtons.clear();
       this.touchMoveX = 0;
       this.touchMoveZ = 0;
       this.touchJump = false;
@@ -157,7 +162,9 @@ export class PlayerInput {
     const sneakPressed = this.enabled && this.sneakPressedSinceLastTick;
 
     const attackPressed = this.enabled && this.attackPressedSinceLastTick;
+    const attackHeld = this.enabled && this.mouseButtons.has(0);
     const usePressed = this.enabled && this.usePressedSinceLastTick;
+    const useHeld = this.enabled && this.mouseButtons.has(2);
 
     // Reset single-frame pulse flags
     this.jumpPressedSinceLastTick = false;
@@ -183,7 +190,9 @@ export class PlayerInput {
       sneakPressed,
       sneakHeld,
       attackPressed,
+      attackHeld,
       usePressed,
+      useHeld,
       analogX: this.touchMoveX,
       analogZ: this.touchMoveZ,
     };
@@ -204,6 +213,12 @@ export class PlayerInput {
 
   private onKeyDown(e: KeyboardEvent): void {
     if (!this.enabled) return;
+
+    if (e.code === 'F3') {
+      e.preventDefault();
+      (window as any).CAMERA_DEBUG = !(window as any).CAMERA_DEBUG;
+      return;
+    }
 
     if (e.code === 'KeyW' && !this.keys.has('KeyW')) {
       const now = performance.now() / 1000;
@@ -244,8 +259,13 @@ export class PlayerInput {
 
   private onMouseDown(e: MouseEvent): void {
     if (!this.locked || !this.enabled) return;
+    this.mouseButtons.add(e.button);
     if (e.button === 0) this.attackPressedSinceLastTick = true;
     if (e.button === 2) this.usePressedSinceLastTick = true;
+  }
+
+  private onMouseUp(e: MouseEvent): void {
+    this.mouseButtons.delete(e.button);
   }
 
   private onCanvasClick(): void {
@@ -256,25 +276,43 @@ export class PlayerInput {
   }
 
   private onPointerLockChange(): void {
-    this.locked = document.pointerLockElement === this.canvas;
+    this.locked = typeof document !== 'undefined' && document.pointerLockElement === this.canvas;
+    if (!this.locked) {
+      this.mouseButtons.clear();
+    }
   }
 
   private bindEvents(): void {
-    window.addEventListener('keydown', this.onKeyDownBound);
-    window.addEventListener('keyup', this.onKeyUpBound);
-    document.addEventListener('mousemove', this.onMouseMoveBound);
-    document.addEventListener('mousedown', this.onMouseDownBound);
-    this.canvas.addEventListener('click', this.onCanvasClickBound);
-    document.addEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', this.onKeyDownBound);
+      window.addEventListener('keyup', this.onKeyUpBound);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('mousemove', this.onMouseMoveBound);
+      document.addEventListener('mousedown', this.onMouseDownBound);
+      document.addEventListener('mouseup', this.onMouseUpBound);
+      document.addEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    }
+    if (this.canvas && typeof this.canvas.addEventListener === 'function') {
+      this.canvas.addEventListener('click', this.onCanvasClickBound);
+    }
   }
 
   dispose(): void {
-    window.removeEventListener('keydown', this.onKeyDownBound);
-    window.removeEventListener('keyup', this.onKeyUpBound);
-    document.removeEventListener('mousemove', this.onMouseMoveBound);
-    document.removeEventListener('mousedown', this.onMouseDownBound);
-    this.canvas.removeEventListener('click', this.onCanvasClickBound);
-    document.removeEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', this.onKeyDownBound);
+      window.removeEventListener('keyup', this.onKeyUpBound);
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('mousemove', this.onMouseMoveBound);
+      document.removeEventListener('mousedown', this.onMouseDownBound);
+      document.removeEventListener('mouseup', this.onMouseUpBound);
+      document.removeEventListener('pointerlockchange', this.onPointerLockChangeBound);
+    }
+    if (this.canvas && typeof this.canvas.removeEventListener === 'function') {
+      this.canvas.removeEventListener('click', this.onCanvasClickBound);
+    }
     this.keys.clear();
+    this.mouseButtons.clear();
   }
 }

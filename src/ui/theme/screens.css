@@ -1067,6 +1067,25 @@ input[type='color']::-webkit-color-swatch {
   z-index: 20;
   font-family: var(--vy-font-ui);
 }
+.vy-hud__gen-debug,
+.vy-hud__cam-debug {
+  position: absolute;
+  top: calc(var(--vy-safe-t) + 28px);
+  left: var(--vy-safe-l);
+  max-width: 46ch;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(10, 12, 16, 0.62);
+  color: #cfe3c0;
+  font: 11px/1.5 var(--vy-font-mono, monospace);
+  white-space: pre-wrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+.vy-hud__cam-debug {
+  top: auto;
+  bottom: var(--vy-safe-b);
+  color: #ffe066;
+}
 .vy-hud__brand {
   position: absolute;
   top: var(--vy-safe-t);

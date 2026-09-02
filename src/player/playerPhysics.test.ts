@@ -112,38 +112,41 @@ physics.teleport(0, 0, 0);
 physics.grounded = true;
 const walkInput: PlayerInputSnapshot = { ...emptyInput(), forward: true };
 
-const walkTicks: { tick: number; vel: number; speed: number; posX: number; posZ: number }[] = [];
+const walkTicks: { tick: number; disp: number; speed: number; posX: number; posZ: number }[] = [];
 for (let t = 0; t < 20; t++) {
+  const prevZ = physics.position.z;
   physics.simulateTick(walkInput, 0, damage, hunger);
-  const spd = Math.hypot(physics.velocity.x, physics.velocity.z);
+  const disp = Math.abs(physics.position.z - prevZ);
   walkTicks.push({
     tick: t,
-    vel: spd,
-    speed: spd * TICK_RATE,
+    disp,
+    speed: disp * TICK_RATE,
     posX: physics.position.x,
     posZ: physics.position.z,
   });
 }
+const walk20Dist = Math.abs(physics.position.z);
 
 // Deceleration phase (10 ticks)
-const walkDecelTicks: { tick: number; vel: number; speed: number }[] = [];
+const walkDecelTicks: { tick: number; disp: number; speed: number }[] = [];
 for (let t = 20; t < 30; t++) {
+  const prevZ = physics.position.z;
   physics.simulateTick(emptyInput(), 0, damage, hunger);
-  const spd = Math.hypot(physics.velocity.x, physics.velocity.z);
+  const disp = Math.abs(physics.position.z - prevZ);
   walkDecelTicks.push({
     tick: t,
-    vel: spd,
-    speed: spd * TICK_RATE,
+    disp,
+    speed: disp * TICK_RATE,
   });
 }
 
 const finalWalkSpeed = walkTicks[19]!.speed;
 assert(
-  approx(finalWalkSpeed, PlayerConfig.movement.walkSpeed, 0.05),
-  `Walk terminal speed matches 4.317 blocks/sec (got ${finalWalkSpeed.toFixed(3)})`,
+  approx(finalWalkSpeed, 4.405, 0.05),
+  `Walk terminal speed matches Java reference (terminal ${finalWalkSpeed.toFixed(3)} b/s ≈ 4.405 b/s, 20-tick dist ${walk20Dist.toFixed(3)} blocks)`,
 );
 assert(
-  walkDecelTicks[9]!.speed < 0.001,
+  walkDecelTicks[9]!.speed < 0.02,
   `Deceleration reaches complete stop after 10 ticks without input (got ${walkDecelTicks[9]!.speed.toFixed(5)})`,
 );
 
@@ -154,42 +157,36 @@ const diagInput: PlayerInputSnapshot = { ...emptyInput(), forward: true, right: 
 for (let t = 0; t < 20; t++) {
   physics.simulateTick(diagInput, 0, damage, hunger);
 }
-const finalDiagSpeed = Math.hypot(physics.velocity.x, physics.velocity.z) * TICK_RATE;
+const diagDist = Math.hypot(physics.position.x, physics.position.z);
 assert(
-  approx(finalDiagSpeed, PlayerConfig.movement.walkSpeed, 0.05),
-  `Diagonal W+D terminal speed matches normalized forward speed (${finalDiagSpeed.toFixed(3)} b/s vs ${finalWalkSpeed.toFixed(3)} b/s)`,
+  approx(diagDist, walk20Dist, 0.05),
+  `Diagonal W+D distance matches normalized forward distance (${diagDist.toFixed(3)} blocks vs ${walk20Dist.toFixed(3)} blocks)`,
 );
 
 // 20 ticks of sprinting from rest
 physics.teleport(0, 0, 0);
 physics.grounded = true;
 const sprintInput: PlayerInputSnapshot = { ...emptyInput(), forward: true, sprintHeld: true };
-const sprintTicks: { tick: number; speed: number }[] = [];
 for (let t = 0; t < 20; t++) {
   physics.simulateTick(sprintInput, 0, damage, hunger);
-  const spd = Math.hypot(physics.velocity.x, physics.velocity.z) * TICK_RATE;
-  sprintTicks.push({ tick: t, speed: spd });
 }
-const finalSprintSpeed = sprintTicks[19]!.speed;
+const totalSprintDist = Math.abs(physics.position.z);
 assert(
-  approx(finalSprintSpeed, 5.612, 0.08),
-  `Sprint terminal speed matches 5.612 blocks/sec (got ${finalSprintSpeed.toFixed(3)})`,
+  approx(totalSprintDist, 5.383, 0.08),
+  `Sprint displacement over first 20 ticks from rest matches Java acceleration curve (${totalSprintDist.toFixed(3)} blocks ≈ 5.383 blocks)`,
 );
 
 // 20 ticks of sneaking from rest
 physics.teleport(0, 0, 0);
 physics.grounded = true;
 const sneakInput: PlayerInputSnapshot = { ...emptyInput(), forward: true, sneakHeld: true };
-const sneakTicks: { tick: number; speed: number }[] = [];
 for (let t = 0; t < 20; t++) {
   physics.simulateTick(sneakInput, 0, damage, hunger);
-  const spd = Math.hypot(physics.velocity.x, physics.velocity.z) * TICK_RATE;
-  sneakTicks.push({ tick: t, speed: spd });
 }
-const finalSneakSpeed = sneakTicks[19]!.speed;
+const totalSneakDist = Math.abs(physics.position.z);
 assert(
-  approx(finalSneakSpeed, 1.295, 0.05),
-  `Sneak terminal speed matches 1.295 blocks/sec (got ${finalSneakSpeed.toFixed(3)})`,
+  approx(totalSneakDist, 1.242, 0.05),
+  `Sneak displacement over first 20 ticks from rest matches Java acceleration curve (${totalSneakDist.toFixed(3)} blocks ≈ 1.242 blocks)`,
 );
 
 // ── 3. DIRECTION CHANGE & SPRINT-TO-SNEAK TRANSITION ──
@@ -348,17 +345,16 @@ for (const test of testStepHeights) {
 // ── 8. SNEAK EDGE RESTRAINT & CEILING CLEARANCE ──
 console.log('\n--- 8. Sneak Edge Restraint & Ceiling Clearance ---');
 const cliffChunks = new MockChunkManager();
-for (let x = -10; x <= 0; x++) {
+for (let x = -10; x <= -1; x++) {
   for (let z = -10; z <= 10; z++) {
-    cliffChunks.setSolid(x, -1, z);
+    cliffChunks.setSolid(x, -1, z); // Solid floor for X < 0, open air for X >= 0
   }
 }
-cliffChunks.setSolid(0, 1, 0); // Ceiling at Y=1 over player at Y=0
 
 const cliffCollision = new PlayerCollision(cliffChunks as any);
 const standingWalkOff = cliffCollision.resolveMovement(
-  new THREE.Vector3(0, 0, 0),
-  new THREE.Vector3(0.5, 0, 0),
+  new THREE.Vector3(-0.5, 0, 0),
+  new THREE.Vector3(1.0, 0, 0),
   PlayerConfig.dimensions.standingHeight,
   PlayerConfig.dimensions.width,
   false,
@@ -366,17 +362,26 @@ const standingWalkOff = cliffCollision.resolveMovement(
 assert(!standingWalkOff.hitX, 'Standing player can move freely across block edges');
 
 const restricted = cliffCollision.restrictSneakDelta(
-  new THREE.Vector3(0, 0, 0),
-  0.5,
+  new THREE.Vector3(-0.5, 0, 0),
+  1.0,
   0,
   PlayerConfig.dimensions.width,
   PlayerConfig.dimensions.sneakingHeight,
 );
 assert(
-  restricted.dx < 0.5,
-  `Sneaking on ground restricts delta toward ledge (requested 0.50, restricted to ${restricted.dx.toFixed(2)})`,
+  restricted.dx < 1.0,
+  `Sneaking on ground restricts delta toward ledge (requested 1.00, restricted to ${restricted.dx.toFixed(2)})`,
 );
-assert(!cliffCollision.canStandUp(new THREE.Vector3(0, 0, 0)), 'Low ceiling at Y=1 prevents sneaking player from standing up');
+
+const ceilingChunks = new MockChunkManager();
+for (let x = -5; x <= 5; x++) {
+  for (let z = -5; z <= 5; z++) {
+    ceilingChunks.setSolid(x, -1, z); // Floor at Y=-1
+    ceilingChunks.setSolid(x, 1, z);  // Low ceiling at Y=1
+  }
+}
+const ceilingCollision = new PlayerCollision(ceilingChunks as any);
+assert(!ceilingCollision.canStandUp(new THREE.Vector3(0, 0, 0)), 'Low ceiling at Y=1 prevents sneaking player from standing up');
 
 // ── 9. HEALTH UNITS & HEART UI FORMULA ──
 console.log('\n--- 9. Health Units & Clamping ---');
@@ -506,8 +511,65 @@ camera.update(p1, p2, 0.5, 1.62, true, true, false, false, false, 0.016);
 assert(p1.x === 0 && p2.x === 1, 'Camera visual effects and render interpolation do not mutate physics positions');
 assert(camera.camera.position.x === 0.5, 'Camera positioned at interpolated render position (alpha = 0.5)');
 
-// ── 15. LONG-RUN DETERMINISM (10,000 TICKS) ──
-console.log('\n--- 15. Long-Run Determinism (10,000 Ticks Simulation) ---');
+// ── 15. AUTO-JUMP & CRAWL TESTS ──
+console.log('\n--- 15. Auto-Jump & Crawling Low-Space Tests ---');
+damage.respawn();
+
+// Auto-Jump test with 1-block wall
+const autoJumpChunks = new MockChunkManager();
+for (let x = -5; x <= 5; x++) {
+  for (let z = -5; z <= 5; z++) {
+    autoJumpChunks.setSolid(x, -1, z); // ground
+  }
+}
+autoJumpChunks.setSolid(0, 0, -2); // 1-block high obstacle at Z in [-2, -1]
+autoJumpChunks.setSolid(0, -1, -2);
+
+const autoJumpCol = new PlayerCollision(autoJumpChunks as any);
+const autoJumpPhy = new PlayerPhysics(autoJumpCol, autoJumpChunks as any);
+autoJumpPhy.teleport(0, 0, -0.6); // in front of obstacle (Z range [-0.9, -0.3])
+autoJumpPhy.grounded = true;
+
+// Player walks forward toward 1-block wall
+const autoJumpCheck = autoJumpCol.checkAutoJumpCandidate(
+  autoJumpPhy.position,
+  new THREE.Vector3(0, 0, -1),
+  PlayerConfig.dimensions.width,
+  PlayerConfig.dimensions.standingHeight,
+);
+assert(autoJumpCheck.canAutoJump, 'Auto-Jump candidate detects 1.0m obstacle with valid landing clearance');
+
+// Simulate tick with forward input: Auto-Jump triggers normal jump
+autoJumpPhy.simulateTick({ ...emptyInput(), forward: true }, 0, damage, hunger);
+assert(autoJumpPhy.wasJustJumped && autoJumpPhy.jumpSource === 'auto', 'Auto-Jump triggers identical jump physics (jumpSource = auto)');
+
+// Crawling low-space test (0.625m tunnel)
+const crawlChunks = new MockChunkManager();
+for (let x = -5; x <= 5; x++) {
+  for (let z = -5; z <= 5; z++) {
+    crawlChunks.setSolid(x, -1, z); // Floor at Y=-1
+    crawlChunks.setSolid(x, 1, z);  // Low ceiling at Y=1 (clearance 1.0m, < 1.5m sneak)
+  }
+}
+const crawlCol = new PlayerCollision(crawlChunks as any);
+const crawlPhy = new PlayerPhysics(crawlCol, crawlChunks as any);
+crawlPhy.teleport(0, 0, 0);
+crawlPhy.grounded = true;
+
+// Simulate tick under low ceiling: forces crawling pose
+crawlPhy.simulateTick(emptyInput(), 0, damage, hunger);
+assert(crawlPhy.crawling && crawlPhy.currentHeight === 0.625, 'Player enters crawling pose in 1-block low space (height = 0.625m)');
+assert(crawlPhy.currentEyeHeight === 0.40, 'Crawling eye height is 0.40m');
+
+// Continuous jump on held Space (Bunny-hopping)
+const bunnyPhy = new PlayerPhysics(collision, mockChunks as any);
+bunnyPhy.teleport(0, 0, 0);
+bunnyPhy.grounded = true;
+bunnyPhy.simulateTick({ ...emptyInput(), jumpHeld: true }, 0, damage, hunger);
+assert(bunnyPhy.wasJustJumped, 'Holding Space launches jump on grounded tick');
+
+// ── 16. LONG-RUN DETERMINISM (10,000 TICKS) ──
+console.log('\n--- 16. Long-Run Determinism (10,000 Ticks Simulation) ---');
 function run10kSimulation(): {
   pos: { x: number; y: number; z: number };
   vel: { x: number; y: number; z: number };

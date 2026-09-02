@@ -1,4 +1,5 @@
 import type { ItemStack } from '../player/Inventory';
+import type { EquipmentSlot } from '../equipment/EquipmentSlot';
 
 export interface SavedSurvivalState {
   health: number;
@@ -8,6 +9,7 @@ export interface SavedSurvivalState {
   pitch?: number;
   slots?: (ItemStack | null)[];
   selectedHotbar?: number;
+  equipment?: Record<EquipmentSlot, ItemStack | null>;
   savedAt?: number;
 }
 
@@ -32,6 +34,7 @@ export function loadSurvivalState(seed: string): SavedSurvivalState | null {
         pitch: typeof data.pitch === 'number' ? data.pitch : undefined,
         slots: Array.isArray(data.slots) ? data.slots : undefined,
         selectedHotbar: typeof data.selectedHotbar === 'number' ? data.selectedHotbar : 0,
+        equipment: data.equipment && typeof data.equipment === 'object' ? data.equipment : undefined,
         savedAt: data.savedAt,
       };
     }

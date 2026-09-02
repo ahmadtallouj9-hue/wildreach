@@ -25,15 +25,27 @@ export class WorldGen {
   readonly seed: string;
   readonly generationVersion = WORLD_GENERATION_VERSION;
   private readonly pipeline: ChunkPipeline;
+  /** Resolved options, kept so a Web Worker can rebuild an identical pipeline. */
+  private readonly resolvedOptions: WorldGenOptions;
 
   constructor(seed: string, options?: Partial<WorldGenOptions>) {
     this.seed = seed;
-    const opts: Partial<PipelineOptions> = {
+    this.resolvedOptions = {
       terrain: options?.terrain ?? 'balanced',
       caves: options?.caves !== false,
+      style: options?.style ?? null,
+    };
+    const opts: Partial<PipelineOptions> = {
+      terrain: this.resolvedOptions.terrain,
+      caves: this.resolvedOptions.caves,
       tuning: options?.style ? tuningFromStyle(options.style) : NEUTRAL_TUNING,
     };
     this.pipeline = new ChunkPipeline(seed, opts);
+  }
+
+  /** Immutable resolved options for worker-side pipeline reconstruction. */
+  workerOptions(): WorldGenOptions {
+    return this.resolvedOptions;
   }
 
   getTempMoist(wx: number, wz: number): { temp: number; moist: number } {

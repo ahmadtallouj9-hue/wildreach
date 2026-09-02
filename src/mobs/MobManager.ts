@@ -2,67 +2,59 @@ import * as THREE from 'three';
 import { Mob, type MobType } from './Mob';
 import type { ChunkManager } from '../world/ChunkManager';
 import { Block } from '../world/blocks';
-
-export interface ItemPickup {
-  id: string;
-  itemId: number;
-  count: number;
-  position: THREE.Vector3;
-  velocity: THREE.Vector3;
-  mesh: THREE.Mesh;
-  age: number;
-}
-
-const MAX_MOBS = 10;
-const SPAWN_INTERVAL = 6.0;
-const DESPAWN_DISTANCE_SQ = 52 * 52;
-const MIN_SPAWN_DIST = 14;
-const MAX_SPAWN_DIST = 32;
+import { ItemDropEntity } from '../world/ItemDropEntity';
 
 export class MobManager {
   readonly mobs: Mob[] = [];
-  readonly pickups: ItemPickup[] = [];
+  readonly dropEntities: ItemDropEntity[] = [];
   private spawnTimer = 2.0;
-
-  private itemGeo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
   private pickupGroup = new THREE.Group();
 
   constructor(
     private scene: THREE.Scene,
     private chunks: ChunkManager,
-    private onPlayerCollectItem?: (itemId: number, count: number) => void,
+    private onPlayerCollectItem?: (itemId: number, count: number, durability?: number, maxDurability?: number) => void,
   ) {
     this.scene.add(this.pickupGroup);
   }
 
   spawnMob(type: MobType, pos: THREE.Vector3): Mob | null {
-    if (this.mobs.length >= MAX_MOBS) return null;
+    if (this.mobs.length >= 10) return null;
     const mob = new Mob(type, pos, this.chunks);
     this.mobs.push(mob);
     this.scene.add(mob.group);
     return mob;
   }
 
-  dropItem(itemId: number, count: number, pos: THREE.Vector3): void {
-    const mat = new THREE.MeshLambertMaterial({
-      color: 0xe5b834,
-      emissive: 0x332211,
-    });
-    const mesh = new THREE.Mesh(this.itemGeo, mat);
-    mesh.position.copy(pos);
-    mesh.position.y += 0.25;
-    this.pickupGroup.add(mesh);
+  dropItem(
+    itemId: number,
+    count: number,
+    pos: THREE.Vector3,
+    durability?: number,
+    maxDurability?: number,
+  ): ItemDropEntity {
+    // Check merging with nearby compatible drops
+    for (const existing of this.dropEntities) {
+      if (existing.canMergeWith({ itemId, count, durability } as any) && existing.position.distanceTo(pos) < 1.2) {
+        existing.count += count;
+        return existing;
+      }
+    }
 
-    const ang = Math.random() * Math.PI * 2;
-    this.pickups.push({
-      id: Math.random().toString(36).slice(2),
-      itemId,
-      count,
-      position: mesh.position,
-      velocity: new THREE.Vector3(Math.cos(ang) * 1.5, 3.5, Math.sin(ang) * 1.5),
-      mesh,
-      age: 0,
-    });
+    const drop = new ItemDropEntity(
+      {
+        itemId,
+        count,
+        durability,
+        maxDurability,
+        position: pos,
+      },
+      this.chunks,
+    );
+
+    this.dropEntities.push(drop);
+    this.pickupGroup.add(drop.mesh);
+    return drop;
   }
 
   raycastMob(origin: THREE.Vector3, dir: THREE.Vector3, maxDist = 3.6): Mob | null {
@@ -103,18 +95,17 @@ export class MobManager {
     // 1. Spawning
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      this.spawnTimer = SPAWN_INTERVAL;
-      if (this.mobs.length < MAX_MOBS) {
+      this.spawnTimer = 6.0;
+      if (this.mobs.length < 10) {
         this.trySpawnRandomMob(playerPos, isNight);
       }
     }
 
     // 2. Mob Updates
     for (let i = this.mobs.length - 1; i >= 0; i--) {
-      const mob = this.mobs[i];
+      const mob = this.mobs[i]!;
       mob.update(dt, playerPos, isNight, onPlayerDamage);
 
-      // Check dead and remove
       if (mob.isDead && mob.deathTimer <= 0) {
         const drops = mob.getDrops();
         for (const d of drops) {
@@ -125,64 +116,48 @@ export class MobManager {
         continue;
       }
 
-      // Check distance for despawning
       if (!mob.isDead) {
         const dx = mob.position.x - playerPos.x;
         const dz = mob.position.z - playerPos.z;
-        if (dx * dx + dz * dz > DESPAWN_DISTANCE_SQ) {
+        if (dx * dx + dz * dz > 52 * 52) {
           mob.dispose();
           this.mobs.splice(i, 1);
         }
       }
     }
 
-    // 3. Item Pickups
-    for (let i = this.pickups.length - 1; i >= 0; i--) {
-      const p = this.pickups[i];
-      p.age += dt;
+    // 3. Item Drop Physics & Magnetization to Player
+    for (let i = this.dropEntities.length - 1; i >= 0; i--) {
+      const drop = this.dropEntities[i]!;
+      drop.update(dt);
 
-      // Gravity & motion
-      p.velocity.y -= 18 * dt;
-      p.velocity.x *= 1 - 2 * dt;
-      p.velocity.z *= 1 - 2 * dt;
+      const dist = drop.position.distanceTo(playerPos);
 
-      p.position.addScaledVector(p.velocity, dt);
-
-      // Simple ground bounce
-      const groundY = Math.floor(p.position.y);
-      if (this.chunks.isSolidAt(Math.floor(p.position.x), groundY, Math.floor(p.position.z))) {
-        if (p.position.y <= groundY + 1.15) {
-          p.position.y = groundY + 1.15;
-          p.velocity.y = 0;
-        }
+      // Magnetize slightly toward player when near
+      if (dist < 2.5 && drop.canBePickedUp) {
+        const pullDir = playerPos.clone().sub(drop.position).normalize();
+        drop.velocity.addScaledVector(pullDir, 12 * dt);
       }
 
-      // Spin
-      p.mesh.rotation.y += dt * 3;
-
-      // Magnetize to player if within 2.2 blocks
-      const dist = p.position.distanceTo(playerPos);
-      if (dist < 2.0 && p.age > 0.4) {
-        this.onPlayerCollectItem?.(p.itemId, p.count);
-        p.mesh.removeFromParent();
-        (p.mesh.material as THREE.Material).dispose();
-        this.pickups.splice(i, 1);
-      } else if (p.age > 180) {
-        // Despawn after 3 minutes
-        p.mesh.removeFromParent();
-        (p.mesh.material as THREE.Material).dispose();
-        this.pickups.splice(i, 1);
+      // Collect when close
+      if (dist < 1.5 && drop.canBePickedUp) {
+        this.onPlayerCollectItem?.(drop.itemId, drop.count, drop.durability, drop.maxDurability);
+        drop.dispose();
+        this.dropEntities.splice(i, 1);
+      } else if (drop.age > 300) {
+        // Despawn after 5 minutes
+        drop.dispose();
+        this.dropEntities.splice(i, 1);
       }
     }
   }
 
   private trySpawnRandomMob(playerPos: THREE.Vector3, isNight: boolean): void {
     const angle = Math.random() * Math.PI * 2;
-    const dist = MIN_SPAWN_DIST + Math.random() * (MAX_SPAWN_DIST - MIN_SPAWN_DIST);
+    const dist = 14 + Math.random() * 18;
     const sx = Math.floor(playerPos.x + Math.sin(angle) * dist);
     const sz = Math.floor(playerPos.z + Math.cos(angle) * dist);
 
-    // Find surface height
     const sy = this.chunks.surfaceHeight(sx, sz);
     if (sy <= 0 || sy >= 128) return;
 
@@ -199,22 +174,22 @@ export class MobManager {
       if (groundBlock === Block.Grass) {
         type = Math.random() < 0.5 ? 'pig' : 'cow';
       } else {
-        type = Math.random() < 0.3 ? 'zombie' : 'pig';
+        return;
       }
     }
 
-    this.spawnMob(type, new THREE.Vector3(sx + 0.5, sy + 1.0, sz + 0.5));
+    this.spawnMob(type, new THREE.Vector3(sx + 0.5, sy + 1, sz + 0.5));
   }
 
   dispose(): void {
-    for (const mob of this.mobs) mob.dispose();
-    this.mobs.length = 0;
-    for (const p of this.pickups) {
-      p.mesh.removeFromParent();
-      (p.mesh.material as THREE.Material).dispose();
+    for (const mob of this.mobs) {
+      mob.dispose();
     }
-    this.pickups.length = 0;
-    this.pickupGroup.removeFromParent();
-    this.itemGeo.dispose();
+    this.mobs.length = 0;
+    for (const drop of this.dropEntities) {
+      drop.dispose();
+    }
+    this.dropEntities.length = 0;
+    this.scene.remove(this.pickupGroup);
   }
 }

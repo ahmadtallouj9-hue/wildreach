@@ -1,7 +1,7 @@
 import type { Profile } from '../ui/prefs';
 import type { TerrainType, WorldTime } from '../ui/worldSettings';
 
-export type AvatarPoseWire = 'stand' | 'sneak' | 'sit';
+export type AvatarPoseWire = 'stand' | 'sneak' | 'sit' | 'crawl';
 
 export type WorldSettingsWire = {
   terrain: TerrainType;

@@ -10,6 +10,18 @@ import { BIOMES, type BiomeId } from './Biomes';
 import type { TerrainMaterials } from '../render/TerrainMaterials';
 import { surfaceHeightFromStep } from './terrainResolution';
 import { loadEdits, saveEdits } from './editStore';
+import { profiler } from '../engine/core/Profiler';
+import { GenWorkerClient, type GenFilled } from './GenWorkerClient';
+import type { ColumnInfo } from './ColumnInfo';
+
+export type CollisionVoxelState = 'SOLID' | 'AIR' | 'UNLOADED';
+export type CollisionAvailability = 'READY' | 'UNLOADED' | 'GENERATING' | 'NOT_READY';
+
+export interface CollisionVoxelQuery {
+  state: CollisionVoxelState;
+  blockId: number;
+  loaded: boolean;
+}
 
 export class ChunkManager {
   private chunks = new Map<string, Chunk>();
@@ -33,6 +45,12 @@ export class ChunkManager {
   private persistSeed: string | null = null;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private persistDirty = false;
+  /** Async raw-terrain filler — Web Worker in browsers, inline elsewhere. */
+  private genClient: GenWorkerClient;
+  /** Chunk keys requested but not yet answered, so we never double-dispatch. */
+  private workersInFlight = new Set<string>();
+  /** Current streaming disc; responses outside it are discarded (radius shrink). */
+  private wanted = new Set<string>();
 
   constructor(
     private scene: THREE.Scene,
@@ -43,6 +61,7 @@ export class ChunkManager {
     this.generateStructures = generateStructures;
     this.landmarkGen = new LandmarkGen(world.seed);
     this.persistSeed = world.seed;
+    this.genClient = new GenWorkerClient(world);
     const saved = loadEdits(world.seed);
     for (const [k, v] of saved) this.edits.set(k, v);
   }
@@ -63,6 +82,19 @@ export class ChunkManager {
 
   getLandmarks(): Landmark[] {
     return [...this.landmarks.values()];
+  }
+
+  /** Queue/chunk counters for the engine profiler HUD line. */
+  get loadedChunks(): number {
+    return this.chunks.size;
+  }
+
+  get genPending(): number {
+    return this.genQueue.length;
+  }
+
+  get buildPending(): number {
+    return this.buildQueue.length;
   }
 
   getExploredKeys(): Set<string> {
@@ -103,11 +135,77 @@ export class ChunkManager {
     return chunk.getLocal(lx, y, lz);
   }
 
+  /**
+   * Authoritative collision query. Unlike getBlock(), this never collapses a
+   * missing/generated chunk into ordinary Air.
+   */
+  getCollisionBlock(wx: number, y: number, wz: number): CollisionVoxelQuery {
+    wx = Math.floor(wx);
+    y = Math.floor(y);
+    wz = Math.floor(wz);
+    if (y < 0 || y >= CHUNK_HEIGHT) {
+      return { state: 'AIR', blockId: Block.Air, loaded: true };
+    }
+
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.chunks.get(chunkKey(cx, cz));
+    if (!chunk) {
+      return { state: 'UNLOADED', blockId: Block.Air, loaded: false };
+    }
+    if (!chunk.collisionReady) {
+      return { state: 'UNLOADED', blockId: Block.Air, loaded: false };
+    }
+
+    const blockId = chunk.getLocal(wx - cx * CHUNK_SIZE, y, wz - cz * CHUNK_SIZE);
+    return {
+      state: isSolid(blockId) ? 'SOLID' : 'AIR',
+      blockId,
+      loaded: true,
+    };
+  }
+
+  /**
+   * Returns whether every chunk column touched by a collision region has
+   * generated voxel data. Mesh generation is deliberately not required.
+   */
+  getCollisionAvailabilityForRegion(
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+  ): CollisionAvailability {
+    if (![minX, minY, minZ, maxX, maxY, maxZ].every(Number.isFinite)) {
+      return 'NOT_READY';
+    }
+    if (maxY < 0 || minY >= CHUNK_HEIGHT) return 'READY';
+
+    const x0 = Math.floor(minX);
+    const x1 = Math.floor(maxX);
+    const z0 = Math.floor(minZ);
+    const z1 = Math.floor(maxZ);
+    const cx0 = Math.floor(x0 / CHUNK_SIZE);
+    const cx1 = Math.floor(x1 / CHUNK_SIZE);
+    const cz0 = Math.floor(z0 / CHUNK_SIZE);
+    const cz1 = Math.floor(z1 / CHUNK_SIZE);
+
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const chunk = this.chunks.get(chunkKey(cx, cz));
+        if (!chunk) return 'UNLOADED';
+        if (!chunk.collisionReady) return 'GENERATING';
+      }
+    }
+    return 'READY';
+  }
+
   /** True when the chunk column at this XZ has finished generation. */
   isColumnReady(wx: number, wz: number): boolean {
     const cx = Math.floor(Math.floor(wx) / CHUNK_SIZE);
     const cz = Math.floor(Math.floor(wz) / CHUNK_SIZE);
-    return !!this.chunks.get(chunkKey(cx, cz))?.ready;
+    return !!this.chunks.get(chunkKey(cx, cz))?.collisionReady;
   }
 
   /**
@@ -296,10 +394,28 @@ export class ChunkManager {
     while (n < budget && this.genQueue.length > 0) {
       const next = this.genQueue.shift()!;
       const key = chunkKey(next.cx, next.cz);
-      if (this.chunks.has(key)) continue;
-      const chunk = this.generateChunk(next.cx, next.cz);
-      this.chunks.set(key, chunk);
-      this.buildQueue.push(chunk);
+      if (this.chunks.has(key) || this.workersInFlight.has(key)) continue;
+      this.workersInFlight.add(key);
+      this.genClient
+        .request(next.cx, next.cz)
+        .then((filled: GenFilled) => {
+          this.workersInFlight.delete(key);
+          // Radius may have shrunk while the worker ran — drop stale results.
+          if (!this.wanted.has(key)) return;
+          const chunk = this.materializeGenFilled(filled);
+          this.chunks.set(key, chunk);
+          this.buildQueue.push(chunk);
+          this.sortBuildQueue(this.lastCx, this.lastCz);
+        })
+        .catch((err) => {
+          this.workersInFlight.delete(key);
+          const disposed = err instanceof Error && err.message === 'GenWorkerClient disposed';
+          if (disposed || !this.wanted.has(key)) return;
+          // Worker failures fall back to inline generation — streaming never stalls.
+          const fallback = this.generateChunk(next.cx, next.cz);
+          this.chunks.set(key, fallback);
+          this.buildQueue.push(fallback);
+        });
       n++;
     }
     this.sortBuildQueue(cx, cz);
@@ -366,21 +482,45 @@ export class ChunkManager {
     }
   }
 
+  /**
+   * Synchronous generator used for urgent bootstrap chunks and worker-error
+   * fallback. Raw terrain fill runs inline; everything else funnels into the
+   * same materialize path as worker responses.
+   */
   private generateChunk(cx: number, cz: number): Chunk {
-    const chunk = new Chunk(cx, cz);
-    chunk.columns = this.world.fillChunk(cx, cz, chunk.voxels);
-    if (this.generateStructures) {
-      const landmark = this.landmarkGen.apply(cx, cz, chunk.voxels, chunk.columns);
-      if (landmark) {
-        chunk.landmark = landmark;
-        this.landmarks.set(landmark.id, landmark);
+    const columns = this.world.fillChunk(cx, cz, new Chunk(cx, cz).voxels);
+    return this.materializeGenFilled({ cx, cz, voxels: new Chunk(cx, cz).voxels, columns });
+  }
+
+  /**
+   * Applies everything after raw terrain fill: landmarks, saved player
+   * edits, fluid seeding, collision flags, lighting. Shared between the
+   * inline path and worker responses so both produce identical chunks.
+   */
+  private materializeGenFilled(filled: GenFilled): Chunk {
+    const genEnd = profiler.begin('chunk.gen');
+    try {
+      const chunk = new Chunk(filled.cx, filled.cz);
+      chunk.voxels.set(filled.voxels);
+      chunk.columns = filled.columns;
+      if (this.generateStructures) {
+        const landmark = this.landmarkGen.apply(filled.cx, filled.cz, chunk.voxels, chunk.columns);
+        if (landmark) {
+          chunk.landmark = landmark;
+          this.landmarks.set(landmark.id, landmark);
+        }
       }
+      this.replayEditsInChunk(chunk);
+      seedFluidLevels(chunk);
+      // Collision becomes available as soon as the final voxel edit is applied;
+      // lighting and mesh construction are visual work and may happen later.
+      chunk.collisionReady = true;
+      chunk.ready = true;
+      rebuildChunkLights(chunk, this.lightWorld());
+      return chunk;
+    } finally {
+      genEnd();
     }
-    this.replayEditsInChunk(chunk);
-    seedFluidLevels(chunk);
-    chunk.ready = true;
-    rebuildChunkLights(chunk, this.lightWorld());
-    return chunk;
   }
 
   private lightWorld() {
@@ -620,15 +760,17 @@ export class ChunkManager {
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
     if (chunk.lightsDirty) rebuildChunkLights(chunk, this.lightWorld());
-    const { solid, cutout, water, lava } = meshChunk(
-      chunk.voxels,
-      ox,
-      oz,
-      (wx, y, wz) => this.sampleBlock(wx, y, wz),
-      (wx, y, wz) => sampleLight(this.lightWorld(), wx, y, wz),
-      chunk.fluidLevel,
-      (wx, y, wz) => this.sampleFluidLevel(wx, y, wz),
-      (wx, y, wz) => this.surfaceStep(wx, wz, y),
+    const { solid, cutout, water, lava } = profiler.measure('chunk.mesh', () =>
+      meshChunk(
+        chunk.voxels,
+        ox,
+        oz,
+        (wx, y, wz) => this.sampleBlock(wx, y, wz),
+        (wx, y, wz) => sampleLight(this.lightWorld(), wx, y, wz),
+        chunk.fluidLevel,
+        (wx, y, wz) => this.sampleFluidLevel(wx, y, wz),
+        (wx, y, wz) => this.surfaceStep(wx, wz, y),
+      ),
     );
 
     if (solid) {

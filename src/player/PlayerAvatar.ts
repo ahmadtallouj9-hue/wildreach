@@ -28,7 +28,7 @@ import {
 import { OVERLAY_SHELL } from './SkinOverlayUV';
 import { BLOCK_PALETTE } from './BlockCharacterSkin';
 
-export type AvatarPose = 'stand' | 'sneak' | 'sit';
+export type AvatarPose = 'stand' | 'sneak' | 'sit' | 'crawl';
 
 const LEG_H = 0.8;
 const TORSO_H = 0.68;
@@ -505,6 +505,10 @@ export class PlayerAvatar {
       this.poseSit();
       return;
     }
+    if (pose === 'crawl' && grounded) {
+      this.poseCrawl(speed);
+      return;
+    }
     if (pose === 'sneak' && grounded) {
       this.poseSneak(speed);
       return;
@@ -565,6 +569,19 @@ export class PlayerAvatar {
       this.body.position.y = grounded ? 0 : -0.02;
     }
     this.hatOverlay.rotation.x = this.head.rotation.x;
+  }
+
+  private poseCrawl(speed: number): void {
+    this.applyRestPose();
+    const swing = Math.sin(this.animPhase) * Math.min(1, speed) * 0.4;
+    this.body.position.y = -0.68 * this.tall;
+    this.torso.rotation.x = 1.35;
+    this.head.rotation.x = -1.25;
+    this.hatOverlay.rotation.x = this.head.rotation.x;
+    this.armL.rotation.x = -1.2 + swing;
+    this.armR.rotation.x = -1.2 - swing;
+    this.legL.rotation.x = 1.4 - swing;
+    this.legR.rotation.x = 1.4 + swing;
   }
 
   private poseSneak(speed: number): void {

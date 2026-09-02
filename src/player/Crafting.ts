@@ -1,6 +1,7 @@
 import { Block } from '../world/blocks';
 import type { ItemStack } from './Inventory';
 import { Item, createItemStack } from './items';
+import { CraftingSystem as UnifiedCraftingSystem } from '../crafting/CraftingSystem';
 
 export interface Recipe {
   id: string;
@@ -177,91 +178,34 @@ export const RECIPES: Recipe[] = [
 ];
 
 export class CraftingGrid {
-  cells: (ItemStack | null)[] = Array.from({ length: 9 }, () => null);
+  private readonly sys = new UnifiedCraftingSystem();
+
+  get cells(): (ItemStack | null)[] {
+    return this.sys.cells;
+  }
 
   setCell(i: number, stack: ItemStack | null): void {
-    if (i < 0 || i >= 9) return;
-    this.cells[i] =
-      stack && stack.count > 0
-        ? {
-            id: stack.id,
-            count: stack.count,
-            durability: stack.durability,
-            maxDurability: stack.maxDurability,
-            meta: stack.meta ? { ...stack.meta } : undefined,
-          }
-        : null;
+    this.sys.set(i, stack);
   }
 
   set(i: number, stack: ItemStack | null): void {
-    this.setCell(i, stack);
+    this.sys.set(i, stack);
   }
 
   match(is3x3 = true): Recipe | null {
-    const ids = this.cells.map((c) => (c ? c.id : 0));
-    for (const recipe of RECIPES) {
-      if (!is3x3 && recipe.gridRequired === '3x3') continue;
-      if (patternsMatch(ids, recipe.pattern)) return recipe;
-    }
-    return null;
+    return this.sys.match(is3x3) as Recipe | null;
   }
 
   peekResult(is3x3 = true): ItemStack | null {
-    const r = this.match(is3x3);
-    return r ? { ...r.result } : null;
+    return this.sys.peekResult(is3x3);
   }
 
   craftOnce(is3x3 = true): ItemStack | null {
-    const recipe = this.match(is3x3);
-    if (!recipe) return null;
-    for (let i = 0; i < 9; i++) {
-      const c = this.cells[i];
-      if (!c) continue;
-      c.count -= 1;
-      if (c.count <= 0) this.cells[i] = null;
-    }
-    return { ...recipe.result };
+    return this.sys.craftOnce(is3x3);
   }
 
   clear(): (ItemStack | null)[] {
-    const items = [...this.cells];
-    this.cells = Array.from({ length: 9 }, () => null);
-    return items;
+    return this.sys.clear();
   }
 }
 
-function normalize(ids: number[]): { map: number[]; w: number; h: number } {
-  let minX = 3;
-  let minY = 3;
-  let maxX = -1;
-  let maxY = -1;
-  for (let i = 0; i < 9; i++) {
-    if (!ids[i]) continue;
-    const x = i % 3;
-    const y = Math.floor(i / 3);
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
-  }
-  if (maxX < 0) return { map: Array(9).fill(0), w: 0, h: 0 };
-  const w = maxX - minX + 1;
-  const h = maxY - minY + 1;
-  const map = Array(9).fill(0);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      map[y * 3 + x] = ids[(y + minY) * 3 + (x + minX)];
-    }
-  }
-  return { map, w, h };
-}
-
-function patternsMatch(gridIds: number[], pattern: number[]): boolean {
-  const g = normalize(gridIds);
-  const p = normalize(pattern);
-  if (g.w !== p.w || g.h !== p.h) return false;
-  for (let i = 0; i < 9; i++) {
-    if (g.map[i] !== p.map[i]) return false;
-  }
-  return true;
-}

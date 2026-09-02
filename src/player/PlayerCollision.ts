@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import type { ChunkManager } from '../world/ChunkManager';
+import type {
+  ChunkManager,
+  CollisionAvailability,
+  CollisionVoxelQuery,
+} from '../world/ChunkManager';
 import { PlayerConfig } from './PlayerConfig';
 import { createAABB, getBlockCollisionBoxes, intersectsAABB, type AABB } from './CollisionShape';
 
@@ -11,7 +15,22 @@ export interface CollisionResult {
   onGround: boolean;
   steppedUp: boolean;
   groundBlock: number;
+  collisionAvailability: CollisionAvailability;
+  blockedByStreaming: boolean;
 }
+
+type CollisionChunkApi = {
+  getBlock: (x: number, y: number, z: number) => number;
+  getCollisionBlock?: (x: number, y: number, z: number) => CollisionVoxelQuery;
+  getCollisionAvailabilityForRegion?: (
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+  ) => CollisionAvailability;
+};
 
 export class PlayerCollision {
   constructor(private chunks: ChunkManager) {}
@@ -35,6 +54,64 @@ export class PlayerCollision {
     );
   }
 
+  /** Returns collision readiness without treating an unloaded region as Air. */
+  getCollisionAvailabilityForRegion(
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+  ): CollisionAvailability {
+    const chunks = this.chunks as unknown as CollisionChunkApi;
+    if (chunks.getCollisionAvailabilityForRegion) {
+      return chunks.getCollisionAvailabilityForRegion(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+    return 'READY';
+  }
+
+  /**
+   * Checks the full current-to-next swept region, including step-up clearance.
+   * The conservative region prevents entering a chunk before its voxel data is
+   * authoritative, while allowing collision to remain independent of meshing.
+   */
+  getCollisionAvailabilityForMovement(
+    pos: THREE.Vector3,
+    delta: THREE.Vector3,
+    height: number,
+    width: number = PlayerConfig.dimensions.width,
+  ): CollisionAvailability {
+    const current = this.getPlayerAABB(pos, width, height);
+    const nextPos = pos.clone().add(delta);
+    const next = this.getPlayerAABB(nextPos, width, height);
+    const stepPos = pos.clone();
+    stepPos.y += PlayerConfig.movement.maxStepHeight;
+    const step = this.getPlayerAABB(stepPos, width, height);
+    const stepNextPos = nextPos.clone();
+    stepNextPos.y += PlayerConfig.movement.maxStepHeight;
+    const stepNext = this.getPlayerAABB(stepNextPos, width, height);
+
+    return this.getCollisionAvailabilityForRegion(
+      Math.min(current.minX, next.minX, step.minX, stepNext.minX),
+      Math.min(current.minY, next.minY, step.minY, stepNext.minY),
+      Math.min(current.minZ, next.minZ, step.minZ, stepNext.minZ),
+      Math.max(current.maxX, next.maxX, step.maxX, stepNext.maxX),
+      Math.max(current.maxY, next.maxY, step.maxY, stepNext.maxY),
+      Math.max(current.maxZ, next.maxZ, step.maxZ, stepNext.maxZ),
+    );
+  }
+
+  private getCollisionVoxel(x: number, y: number, z: number): CollisionVoxelQuery {
+    const chunks = this.chunks as unknown as CollisionChunkApi;
+    if (chunks.getCollisionBlock) return chunks.getCollisionBlock(x, y, z);
+    const blockId = chunks.getBlock(x, y, z);
+    return {
+      state: blockId === 0 ? 'AIR' : 'SOLID',
+      blockId,
+      loaded: true,
+    };
+  }
+
   /**
    * Retrieves all block collision AABBs overlapping the query region.
    */
@@ -51,8 +128,9 @@ export class PlayerCollision {
     for (let y = y0; y <= y1; y++) {
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
-          const block = this.chunks.getBlock(x, y, z);
-          const blockBoxes = getBlockCollisionBoxes(block, x, y, z);
+          const query = this.getCollisionVoxel(x, y, z);
+          if (query.state !== 'SOLID') continue;
+          const blockBoxes = getBlockCollisionBoxes(query.blockId, x, y, z);
           for (let i = 0; i < blockBoxes.length; i++) {
             boxes.push(blockBoxes[i]!);
           }
@@ -72,6 +150,18 @@ export class PlayerCollision {
     height: number = PlayerConfig.dimensions.standingHeight,
   ): boolean {
     const playerBox = this.getPlayerAABB(pos, width, height);
+    if (
+      this.getCollisionAvailabilityForRegion(
+        playerBox.minX,
+        playerBox.minY,
+        playerBox.minZ,
+        playerBox.maxX,
+        playerBox.maxY,
+        playerBox.maxZ,
+      ) !== 'READY'
+    ) {
+      return true;
+    }
     const boxes = this.getBlockBoxesInRegion(
       playerBox.minX,
       playerBox.minY,
@@ -101,8 +191,31 @@ export class PlayerCollision {
   }
 
   /**
+   * Check if player can fit sneak height (1.50) without colliding with ceiling blocks.
+   */
+  canSneakUp(pos: THREE.Vector3): boolean {
+    return !this.isBoxBlocked(
+      pos,
+      PlayerConfig.dimensions.width,
+      PlayerConfig.dimensions.sneakingHeight,
+    );
+  }
+
+  /**
+   * Check if player can fit crawl height (0.625) without colliding with ceiling blocks.
+   */
+  canFitCrawl(pos: THREE.Vector3): boolean {
+    return !this.isBoxBlocked(
+      pos,
+      PlayerConfig.dimensions.width,
+      PlayerConfig.dimensions.crawlingHeight,
+    );
+  }
+
+  /**
    * Checks if moving by (dx, dz) while on ground and sneaking would step off an edge into open air.
    * Restricts horizontal delta to prevent falling off solid blocks.
+   * Minecraft Java drop threshold: 0.625 blocks (5/8 block).
    */
   restrictSneakDelta(
     pos: THREE.Vector3,
@@ -111,12 +224,14 @@ export class PlayerCollision {
     width: number = PlayerConfig.dimensions.width,
     height: number = PlayerConfig.dimensions.sneakingHeight,
   ): { dx: number; dz: number } {
+    const edgeDropThreshold = 0.625; // 5/8 of a block
+
     // Check X
     let testX = dx;
     while (testX !== 0) {
       const p = pos.clone();
       p.x += testX;
-      p.y -= 0.1; // check underneath
+      p.y -= edgeDropThreshold;
       if (this.isBoxBlocked(p, width, height)) {
         break;
       }
@@ -133,7 +248,7 @@ export class PlayerCollision {
       const p = pos.clone();
       p.x += testX;
       p.z += testZ;
-      p.y -= 0.1; // check underneath
+      p.y -= edgeDropThreshold;
       if (this.isBoxBlocked(p, width, height)) {
         break;
       }
@@ -148,6 +263,87 @@ export class PlayerCollision {
   }
 
   /**
+   * Tests if the player is facing an obstacle that qualifies for Auto-Jump.
+   * Qualifications (Minecraft Java):
+   * - Obstacle height is between 0.60 and 1.25 blocks above player feet
+   * - Forward wishDir points into obstacle
+   * - Destination above obstacle has solid footing and clearance for standing height (1.80)
+   * - Player has head clearance (upward headroom) to jump
+   */
+  checkAutoJumpCandidate(
+    pos: THREE.Vector3,
+    wishDir: THREE.Vector3,
+    width: number = PlayerConfig.dimensions.width,
+    height: number = PlayerConfig.dimensions.standingHeight,
+  ): { canAutoJump: boolean; obstacleHeight: number; reason?: string } {
+    if (wishDir.lengthSq() < 0.001) {
+      return { canAutoJump: false, obstacleHeight: 0, reason: 'not moving' };
+    }
+
+    const dir = wishDir.clone().normalize();
+    const probeDist = 0.45;
+    const frontPos = pos.clone().addScaledVector(dir, probeDist);
+
+    const half = width * 0.5;
+    const frontAvailability = this.getCollisionAvailabilityForRegion(
+      frontPos.x - half,
+      pos.y,
+      frontPos.z - half,
+      frontPos.x + half,
+      pos.y + 1.5,
+      frontPos.z + half,
+    );
+    if (frontAvailability !== 'READY') {
+      return { canAutoJump: false, obstacleHeight: 0, reason: 'collision unavailable' };
+    }
+
+    // Get all block boxes intersecting the front probe column
+    const frontBoxes = this.getBlockBoxesInRegion(
+      frontPos.x - half,
+      pos.y,
+      frontPos.z - half,
+      frontPos.x + half,
+      pos.y + 1.5,
+      frontPos.z + half,
+    );
+
+    if (frontBoxes.length === 0) {
+      return { canAutoJump: false, obstacleHeight: 0, reason: 'no obstacle in front' };
+    }
+
+    let highestTop = pos.y;
+    for (const b of frontBoxes) {
+      if (b.maxY > highestTop && b.minY <= pos.y + PlayerConfig.movement.maxStepHeight) {
+        highestTop = b.maxY;
+      }
+    }
+
+    const rise = highestTop - pos.y;
+    if (rise <= PlayerConfig.movement.maxStepHeight) {
+      return { canAutoJump: false, obstacleHeight: rise, reason: 'within step height' };
+    }
+    if (rise > PlayerConfig.movement.autoJumpMaxObstacle) {
+      return { canAutoJump: false, obstacleHeight: rise, reason: 'obstacle too high' };
+    }
+
+    // Check head clearance above current position
+    const headCheck = pos.clone();
+    headCheck.y += 1.25;
+    if (this.isBoxBlocked(headCheck, width, 0.8)) {
+      return { canAutoJump: false, obstacleHeight: rise, reason: 'no head clearance' };
+    }
+
+    // Check destination clearance on top of obstacle
+    const destPos = frontPos.clone();
+    destPos.y = highestTop;
+    if (this.isBoxBlocked(destPos, width, height)) {
+      return { canAutoJump: false, obstacleHeight: rise, reason: 'destination blocked' };
+    }
+
+    return { canAutoJump: true, obstacleHeight: rise };
+  }
+
+  /**
    * Resolves player movement and collision with swept AABB + step-up support.
    */
   resolveMovement(
@@ -157,6 +353,21 @@ export class PlayerCollision {
     width: number = PlayerConfig.dimensions.width,
     sneakingOnGround = false,
   ): CollisionResult {
+    const availability = this.getCollisionAvailabilityForMovement(pos, vel, height, width);
+    if (availability !== 'READY') {
+      return {
+        hitX: vel.x !== 0,
+        hitY: vel.y !== 0,
+        hitZ: vel.z !== 0,
+        hitCeiling: false,
+        onGround: false,
+        steppedUp: false,
+        groundBlock: this.getGroundBlock(pos),
+        collisionAvailability: availability,
+        blockedByStreaming: true,
+      };
+    }
+
     let hitX = false;
     let hitY = false;
     let hitZ = false;
@@ -225,7 +436,7 @@ export class PlayerCollision {
     }
 
     // Check ground support underneath feet if not already verified
-    if (!onGround) {
+    if (!onGround && vel.y <= 0) {
       const testPos = pos.clone();
       testPos.y -= 0.05;
       if (this.isBoxBlocked(testPos, width, height)) {
@@ -243,6 +454,8 @@ export class PlayerCollision {
       onGround,
       steppedUp,
       groundBlock,
+      collisionAvailability: 'READY',
+      blockedByStreaming: false,
     };
   }
 

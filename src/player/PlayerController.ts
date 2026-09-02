@@ -3,13 +3,13 @@ import type { ChunkManager } from '../world/ChunkManager';
 import { loadSettings, saveSettings, type Profile, type ViewMode } from '../ui/prefs';
 import { PlayerAvatar, type AvatarPose } from './PlayerAvatar';
 import { PlayerConfig } from './PlayerConfig';
-import { PlayerInput } from './PlayerInput';
+import { PlayerInput, type PlayerInputSnapshot } from './PlayerInput';
 import { PlayerCollision } from './PlayerCollision';
 import { PlayerPhysics } from './PlayerPhysics';
-import { PlayerCamera } from './PlayerCamera';
+import { PlayerCamera, type CameraDebugInfo } from './PlayerCamera';
 import type { PlayerDamage } from './PlayerDamage';
 import type { PlayerHunger } from './PlayerHunger';
-import type { PlayerSimulationState } from './PlayerState';
+import { lerpTransform, type PlayerSimulationState } from './PlayerState';
 
 export class PlayerController {
   readonly camera: THREE.PerspectiveCamera;
@@ -127,6 +127,7 @@ export class PlayerController {
 
   get pose(): AvatarPose {
     if (this.sitting) return 'sit';
+    if (this.physics.crawling) return 'crawl';
     if (this.sneaking) return 'sneak';
     return 'stand';
   }
@@ -229,9 +230,30 @@ export class PlayerController {
 
   /**
    * Deterministic 20 Hz fixed simulation step.
+   * Note: Mouse look is processed at render frequency and NOT stepped at 20 Hz.
    */
-  simulateTick(damageSystem: PlayerDamage, hungerSystem: PlayerHunger): void {
-    // 1. Consume look deltas from mouse movement
+  simulateTick(damageSystem: PlayerDamage, hungerSystem: PlayerHunger): PlayerInputSnapshot {
+    // 1. Consume input snapshot for 20 Hz physics
+    const snapshot = this.input.consumeTickSnapshot();
+
+    // 2. Step physics simulation with authoritative yaw
+    this.physics.simulateTick(
+      snapshot,
+      this.playerCamera.yaw,
+      damageSystem,
+      hungerSystem,
+    );
+
+    return snapshot;
+  }
+
+  /**
+   * Continuous render frame update (smooth interpolation, render-rate mouse look, and visual effects).
+   */
+  render(renderAlpha: number, dt: number): void {
+    this.input.updateFrame(dt);
+
+    // 1. Process raw mouse look deltas at full render frequency (no 20 Hz stepping)
     const look = this.input.consumeLookDeltas();
     if (look.dx !== 0 || look.dy !== 0) {
       this.playerCamera.applyLook(
@@ -242,24 +264,6 @@ export class PlayerController {
       );
     }
 
-    // 2. Consume input snapshot
-    const snapshot = this.input.consumeTickSnapshot();
-
-    // 3. Step physics simulation
-    this.physics.simulateTick(
-      snapshot,
-      this.playerCamera.yaw,
-      damageSystem,
-      hungerSystem,
-    );
-  }
-
-  /**
-   * Continuous render frame update (smooth interpolation and effects).
-   */
-  render(renderAlpha: number, dt: number): void {
-    this.input.updateFrame(dt);
-
     if (this.input.isTouchMode) {
       this.playerCamera.applyTouchLookDeltas(
         this.input.touchLookVelYaw,
@@ -268,7 +272,7 @@ export class PlayerController {
       );
     }
 
-    // Update camera with position interpolation
+    // 2. Update camera with position interpolation and time-based visual smoothing
     this.playerCamera.update(
       this.physics.previousPosition,
       this.physics.position,
@@ -282,15 +286,15 @@ export class PlayerController {
       dt,
     );
 
-    // Update 3D avatar position and animation
-    const renderPos = new THREE.Vector3().lerpVectors(
+    // 3. Update 3D avatar position and orientation (smoothed)
+    const renderPos = lerpTransform(
       this.physics.previousPosition,
       this.physics.position,
       renderAlpha,
     );
 
     this.avatar.position.copy(renderPos);
-    this.avatar.rotation.y = this.playerCamera.yaw;
+    this.avatar.rotation.y = this.playerCamera.smoothedYaw;
 
     const moveAmt = Math.hypot(this.physics.velocity.x, this.physics.velocity.z) / PlayerConfig.movement.walkSpeedTick;
     this.model.update(
@@ -300,6 +304,15 @@ export class PlayerController {
       this.physics.velocity.y,
       this.pose,
       this.physics.wasJustJumped,
+    );
+  }
+
+  getCameraDebugInfo(renderAlpha: number, dt: number): CameraDebugInfo {
+    return this.playerCamera.getDebugInfo(
+      this.physics.previousPosition,
+      this.physics.position,
+      renderAlpha,
+      dt,
     );
   }
 

@@ -5,6 +5,7 @@ import { CHUNK_SIZE } from '../world/blocks';
 import { BLOCK_KINDS, BLOCK_NAMES, blockCssColor } from './InventoryUi';
 import type { MapPlayerMarker } from '../net/RemotePlayers';
 import type { NetLinkStatus } from '../net/NetClient';
+import type { CameraDebugInfo } from '../player/PlayerCamera';
 
 export class Hud {
   readonly root: HTMLElement;
@@ -38,6 +39,8 @@ export class Hud {
   private localPlayerName = 'You';
   private toasts: { el: HTMLElement; t: number }[] = [];
   private fpsEl: HTMLElement;
+  private camDebugEl: HTMLElement;
+  private genDebugEl: HTMLElement;
   private lookViewerEl: HTMLElement;
   private lookNameEl: HTMLElement;
   private lookKindEl: HTMLElement;
@@ -86,6 +89,8 @@ export class Hud {
         <span class="vy-hud__mp-label">Solo</span>
       </div>
       <div class="vy-hud__coords" aria-label="Coordinates"></div>
+      <div class="vy-hud__gen-debug" hidden aria-label="Engine Debug Info"></div>
+      <div class="vy-hud__cam-debug" hidden aria-label="Camera Debug Info"></div>
       <div class="vy-hud__look" hidden aria-live="polite">
         <span class="vy-hud__look-swatch" aria-hidden="true"></span>
         <div class="vy-hud__look-text">
@@ -185,6 +190,8 @@ export class Hud {
     this.paletteWrap = this.root.querySelector('.vy-hud__palette')!;
     this.coordsEl = this.root.querySelector('.vy-hud__coords')!;
     this.fpsEl = this.root.querySelector('.vy-hud__fps')!;
+    this.camDebugEl = this.root.querySelector('.vy-hud__cam-debug')!;
+    this.genDebugEl = this.root.querySelector('.vy-hud__gen-debug')!;
     this.lookViewerEl = this.root.querySelector('.vy-hud__look')!;
     this.lookNameEl = this.root.querySelector('.vy-hud__look-name')!;
     this.lookKindEl = this.root.querySelector('.vy-hud__look-kind')!;
@@ -315,6 +322,30 @@ export class Hud {
       this.fpsFrames = 0;
       this.fpsTimer = 0;
     }
+  }
+
+  setCameraDebug(info: CameraDebugInfo | null): void {
+    if (!this.camDebugEl) return;
+    if (!info) {
+      this.camDebugEl.hidden = true;
+      return;
+    }
+    this.camDebugEl.hidden = false;
+    this.camDebugEl.innerHTML = `
+      <div style="font-weight:bold;margin-bottom:2px;color:#ffe066;">[CAMERA DEBUG]</div>
+      <div>Physics Pos: (${info.physicsPos.x.toFixed(2)}, ${info.physicsPos.y.toFixed(2)}, ${info.physicsPos.z.toFixed(2)})</div>
+      <div>Interpolated Pos: (${info.interpolatedPos.x.toFixed(2)}, ${info.interpolatedPos.y.toFixed(2)}, ${info.interpolatedPos.z.toFixed(2)})</div>
+      <div>Physics Yaw: ${((info.physicsYaw * 180) / Math.PI).toFixed(1)}°</div>
+      <div>Target Yaw: ${((info.targetYaw * 180) / Math.PI).toFixed(1)}°</div>
+      <div>Render Yaw: ${((info.renderYaw * 180) / Math.PI).toFixed(1)}°</div>
+      <div>Physics Pitch: ${((info.physicsPitch * 180) / Math.PI).toFixed(1)}°</div>
+      <div>Target Pitch: ${((info.targetPitch * 180) / Math.PI).toFixed(1)}°</div>
+      <div>Render Pitch: ${((info.renderPitch * 180) / Math.PI).toFixed(1)}°</div>
+      <div>Render Delta: ${(info.renderDelta * 1000).toFixed(1)} ms</div>
+      <div>Render Alpha: ${info.renderAlpha.toFixed(3)}</div>
+      <div>Horiz Speed: ${info.horizontalSpeed.toFixed(2)} b/s</div>
+      <div>Camera FOV: ${info.cameraFov.toFixed(1)}°</div>
+    `;
   }
 
   get isJournalOpen(): boolean {
@@ -516,6 +547,15 @@ export class Hud {
       this.lookSwatchEl.style.background = blockCssColor(look.id);
     } else {
       this.lookViewerEl.hidden = true;
+    }
+
+    // Engine debug overlay (?genDebug=…): worldgen info plus the appended
+    // profiler metrics line built by Game.
+    if (opts.genDebug) {
+      this.genDebugEl.hidden = false;
+      this.genDebugEl.textContent = opts.genDebug;
+    } else {
+      this.genDebugEl.hidden = true;
     }
 
     for (let i = this.toasts.length - 1; i >= 0; i--) {

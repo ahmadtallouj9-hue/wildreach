@@ -34,6 +34,15 @@ export const Item = {
   CookedBeef: 113,
   Coal: 114,
   IronIngot: 115,
+  // Iron Tools
+  IronPickaxe: 116,
+  IronAxe: 117,
+  IronSword: 118,
+  // Armor
+  IronHelmet: 120,
+  IronChestplate: 121,
+  IronLeggings: 122,
+  IronBoots: 123,
 } as const;
 
 export type ItemId = (typeof Item)[keyof typeof Item];
@@ -78,6 +87,13 @@ export const ITEM_NAMES: Record<number, string> = {
   [Item.CookedBeef]: 'Steak',
   [Item.Coal]: 'Coal',
   [Item.IronIngot]: 'Iron Ingot',
+  [Item.IronPickaxe]: 'Iron Pickaxe',
+  [Item.IronAxe]: 'Iron Axe',
+  [Item.IronSword]: 'Iron Sword',
+  [Item.IronHelmet]: 'Iron Helmet',
+  [Item.IronChestplate]: 'Iron Chestplate',
+  [Item.IronLeggings]: 'Iron Leggings',
+  [Item.IronBoots]: 'Iron Boots',
 };
 
 export const ITEM_KINDS: Record<number, string> = {
@@ -119,6 +135,13 @@ export const ITEM_KINDS: Record<number, string> = {
   [Item.CookedBeef]: 'Cooked food',
   [Item.Coal]: 'Fuel / Mineral',
   [Item.IronIngot]: 'Refined metal',
+  [Item.IronPickaxe]: 'Mining tool',
+  [Item.IronAxe]: 'Harvesting tool',
+  [Item.IronSword]: 'Weapon',
+  [Item.IronHelmet]: 'Armor (Head)',
+  [Item.IronChestplate]: 'Armor (Chest)',
+  [Item.IronLeggings]: 'Armor (Legs)',
+  [Item.IronBoots]: 'Armor (Feet)',
 };
 
 export const ITEM_ICONS: Record<number, string> = {
@@ -170,6 +193,13 @@ export const ITEM_COLORS: Record<number, [number, number, number]> = {
   [Item.CookedBeef]: [0.55, 0.32, 0.22],
   [Item.Coal]: [0.18, 0.18, 0.18],
   [Item.IronIngot]: [0.82, 0.82, 0.82],
+  [Item.IronPickaxe]: [0.82, 0.82, 0.82],
+  [Item.IronAxe]: [0.82, 0.82, 0.82],
+  [Item.IronSword]: [0.82, 0.82, 0.82],
+  [Item.IronHelmet]: [0.85, 0.85, 0.85],
+  [Item.IronChestplate]: [0.85, 0.85, 0.85],
+  [Item.IronLeggings]: [0.85, 0.85, 0.85],
+  [Item.IronBoots]: [0.85, 0.85, 0.85],
 };
 
 export function isFood(id: number): boolean {
