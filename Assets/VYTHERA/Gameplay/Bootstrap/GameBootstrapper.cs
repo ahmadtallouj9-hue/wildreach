@@ -107,7 +107,7 @@ namespace VYTHERA.Gameplay.Bootstrap
 
         private void EnsureCoreSystems()
         {
-            _tickManager = FindFirstObjectByType<FixedTickManager>();
+            _tickManager = FindAnyObjectByType<FixedTickManager>();
             if (_tickManager == null)
             {
                 var go = new GameObject("FixedTickManager");
@@ -115,7 +115,7 @@ namespace VYTHERA.Gameplay.Bootstrap
                 _tickManager = go.AddComponent<FixedTickManager>();
             }
 
-            if (FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+            if (FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
             {
                 var esGo = new GameObject("EventSystem", typeof(UnityEngine.EventSystems.EventSystem), typeof(UnityEngine.InputSystem.UI.InputSystemUIInputModule));
             }
@@ -171,7 +171,7 @@ namespace VYTHERA.Gameplay.Bootstrap
 
         private void EnsureChunkManager()
         {
-            _chunkManager = FindFirstObjectByType<ChunkManager>();
+            _chunkManager = FindAnyObjectByType<ChunkManager>();
             if (_chunkManager == null)
             {
                 var go = new GameObject("ChunkManager");
@@ -185,7 +185,7 @@ namespace VYTHERA.Gameplay.Bootstrap
 
         private void EnsurePlayer()
         {
-            _player = FindFirstObjectByType<PlayerPhysics>();
+            _player = FindAnyObjectByType<PlayerPhysics>();
             if (_player == null)
             {
                 var go = new GameObject("Player");
@@ -201,7 +201,7 @@ namespace VYTHERA.Gameplay.Bootstrap
 
         private void EnsureCamera()
         {
-            _cameraRig = FindFirstObjectByType<PlayerCameraRig>();
+            _cameraRig = FindAnyObjectByType<PlayerCameraRig>();
             if (_cameraRig == null)
             {
                 // Attach to player or create separate GO
@@ -232,7 +232,7 @@ namespace VYTHERA.Gameplay.Bootstrap
 
         private void EnsureInput()
         {
-            _inputHandler = FindFirstObjectByType<PlayerInputHandler>();
+            _inputHandler = FindAnyObjectByType<PlayerInputHandler>();
             if (_inputHandler == null)
                 _inputHandler = _player.gameObject.AddComponent<PlayerInputHandler>();
 
@@ -276,7 +276,7 @@ namespace VYTHERA.Gameplay.Bootstrap
 
         private void EnsureHUD()
         {
-            _hud = FindFirstObjectByType<HUDManager>();
+            _hud = FindAnyObjectByType<HUDManager>();
             if (_hud == null)
             {
                 var hudGO = HUDBuilder.BuildHUD();

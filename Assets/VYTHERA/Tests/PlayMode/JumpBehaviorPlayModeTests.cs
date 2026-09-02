@@ -16,14 +16,14 @@ namespace VYTHERA.Tests.PlayMode
             while (!loadOp.isDone) yield return null;
             for (int i = 0; i < 5; i++) yield return null;
 
-            var chunks = Object.FindFirstObjectByType<ChunkManager>();
+            var chunks = Object.FindAnyObjectByType<ChunkManager>();
             for (int i = 0; i < 60; i++)
             {
                 if (chunks != null && chunks.GetChunk(0, 0) != null) break;
                 yield return null;
             }
 
-            var player = Object.FindFirstObjectByType<PlayerPhysics>();
+            var player = Object.FindAnyObjectByType<PlayerPhysics>();
             Assert.IsNotNull(player, "PlayerPhysics must be present in scene");
 
             for (int i = 0; i < 60; i++)

@@ -16,7 +16,7 @@ namespace VYTHERA.UI.MainMenu
         {
             if (_canvas == null)
             {
-                _canvas = GetComponentInParent<Canvas>() ?? FindFirstObjectByType<Canvas>();
+                _canvas = GetComponentInParent<Canvas>() ?? FindAnyObjectByType<Canvas>();
                 if (_canvas == null)
                 {
                     var canvasGo = new GameObject("MainMenuCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));

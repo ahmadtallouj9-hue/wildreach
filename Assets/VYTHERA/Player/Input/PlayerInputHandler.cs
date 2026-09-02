@@ -130,7 +130,7 @@ namespace VYTHERA.Player.Input
                 // Quick save (F6)
                 if (keyboard.f6Key.wasPressedThisFrame)
                 {
-                    var bootstrapper = FindFirstObjectByType<Gameplay.Bootstrap.GameBootstrapper>();
+                    var bootstrapper = FindAnyObjectByType<Gameplay.Bootstrap.GameBootstrapper>();
                     bootstrapper?.SaveGame();
                 }
             }
@@ -207,7 +207,7 @@ namespace VYTHERA.Player.Input
                 // Quick save
                 if (gamepad.startButton.wasPressedThisFrame)
                 {
-                    var bootstrapper = FindFirstObjectByType<Gameplay.Bootstrap.GameBootstrapper>();
+                    var bootstrapper = FindAnyObjectByType<Gameplay.Bootstrap.GameBootstrapper>();
                     bootstrapper?.SaveGame();
                 }
             }

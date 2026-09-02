@@ -45,28 +45,28 @@ namespace VYTHERA.UI
 
         private void Start()
         {
-            if (_survival == null) _survival = FindFirstObjectByType<SurvivalSystem>();
-            if (_inventory == null) _inventory = FindFirstObjectByType<InventorySystem>();
-            if (_player == null) _player = FindFirstObjectByType<PlayerPhysics>();
-            if (_cameraRig == null) _cameraRig = FindFirstObjectByType<PlayerCameraRig>();
-            if (_interaction == null) _interaction = FindFirstObjectByType<BlockInteractionSystem>();
+            if (_survival == null) _survival = FindAnyObjectByType<SurvivalSystem>();
+            if (_inventory == null) _inventory = FindAnyObjectByType<InventorySystem>();
+            if (_player == null) _player = FindAnyObjectByType<PlayerPhysics>();
+            if (_cameraRig == null) _cameraRig = FindAnyObjectByType<PlayerCameraRig>();
+            if (_interaction == null) _interaction = FindAnyObjectByType<BlockInteractionSystem>();
 
             // Ensure Inventory and Pause screens exist in scene
-            if (FindFirstObjectByType<InventoryScreen>() == null)
+            if (FindAnyObjectByType<InventoryScreen>() == null)
             {
                 var invGo = new GameObject("InventoryScreenRoot");
                 invGo.transform.SetParent(transform, false);
                 invGo.AddComponent<InventoryScreen>();
             }
 
-            if (FindFirstObjectByType<PauseMenuScreen>() == null)
+            if (FindAnyObjectByType<PauseMenuScreen>() == null)
             {
                 var pauseGo = new GameObject("PauseMenuScreenRoot");
                 pauseGo.transform.SetParent(transform, false);
                 pauseGo.AddComponent<PauseMenuScreen>();
             }
 
-            if (FindFirstObjectByType<SettingsScreen>() == null)
+            if (FindAnyObjectByType<SettingsScreen>() == null)
             {
                 var settingsGo = new GameObject("SettingsScreenRoot");
                 settingsGo.transform.SetParent(transform, false);
@@ -240,7 +240,7 @@ namespace VYTHERA.UI
         {
             if (_deathScreen != null) _deathScreen.SetActive(false);
 
-            var bootstrapper = FindFirstObjectByType<GameBootstrapper>();
+            var bootstrapper = FindAnyObjectByType<GameBootstrapper>();
             if (_player != null && bootstrapper != null)
             {
                 _player.Teleport(bootstrapper.SpawnPosition);

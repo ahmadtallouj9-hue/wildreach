@@ -102,7 +102,7 @@ namespace VYTHERA.UI.Pause
 
             UIWidgetFactory.CreateButton(stack.transform, "BtnSave", "Save World", UIColors.SurfaceSolid, UIColors.Ink, () =>
             {
-                var bootstrapper = FindFirstObjectByType<GameBootstrapper>();
+                var bootstrapper = FindAnyObjectByType<GameBootstrapper>();
                 bool success = bootstrapper != null && bootstrapper.SaveGame();
                 if (_saveFeedbackText != null)
                 {
@@ -114,7 +114,7 @@ namespace VYTHERA.UI.Pause
 
             UIWidgetFactory.CreateButton(stack.transform, "BtnSettings", "Settings", UIColors.SurfaceSolid, UIColors.Ink, () =>
             {
-                var settings = FindFirstObjectByType<SettingsScreen>();
+                var settings = FindAnyObjectByType<SettingsScreen>();
                 if (settings != null)
                 {
                     settings.Show();
@@ -127,7 +127,7 @@ namespace VYTHERA.UI.Pause
 
             UIWidgetFactory.CreateButton(stack.transform, "BtnSaveAndQuit", "Save & Quit to Title", UIColors.Warning, UIColors.Void, () =>
             {
-                var bootstrapper = FindFirstObjectByType<GameBootstrapper>();
+                var bootstrapper = FindAnyObjectByType<GameBootstrapper>();
                 if (bootstrapper != null)
                 {
                     bootstrapper.SaveGame();

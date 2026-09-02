@@ -26,7 +26,7 @@ namespace VYTHERA.UI.Core
         {
             if (parent != null && parent.GetComponent<RectTransform>() == null)
             {
-                var canvas = parent.GetComponentInParent<Canvas>() ?? UnityEngine.Object.FindFirstObjectByType<Canvas>();
+                var canvas = parent.GetComponentInParent<Canvas>() ?? UnityEngine.Object.FindAnyObjectByType<Canvas>();
                 if (canvas != null)
                 {
                     parent = canvas.transform;

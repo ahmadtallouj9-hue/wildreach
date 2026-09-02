@@ -36,18 +36,18 @@ namespace VYTHERA.Tests.PlayMode
             Assert.IsNotNull(ChunkManager.Instance, "ChunkManager should be instantiated");
 
             // Verify Player and Physics
-            var player = Object.FindFirstObjectByType<PlayerPhysics>();
+            var player = Object.FindAnyObjectByType<PlayerPhysics>();
             Assert.IsNotNull(player, "PlayerPhysics should be instantiated and present");
             Assert.Greater(player.Position.y, 0f, "Player should be spawned above ground");
 
             // Verify Survival
-            var survival = Object.FindFirstObjectByType<SurvivalSystem>();
+            var survival = Object.FindAnyObjectByType<SurvivalSystem>();
             Assert.IsNotNull(survival, "SurvivalSystem should be attached");
             Assert.AreEqual(20f, survival.Health, "Health should initialize at 20");
             Assert.AreEqual(20f, survival.Hunger, "Hunger should initialize at 20");
 
             // Verify Inventory
-            var inventory = Object.FindFirstObjectByType<InventorySystem>();
+            var inventory = Object.FindAnyObjectByType<InventorySystem>();
             Assert.IsNotNull(inventory, "InventorySystem should be attached");
 
             // Simulate small input step

@@ -45,8 +45,8 @@ namespace VYTHERA.UI.Inventory
 
         private void Start()
         {
-            if (_inventory == null) _inventory = FindFirstObjectByType<InventorySystem>();
-            if (_equipment == null) _equipment = FindFirstObjectByType<EquipmentSystem>();
+            if (_inventory == null) _inventory = FindAnyObjectByType<InventorySystem>();
+            if (_equipment == null) _equipment = FindAnyObjectByType<EquipmentSystem>();
 
             UIManager.Instance?.RegisterScreen(this);
             Hide();

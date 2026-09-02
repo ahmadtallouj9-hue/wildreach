@@ -132,7 +132,7 @@ namespace VYTHERA.UI.Touch
             jumpTrigger.onClick.AddListener(touchControls.PressJump);
 
             // EventSystem for touch
-            if (FindFirstObjectByType<EventSystem>() == null)
+            if (FindAnyObjectByType<EventSystem>() == null)
             {
                 var esGO = new GameObject("EventSystem");
                 esGO.AddComponent<EventSystem>();

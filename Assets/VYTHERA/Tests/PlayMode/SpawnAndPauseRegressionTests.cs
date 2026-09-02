@@ -27,13 +27,13 @@ namespace VYTHERA.Tests.PlayMode
             // Wait a few frames for GameBootstrapper Start() coroutine to complete
             for (int i = 0; i < 10; i++) yield return null;
 
-            var bootstrapper = Object.FindFirstObjectByType<GameBootstrapper>();
+            var bootstrapper = Object.FindAnyObjectByType<GameBootstrapper>();
             Assert.IsNotNull(bootstrapper, "GameBootstrapper must exist");
 
-            var player = Object.FindFirstObjectByType<PlayerPhysics>();
+            var player = Object.FindAnyObjectByType<PlayerPhysics>();
             Assert.IsNotNull(player, "PlayerPhysics must exist");
 
-            var chunks = Object.FindFirstObjectByType<ChunkManager>();
+            var chunks = Object.FindAnyObjectByType<ChunkManager>();
             Assert.IsNotNull(chunks, "ChunkManager must exist");
 
             // 1. Required chunk exists before player interacts
@@ -64,7 +64,7 @@ namespace VYTHERA.Tests.PlayMode
 
             // 5. Simulate several frames and ensure player does not fall to death
             float initialHealth = 20f;
-            var survival = Object.FindFirstObjectByType<VYTHERA.Gameplay.Survival.SurvivalSystem>();
+            var survival = Object.FindAnyObjectByType<VYTHERA.Gameplay.Survival.SurvivalSystem>();
             if (survival != null) initialHealth = survival.Health;
 
             for (int f = 0; f < 30; f++)
@@ -87,10 +87,10 @@ namespace VYTHERA.Tests.PlayMode
             while (!loadOp.isDone) yield return null;
             for (int i = 0; i < 5; i++) yield return null;
 
-            var pause = Object.FindFirstObjectByType<PauseMenuScreen>();
+            var pause = Object.FindAnyObjectByType<PauseMenuScreen>();
             Assert.IsNotNull(pause, "PauseMenuScreen must be present");
 
-            var bootstrapper = Object.FindFirstObjectByType<GameBootstrapper>();
+            var bootstrapper = Object.FindAnyObjectByType<GameBootstrapper>();
             Assert.IsNotNull(bootstrapper, "GameBootstrapper must be present");
 
             // 1. Pause game
@@ -105,7 +105,7 @@ namespace VYTHERA.Tests.PlayMode
             Assert.IsTrue(File.Exists(savePath), $"Save file must exist at {savePath}");
 
             // 3. Settings opens
-            var settings = Object.FindFirstObjectByType<SettingsScreen>();
+            var settings = Object.FindAnyObjectByType<SettingsScreen>();
             Assert.IsNotNull(settings, "SettingsScreen must exist in scene");
             settings.Show();
             var settingsRoot = settings.transform.Find("SettingsRoot");
@@ -125,11 +125,11 @@ namespace VYTHERA.Tests.PlayMode
             while (!loadOp.isDone) yield return null;
             for (int i = 0; i < 10; i++) yield return null;
 
-            var player = Object.FindFirstObjectByType<PlayerPhysics>();
+            var player = Object.FindAnyObjectByType<PlayerPhysics>();
             Assert.IsNotNull(player, "PlayerPhysics must exist");
 
             // Build a flat 5x5 platform of stone at player feet level to guarantee perfectly flat test surface
-            var chunks = Object.FindFirstObjectByType<ChunkManager>();
+            var chunks = Object.FindAnyObjectByType<ChunkManager>();
             int flatY = Mathf.FloorToInt(player.Position.y) - 1;
             int px = Mathf.FloorToInt(player.Position.x);
             int pz = Mathf.FloorToInt(player.Position.z);
@@ -173,9 +173,9 @@ namespace VYTHERA.Tests.PlayMode
             while (!loadOp.isDone) yield return null;
             for (int i = 0; i < 10; i++) yield return null;
 
-            var chunks = Object.FindFirstObjectByType<ChunkManager>();
-            var bootstrapper = Object.FindFirstObjectByType<GameBootstrapper>();
-            var interaction = Object.FindFirstObjectByType<BlockInteractionSystem>();
+            var chunks = Object.FindAnyObjectByType<ChunkManager>();
+            var bootstrapper = Object.FindAnyObjectByType<GameBootstrapper>();
+            var interaction = Object.FindAnyObjectByType<BlockInteractionSystem>();
             Assert.IsNotNull(interaction, "BlockInteractionSystem must exist");
 
             // 1. Raycast down onto block beneath target

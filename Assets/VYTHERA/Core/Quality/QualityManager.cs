@@ -204,7 +204,7 @@ namespace VYTHERA.Core.Quality
             }
 
             // Directional light & shadows
-            var sun = RenderSettings.sun ?? FindFirstObjectByType<Light>();
+            var sun = RenderSettings.sun ?? FindAnyObjectByType<Light>();
             if (sun != null)
             {
                 if (profile.Shadows == ShadowMode.None)

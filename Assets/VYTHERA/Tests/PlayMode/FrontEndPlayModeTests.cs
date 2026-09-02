@@ -23,16 +23,16 @@ namespace VYTHERA.Tests.PlayMode
             while (!loadOp.isDone) yield return null;
             yield return null;
 
-            var mm = Object.FindFirstObjectByType<MainMenuScreen>();
+            var mm = Object.FindAnyObjectByType<MainMenuScreen>();
             Assert.IsNotNull(mm, "MainMenuScreen must be present in MainMenuScene");
 
-            var ws = Object.FindFirstObjectByType<WorldSelectScreen>();
+            var ws = Object.FindAnyObjectByType<WorldSelectScreen>();
             Assert.IsNotNull(ws, "WorldSelectScreen must be present in MainMenuScene");
 
-            var wc = Object.FindFirstObjectByType<WorldCreationScreen>();
+            var wc = Object.FindAnyObjectByType<WorldCreationScreen>();
             Assert.IsNotNull(wc, "WorldCreationScreen must be present in MainMenuScene");
 
-            var set = Object.FindFirstObjectByType<SettingsScreen>();
+            var set = Object.FindAnyObjectByType<SettingsScreen>();
             Assert.IsNotNull(set, "SettingsScreen must be present in MainMenuScene");
         }
 
@@ -43,13 +43,13 @@ namespace VYTHERA.Tests.PlayMode
             while (!loadOp.isDone) yield return null;
             for (int i = 0; i < 5; i++) yield return null;
 
-            var hud = Object.FindFirstObjectByType<HUDManager>();
+            var hud = Object.FindAnyObjectByType<HUDManager>();
             Assert.IsNotNull(hud, "HUDManager must be present in GameScene");
 
-            var inv = Object.FindFirstObjectByType<InventoryScreen>();
+            var inv = Object.FindAnyObjectByType<InventoryScreen>();
             Assert.IsNotNull(inv, "InventoryScreen must be spawned and ready in GameScene");
 
-            var pause = Object.FindFirstObjectByType<PauseMenuScreen>();
+            var pause = Object.FindAnyObjectByType<PauseMenuScreen>();
             Assert.IsNotNull(pause, "PauseMenuScreen must be spawned and ready in GameScene");
 
             // Test Inventory Open/Close
@@ -76,7 +76,7 @@ namespace VYTHERA.Tests.PlayMode
             while (!loadOp.isDone) yield return null;
             yield return null;
 
-            var settings = Object.FindFirstObjectByType<SettingsScreen>();
+            var settings = Object.FindAnyObjectByType<SettingsScreen>();
             Assert.IsNotNull(settings, "SettingsScreen must exist");
 
             // Open Settings

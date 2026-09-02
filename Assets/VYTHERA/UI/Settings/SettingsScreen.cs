@@ -156,7 +156,7 @@ namespace VYTHERA.UI.Settings
 
             UIWidgetFactory.CreateSlider(_videoPane.transform, "SliderFOV", "Field of View", 60f, 100f, 75f, v =>
             {
-                var rig = FindFirstObjectByType<Player.Camera.PlayerCameraRig>();
+                var rig = FindAnyObjectByType<Player.Camera.PlayerCameraRig>();
                 if (rig != null) rig.SetBaseFov(v);
                 if (Camera.main != null) Camera.main.fieldOfView = v;
             });
@@ -164,7 +164,7 @@ namespace VYTHERA.UI.Settings
             UIWidgetFactory.CreateSlider(_videoPane.transform, "SliderBrightness", "Brightness", 0.6f, 1.4f, 1.0f, v =>
             {
                 RenderSettings.ambientLight = new Color(v * 0.45f, v * 0.45f, v * 0.5f, 1f);
-                var sun = RenderSettings.sun ?? FindFirstObjectByType<Light>();
+                var sun = RenderSettings.sun ?? FindAnyObjectByType<Light>();
                 if (sun != null) sun.intensity = v * 1.1f;
             });
 
@@ -201,7 +201,7 @@ namespace VYTHERA.UI.Settings
 
             UIWidgetFactory.CreateSlider(_controlsPane.transform, "SliderSens", "Mouse Look Sensitivity", 0.05f, 0.5f, 0.15f, v =>
             {
-                var input = FindFirstObjectByType<PlayerInputHandler>();
+                var input = FindAnyObjectByType<PlayerInputHandler>();
                 if (input != null) input.ControllerLookSensitivity = v * 800f;
             });
 
