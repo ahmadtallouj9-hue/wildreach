@@ -6,9 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/VYTHERA/Scenes/MainMenuScene.unity
-    guid: bd81a9b2f04ab734080942003450e534
-  - enabled: 1
     path: Assets/VYTHERA/Scenes/GameScene.unity
     guid: a9635b0bbb11b5b4ba57a5d5a1230b92
+  - enabled: 1
+    path: Assets/VYTHERA/Scenes/MainMenuScene.unity
+    guid: bd81a9b2f04ab734080942003450e534
   m_configObjects: {}

@@ -24,30 +24,35 @@ namespace VYTHERA.Editor
         {
             if (Application.isBatchMode) return;
 
-            // 1. Ensure GameScene is loaded in Editor
+            // 1. Set GameScene as the playModeStartScene so pressing Play anywhere runs GameScene
+            var sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath);
+            if (sceneAsset != null)
+            {
+                EditorSceneManager.playModeStartScene = sceneAsset;
+            }
+
+            // 2. Ensure GameScene is loaded if currently on Untitled or empty scene
             var currentScene = EditorSceneManager.GetActiveScene();
-            if (currentScene.path != ScenePath)
+            if (string.IsNullOrEmpty(currentScene.path) || currentScene.name == "Untitled")
             {
                 if (File.Exists(Path.Combine(Application.dataPath, "../", ScenePath)))
                 {
-                    Debug.Log("[VytheraAutoPlayer] Loading GameScene.unity...");
+                    Debug.Log("[VytheraAutoPlayer] Untitled scene detected. Opening GameScene.unity...");
                     EditorSceneManager.OpenScene(ScenePath);
                 }
             }
+        }
 
-            // 2. Enter Play Mode once per Editor session launch
-            if (!SessionState.GetBool(SessionKey, false))
-            {
-                SessionState.SetBool(SessionKey, true);
-                EditorApplication.delayCall += () =>
-                {
-                    if (!EditorApplication.isPlaying)
-                    {
-                        Debug.Log("[VytheraAutoPlayer] Entering Play Mode in GameScene!");
-                        EditorApplication.isPlaying = true;
-                    }
-                };
-            }
+        [MenuItem("VYTHERA/Open GameScene")]
+        public static void OpenGameScene()
+        {
+            EditorSceneManager.OpenScene(ScenePath);
+        }
+
+        [MenuItem("VYTHERA/Open MainMenuScene")]
+        public static void OpenMainMenuScene()
+        {
+            EditorSceneManager.OpenScene("Assets/VYTHERA/Scenes/MainMenuScene.unity");
         }
 
         [MenuItem("VYTHERA/Play GameScene")]
