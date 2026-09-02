@@ -126,7 +126,7 @@ namespace VYTHERA.Gameplay.Bootstrap
             }
 
             // Bind scene Sun to RenderSettings
-            var lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+            var lights = FindObjectsByType<Light>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             for (int i = 0; i < lights.Length; i++)
             {
                 if (lights[i].type == LightType.Directional)
