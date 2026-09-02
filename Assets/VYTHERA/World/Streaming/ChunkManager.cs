@@ -32,6 +32,7 @@ namespace VYTHERA.World.Streaming
         private Transform _playerTransform;
         private int _lastPlayerCx = int.MinValue;
         private int _lastPlayerCz = int.MinValue;
+        private bool _isDestroyed;
 
         private void Awake()
         {
@@ -43,6 +44,11 @@ namespace VYTHERA.World.Streaming
             Instance = this;
 
             _pipeline = new ChunkPipeline(_worldSeed);
+        }
+
+        private void OnDestroy()
+        {
+            _isDestroyed = true;
         }
 
         public void SetPlayer(Transform player)
@@ -303,6 +309,8 @@ namespace VYTHERA.World.Streaming
                 chunk.IsCollisionReady = true;
             });
 
+            if (_isDestroyed || this == null) return;
+
             _loadingChunks.Remove(k);
             _chunks[k] = chunk;
             _activeList.Add(chunk);
@@ -316,7 +324,7 @@ namespace VYTHERA.World.Streaming
 
         private void RemeshChunk(ChunkData chunk)
         {
-            if (chunk == null || !chunk.IsReady) return;
+            if (_isDestroyed || this == null || chunk == null || !chunk.IsReady) return;
 
             var meshes = VoxelMesher.BuildChunkMesh(
                 chunk,
