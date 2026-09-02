@@ -224,8 +224,8 @@ namespace VYTHERA.Core.Quality
             // Linear fog matching render distance
             RenderSettings.fog = profile.Tier >= QualityTier.Medium;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogStart = Math.Max(16f, (profile.RenderDistanceChunks - 2) * 16f);
-            RenderSettings.fogEnd = profile.RenderDistanceChunks * 16f;
+            RenderSettings.fogStartDistance = Math.Max(16f, (profile.RenderDistanceChunks - 2) * 16f);
+            RenderSettings.fogEndDistance = profile.RenderDistanceChunks * 16f;
 
             OnQualityChanged?.Invoke(Current);
         }
