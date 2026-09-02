@@ -218,6 +218,12 @@ namespace VYTHERA.Gameplay.Bootstrap
                 camGO.AddComponent<AudioListener>();
             }
 
+            if (cam != null)
+            {
+                cam.nearClipPlane = 0.05f;
+                cam.farClipPlane = 1000f;
+            }
+
             // Link via reflection-safe public field
             typeof(PlayerCameraRig)
                 .GetField("_camera", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)

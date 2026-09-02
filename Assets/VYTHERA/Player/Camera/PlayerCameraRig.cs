@@ -33,7 +33,11 @@ namespace VYTHERA.Player.Camera
             {
                 _physics.OnLanded += HandleLanding;
             }
-            if (_camera != null) _baseFov = _camera.fieldOfView;
+            if (_camera != null)
+            {
+                _baseFov = _camera.fieldOfView;
+                _camera.nearClipPlane = 0.05f;
+            }
         }
 
         private void OnDestroy()
