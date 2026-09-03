@@ -7,6 +7,7 @@ using VYTHERA.Gameplay.Bootstrap;
 using VYTHERA.Gameplay.Inventory;
 using VYTHERA.Gameplay.Survival;
 using VYTHERA.Player.Physics;
+using VYTHERA.Save.Serialization;
 using VYTHERA.World.Streaming;
 
 namespace VYTHERA.Tests.PlayMode

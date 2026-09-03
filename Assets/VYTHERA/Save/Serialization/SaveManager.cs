@@ -164,6 +164,8 @@ namespace VYTHERA.Save
             return list;
         }
 
+        public static bool DeleteSave(string seed) => DeleteWorld(seed);
+
         public static bool DeleteWorld(string seed)
         {
             try
