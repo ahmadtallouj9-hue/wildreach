@@ -326,7 +326,7 @@ namespace VYTHERA.Gameplay.Bootstrap
                 }
             }
 
-            if (data.Health <= 0f || data.PlayerY < 1f || data.PlayerY > 250f)
+            if (data.Health <= 0f || data.PlayerY < 50f || data.PlayerY > 250f)
             {
                 Debug.Log("[GameBootstrapper] Saved player state was dead or invalid, placing at safe spawn position.");
                 _player.Teleport(SpawnPosition);

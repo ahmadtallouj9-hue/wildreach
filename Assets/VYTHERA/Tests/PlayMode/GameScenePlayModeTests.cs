@@ -16,6 +16,7 @@ namespace VYTHERA.Tests.PlayMode
         [UnityTest]
         public IEnumerator GameScene_LoadsAndInitializesAllCoreSystems()
         {
+            SaveManager.DeleteSave("vythera-default");
             // Load GameScene
             var loadOp = SceneManager.LoadSceneAsync("Assets/VYTHERA/Scenes/GameScene.unity", LoadSceneMode.Single);
             while (!loadOp.isDone)

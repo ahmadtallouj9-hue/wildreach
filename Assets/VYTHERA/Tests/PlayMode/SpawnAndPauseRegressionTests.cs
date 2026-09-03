@@ -20,6 +20,7 @@ namespace VYTHERA.Tests.PlayMode
         [UnityTest]
         public IEnumerator SafeSpawn_PlayerSpawnsAboveTerrain_ChunkExists_NoFallDeath()
         {
+            SaveManager.DeleteSave("vythera-default");
             // Load GameScene cleanly
             var loadOp = SceneManager.LoadSceneAsync("Assets/VYTHERA/Scenes/GameScene.unity", LoadSceneMode.Single);
             while (!loadOp.isDone) yield return null;

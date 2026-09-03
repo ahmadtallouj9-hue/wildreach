@@ -57,13 +57,60 @@ namespace VYTHERA.UI.Inventory
             UIManager.Instance?.UnregisterScreen(this);
         }
 
+        private static Sprite _inventoryBgSprite;
+
+        public static Sprite GetInventorySprite()
+        {
+            if (_inventoryBgSprite != null) return _inventoryBgSprite;
+
+            _inventoryBgSprite = Resources.Load<Sprite>("UI/inventory") ?? Resources.Load<Sprite>("inventory");
+            if (_inventoryBgSprite != null) return _inventoryBgSprite;
+
+            string[] searchPaths = new[]
+            {
+                System.IO.Path.Combine(Application.dataPath, "VYTHERA/UI/Inventory/inventory.png"),
+                System.IO.Path.Combine(Application.dataPath, "Resources/UI/inventory.png"),
+                System.IO.Path.Combine(Application.streamingAssetsPath, "inventory.png")
+            };
+
+            foreach (var path in searchPaths)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    try
+                    {
+                        byte[] bytes = System.IO.File.ReadAllBytes(path);
+                        var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                        tex.filterMode = FilterMode.Point;
+                        if (tex.LoadImage(bytes))
+                        {
+                            tex.filterMode = FilterMode.Point;
+                            _inventoryBgSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                            return _inventoryBgSprite;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning("[InventoryScreen] Texture load warning: " + ex.Message);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private Image _cardImage;
+
         private void Update()
         {
             var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (keyboard != null && keyboard.eKey.wasPressedThisFrame)
+            if (keyboard != null)
             {
-                if (IsOpen) CloseInventory();
-                else OpenInventory();
+                if (keyboard.eKey.wasPressedThisFrame || (IsOpen && keyboard.escapeKey.wasPressedThisFrame))
+                {
+                    if (IsOpen) CloseInventory();
+                    else OpenInventory();
+                }
             }
 
             // Update floating cursor position
@@ -112,7 +159,19 @@ namespace VYTHERA.UI.Inventory
 
         public void Show()
         {
-            if (_rootPanel != null) _rootPanel.SetActive(true);
+            if (_rootPanel != null)
+            {
+                _rootPanel.SetActive(true);
+                if (_cardImage != null && _cardImage.sprite == null)
+                {
+                    var spr = GetInventorySprite();
+                    if (spr != null)
+                    {
+                        _cardImage.sprite = spr;
+                        _cardImage.color = Color.white;
+                    }
+                }
+            }
             RefreshAllSlots();
         }
 
@@ -125,7 +184,16 @@ namespace VYTHERA.UI.Inventory
         {
             _rootPanel = UIWidgetFactory.CreatePanel(transform, "InventoryRoot", UIColors.ModalDim, Vector2.zero, Vector2.zero, Vector2.one);
 
-            var card = UIWidgetFactory.CreatePanel(_rootPanel.transform, "Card", UIColors.SurfaceCard, new Vector2(740f, 600f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            var sprite = GetInventorySprite();
+            var card = UIWidgetFactory.CreatePanel(_rootPanel.transform, "Card", sprite != null ? Color.white : UIColors.SurfaceCard, new Vector2(760f, 620f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            _cardImage = card.GetComponent<Image>();
+            if (_cardImage != null && sprite != null)
+            {
+                _cardImage.sprite = sprite;
+                _cardImage.color = Color.white;
+                _cardImage.type = Image.Type.Simple;
+                _cardImage.preserveAspect = true;
+            }
 
             // Title & Close Button
             var title = UIWidgetFactory.CreateText(card.transform, "Title", "INVENTORY & CRAFTING", 18, UIColors.Gold, TextAnchor.MiddleLeft);
@@ -283,8 +351,8 @@ namespace VYTHERA.UI.Inventory
 
         private void CreateSlot(Transform parent, string name, out Image icon, out Text count, Action onClick)
         {
-            var btn = UIWidgetFactory.CreateButton(parent, name, "", UIColors.SurfaceSolid, UIColors.Ink, onClick, 56f, 54f);
-            var border = UIWidgetFactory.CreatePanel(btn.transform, "Border", UIColors.GoldBorder, Vector2.zero, Vector2.zero, Vector2.one);
+            var btn = UIWidgetFactory.CreateButton(parent, name, "", new Color(0.1f, 0.1f, 0.12f, 0.35f), UIColors.Ink, onClick, 56f, 54f);
+            var border = UIWidgetFactory.CreatePanel(btn.transform, "Border", new Color(0.5f, 0.45f, 0.3f, 0.45f), Vector2.zero, Vector2.zero, Vector2.one);
 
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconGo.transform.SetParent(btn.transform, false);
