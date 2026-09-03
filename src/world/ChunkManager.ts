@@ -12,7 +12,6 @@ import { surfaceHeightFromStep } from './terrainResolution';
 import { loadEdits, saveEdits } from './editStore';
 import { profiler } from '../engine/core/Profiler';
 import { GenWorkerClient, type GenFilled } from './GenWorkerClient';
-import type { ColumnInfo } from './ColumnInfo';
 
 export type CollisionVoxelState = 'SOLID' | 'AIR' | 'UNLOADED';
 export type CollisionAvailability = 'READY' | 'UNLOADED' | 'GENERATING' | 'NOT_READY';

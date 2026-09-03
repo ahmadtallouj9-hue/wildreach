@@ -11,7 +11,7 @@ export interface GenFilled {
 }
 
 interface PendingGen {
-  resolve: (r: GenFilled) => void;
+  resolve: (msg: GenWorkerOut) => void;
   reject: (err: Error) => void;
 }
 

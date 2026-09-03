@@ -112,6 +112,7 @@ export class SkinPaint3D {
 
   applyProfile(profile: Profile): void {
     this.avatar.applyProfile(profile);
+    this.updateCamera();
   }
 
   syncPixels(pixels: Uint8ClampedArray): void {
@@ -168,7 +169,7 @@ export class SkinPaint3D {
   }
 
   private updateCamera(): void {
-    const targetY = 0.88;
+    const targetY = this.avatar.getBodyHeight() * 0.52;
     const cp = Math.cos(this.orbitPitch);
     this.camera.position.set(
       Math.sin(this.orbitYaw) * cp * this.dist,

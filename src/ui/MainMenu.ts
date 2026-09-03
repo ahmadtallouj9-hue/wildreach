@@ -506,6 +506,7 @@ ${fieldRange('Atmosphere', 'bg-atmo-range', 'bg-atmo-val', 0, 1, 0.05)}
                   ['stocky', 'Stocky'],
                   ['tall', 'Tall'],
                   ['slim', 'Slim'],
+                  ['cubic', 'Cubic'],
                 ])}</div>
                 <div class="vy-field"><span>Sleeves</span>${seg('sleeves', [
                   ['bare', 'Bare'],

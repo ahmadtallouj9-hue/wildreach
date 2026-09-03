@@ -1,5 +1,5 @@
 export type ViewMode = 'first' | 'third' | 'front';
-export type AvatarStyle = 'classic' | 'stocky' | 'tall' | 'slim';
+export type AvatarStyle = 'classic' | 'stocky' | 'tall' | 'slim' | 'cubic';
 export type HatStyle =
   | 'none'
   | 'cap'
@@ -122,7 +122,7 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const HATS: HatStyle[] = ['none', 'cap', 'band', 'hood', 'beanie', 'visor', 'crown', 'helm'];
-const STYLES: AvatarStyle[] = ['classic', 'stocky', 'tall', 'slim'];
+const STYLES: AvatarStyle[] = ['classic', 'stocky', 'tall', 'slim', 'cubic'];
 const HAIR_STYLES: HairStyle[] = [
   'none',
   'short',

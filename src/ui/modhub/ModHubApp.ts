@@ -1,6 +1,7 @@
 /**
  * MOD HUB — discovery / library / details (local catalog + import).
  */
+import './mod-hub.css';
 import {
   MOD_CATEGORIES,
   addReport,

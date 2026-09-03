@@ -98,6 +98,11 @@ export class PlayerAvatar {
   private capeStyle: CapeStyle = 'none';
   private backpackStyle: BackpackStyle = 'none';
   private skinLoadGen = 0;
+
+  /** Total world-space height of the avatar (feet to top of head). */
+  getBodyHeight(): number {
+    return (LEG_H + TORSO_H + HEAD) * this.tall;
+  }
   private previewPose: AvatarPose = 'stand';
   private previewMove = 0;
 
@@ -336,6 +341,11 @@ export class PlayerAvatar {
       this.tall = 1.08;
       this.wide = 0.82;
       this.armThin = 0.68;
+    } else if (style === 'cubic') {
+      // Extra-short, extra-wide, thick arms — a true block figure.
+      this.tall = 0.72;
+      this.wide = 1.48;
+      this.armThin = 1.42;
     } else {
       this.tall = 1;
       this.wide = 1;

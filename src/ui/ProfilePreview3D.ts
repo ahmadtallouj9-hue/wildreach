@@ -73,6 +73,7 @@ export class ProfilePreview3D {
 
   applyProfile(profile: Profile): void {
     this.avatar.applyProfile(profile);
+    this.updateCamera();
   }
 
   syncPixels(pixels: Uint8ClampedArray): void {
@@ -165,7 +166,7 @@ export class ProfilePreview3D {
   }
 
   private updateCamera(): void {
-    const targetY = 0.92;
+    const targetY = this.avatar.getBodyHeight() * 0.52;
     const cp = Math.cos(this.pitch);
     // Fixed orbit angle — avatar spins in place (turntable).
     const camYaw = 0.45;
